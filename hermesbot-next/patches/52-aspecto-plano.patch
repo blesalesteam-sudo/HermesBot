@@ -1,14 +1,17 @@
 diff --git a/src/styles.css b/src/styles.css
-index 51ffa1f..554e15f 100644
+index 51ffa1f..a84fb9b 100644
 --- a/src/styles.css
 +++ b/src/styles.css
-@@ -3987,3 +3987,16 @@ button:disabled.bg-danger {
+@@ -3987,3 +3987,19 @@ button:disabled.bg-danger {
  :root[data-reduced-motion="true"] .thread-tab,
  :root[data-reduced-motion="true"] .thread-tab::before,
  :root[data-reduced-motion="true"] .thread-tab-indicator { animation: none !important; transition: none !important; }
 +
 +/* OpenBot: parts kept out of sight until Settings → Features turns them on (src/lib/openbot.ts). */
-+html[data-openbot-hide~="computers"] [data-tour="computer"] { display: none; }
++html[data-openbot-hide~="computers"] :is([data-tour="computer"], [data-panel-tab="computer"]) { display: none; }
++html[data-openbot-hide~="liveCalls"] [data-call-button] { display: none; }
++html[data-openbot-hide~="inspector"] [data-panel-item="inspector"] { display: none; }
++html[data-openbot-hide~="updates"] :is([data-settings-block="version"], [data-settings-block="updates"]) { display: none; }
 +
 +/* OpenBot: flat surfaces. Things that used to lift off the page with a shadow get a hairline instead. */
 +:root, :root[data-skin] {
