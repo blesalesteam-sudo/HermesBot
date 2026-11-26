@@ -1,0 +1,262 @@
+diff --git a/server/config.ts b/server/config.ts
+index d19315f..5e50d44 100644
+--- a/server/config.ts
++++ b/server/config.ts
+@@ -226,7 +226,7 @@ const featureConfigSchema = z.object({
+   /** Room jobs to several members run side by side, each in a thread of its own. On unless false. */
+   parallelRoomJobs: z.boolean().optional(),
+   acpPlanLines: z.boolean().optional(), // An ACP agent's plan as activity lines. Off unless true.
+-}).extend({ agentsToolBridge: z.boolean().optional(), savedSteps: z.boolean().optional(), usbPhoneTakeover: z.boolean().optional(), cloudComputerAutoReplace: z.boolean().optional(), phonePush: z.boolean().optional(), skillBurger: z.boolean().optional(), threadTabs: z.boolean().optional(), teamBoard: z.boolean().optional(), suggestedReplies: z.boolean().optional() }); // suggestedReplies: a faded next-line suggestion in an empty composer after a bot replies, written by the bot's own engine's smallest model, on unless false; skillBurger: Skill Burgers in chat, the side menu and the bot panel, and the tools that run them, on unless false; threadTabs: a bot's threads as tabs above its chat, off unless true; teamBoard: the Team Board on a Team Cloud (docs/team-board.md), off unless true; cloudComputerAutoReplace: set a dead or silent cloud computer aside (kept seven days with its files) and give its bot a new one by itself, on unless false (OMB_CLOUD_COMPUTER_AUTO_REPLACE wins); agentsToolBridge: the find_tool / use_tool bridge, off unless true; savedSteps: repeat a computer task from its saved steps, on unless false; usbPhoneTakeover: watch and take over the bots' USB phone, off unless true; phonePush: wake a paired phone whose app is closed through the hosted push relay, on unless false (OMB_PHONE_PUSH=0 or 1 wins)
++}).extend({ agentsToolBridge: z.boolean().optional(), savedSteps: z.boolean().optional(), usbPhoneTakeover: z.boolean().optional(), cloudComputerAutoReplace: z.boolean().optional(), phonePush: z.boolean().optional(), skillBurger: z.boolean().optional(), threadTabs: z.boolean().optional(), teamBoard: z.boolean().optional(), suggestedReplies: z.boolean().optional(), openbot: z.record(z.string(), z.boolean()).optional() }); // suggestedReplies: a faded next-line suggestion in an empty composer after a bot replies, written by the bot's own engine's smallest model, on unless false; skillBurger: Skill Burgers in chat, the side menu and the bot panel, and the tools that run them, on unless false; threadTabs: a bot's threads as tabs above its chat, off unless true; teamBoard: the Team Board on a Team Cloud (docs/team-board.md), off unless true; cloudComputerAutoReplace: set a dead or silent cloud computer aside (kept seven days with its files) and give its bot a new one by itself, on unless false (OMB_CLOUD_COMPUTER_AUTO_REPLACE wins); agentsToolBridge: the find_tool / use_tool bridge, off unless true; savedSteps: repeat a computer task from its saved steps, on unless false; usbPhoneTakeover: watch and take over the bots' USB phone, off unless true; phonePush: wake a paired phone whose app is closed through the hosted push relay, on unless false (OMB_PHONE_PUSH=0 or 1 wins)
+ const onboardingConfigSchema = z.object({
+   completedAt: z.string().trim().max(40).optional(),
+   version: z.number().int().min(0).max(1000).optional(),
+@@ -467,7 +467,7 @@ export interface AppConfig extends HelperConfig {
+   context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; roomCompactAt?: number; roomSessions?: boolean; replayToolHistory?: boolean };
+   memory?: { captureQuietMs?: number; tidyHour?: number };
+   vpsIdle?: z.infer<typeof vpsIdleConfigSchema>; localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number; preserveInstalledApps?: boolean; memoryGb?: number; cpus?: number };
+-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; smartSetupChoices?: boolean; autoRecall?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; parallelRoomJobs?: boolean; acpPlanLines?: boolean; agentsToolBridge?: boolean; savedSteps?: boolean; usbPhoneTakeover?: boolean; cloudComputerAutoReplace?: boolean; phonePush?: boolean; skillBurger?: boolean; threadTabs?: boolean; teamBoard?: boolean; suggestedReplies?: boolean };
++  features?: { openbot?: Record<string, boolean>; skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; smartSetupChoices?: boolean; autoRecall?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; parallelRoomJobs?: boolean; acpPlanLines?: boolean; agentsToolBridge?: boolean; savedSteps?: boolean; usbPhoneTakeover?: boolean; cloudComputerAutoReplace?: boolean; phonePush?: boolean; skillBurger?: boolean; threadTabs?: boolean; teamBoard?: boolean; suggestedReplies?: boolean };
+   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; firstTurnAt?: string };
+   browserProfiles?: BrowserProfile[];
+   browserEngine?: BrowserEngineConfig;
+diff --git a/server/index.ts b/server/index.ts
+index 0695438..500fd62 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -11616,6 +11616,7 @@ function configStatus() {
+       autoRecall: autoRecallEnabled(cfg),
+       roomMemoryCapture: roomMemoryCaptureEnabled(cfg),
+       parallelRoomJobs: parallelRoomJobsEnabled(cfg),
++      openbot: cfg.features?.openbot ?? {},
+       savedSteps: savedStepsEnabled(cfg), savedStepsHere: savedSteps.here(), skillBurger: skillBurgerEnabled(cfg), threadTabs: cfg.features?.threadTabs === true, suggestedReplies: cfg.features?.suggestedReplies !== false, roomFeed: true, roomFeedSince: roomFeedSince(DATA_DIR), teamBoard: CLOUD_TEAM ? cfg.features?.teamBoard === true : undefined,
+       usbPhoneTakeover: HAS_USB_PORT ? usbPhoneTakeoverEnabled(cfg) : undefined,
+     },
+diff --git a/src/App.tsx b/src/App.tsx
+index f09cdaf..bc89b0d 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,3 +1,4 @@
++import { useOpenbotExtras } from "@/lib/openbot";
+ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+ import { ChevronLeft, Loader2, Menu } from "lucide-react";
+ import { CLOUD_LINK_SETTINGS, openBot, StoreProvider, useStore } from "@/state/store";
+@@ -555,6 +556,11 @@ function AppLoadSignal() {
+   return null;
+ }
+ 
++function OpenbotExtras() {
++  useOpenbotExtras();
++  return null;
++}
++
+ function Application() {
+   useEffect(() => {
+     initAnalytics();
+@@ -564,6 +570,7 @@ function Application() {
+     <DesktopCapabilitiesProvider>
+       <StoreProvider>
+         <AppLoadSignal />
++        <OpenbotExtras />
+         <ThreadRefsProvider>
+           <Shell viewer={viewer} />
+         </ThreadRefsProvider>
+diff --git a/src/components/HelperSetup.tsx b/src/components/HelperSetup.tsx
+index 35822d8..7258fd3 100644
+--- a/src/components/HelperSetup.tsx
++++ b/src/components/HelperSetup.tsx
+@@ -1,3 +1,4 @@
++import { useExtra } from "@/lib/openbot";
+ import { useState } from "react";
+ import { AppWindow, Bot as BotIcon, Cloud, Download, Mail, Smartphone, Sparkles, type LucideIcon } from "lucide-react";
+ 
+@@ -95,7 +96,8 @@ export function IntroChips({ chips }: { chips: readonly IntroChip[] }) {
+   const { dispatch } = useStore();
+   const [tapped, setTapped] = useState<ReadonlySet<IntroChip>>(new Set());
+   const [connecting, setConnecting] = useState(false);
+-  const shown = chips.filter((chip) => !tapped.has(chip)).slice(0, INTRO_CHIPS);
++  const cloud = useExtra("cloud");
++  const shown = chips.filter((chip) => !tapped.has(chip) && (chip !== "cloud" || cloud)).slice(0, INTRO_CHIPS);
+   const tap = (chip: IntroChip) => {
+     setTapped((now) => new Set([...now, chip]));
+     if (chip === "ai") return setConnecting(true);
+diff --git a/src/components/SidebarProfileMenu.tsx b/src/components/SidebarProfileMenu.tsx
+index 5ed565f..504b488 100644
+--- a/src/components/SidebarProfileMenu.tsx
++++ b/src/components/SidebarProfileMenu.tsx
+@@ -1,3 +1,4 @@
++import { extraShown } from "@/lib/openbot";
+ import { useEffect, useRef, useState } from "react";
+ import {
+   ArrowUpRight,
+@@ -326,9 +327,9 @@ export function toolMenuItems({ activeView, automationsNeedYou, onAutomations, o
+ }): SidebarMenuItem[] {
+   return [
+     { key: "automations", label: t("sidebar.nav.automations"), icon: <Zap size={16} />, active: activeView === "routines", attention: automationsNeedYou, onSelect: onAutomations },
+-    { key: "team-map", label: t("sidebar.nav.teamMap"), icon: <UsersRound size={16} />, active: activeView === "team-map", onSelect: onTeamMap },
++    ...(extraShown("teamMap") ? [{ key: "team-map", label: t("sidebar.nav.teamMap"), icon: <UsersRound size={16} />, active: activeView === "team-map", onSelect: onTeamMap }] : []),
+     ...(onFiles ? [{ key: "files", label: t("sidebar.nav.files"), icon: <FolderOpen size={16} />, active: activeView === "files", onSelect: onFiles }] : []),
+-    ...(onPublishedApps ? [{ key: "published-apps", label: t("sidebar.nav.publishedApps"), icon: <Rocket size={16} />, active: activeView === "published-apps", onSelect: onPublishedApps }] : []),
++    ...(onPublishedApps && extraShown("publishedApps") ? [{ key: "published-apps", label: t("sidebar.nav.publishedApps"), icon: <Rocket size={16} />, active: activeView === "published-apps", onSelect: onPublishedApps }] : []),
+     ...(onSkillBurgers ? [{ key: "skill-burgers", label: t("skillBurger.list.title"), icon: <Hamburger size={16} />, active: activeView === "skill-burgers", onSelect: onSkillBurgers }] : []),
+     ...(onTeamFiles ? [{ key: "team-files", label: t("sidebar.nav.teamFiles"), icon: <FolderTree size={16} />, active: activeView === "team-files", onSelect: onTeamFiles }] : []),
+     ...(archived?.count ? [{ key: "archived", label: t("sidebar.archived.title"), icon: <Archive size={16} />, value: String(archived.count), onSelect: archived.open }] : []),
+@@ -502,7 +503,7 @@ export function profileMenuItems({
+   const account: SidebarMenuItem = { key: "account", label: header.name, subtitle: header.line, icon: header.avatar, large: true, chevron: true, onSelect: header.onOpen };
+   const settings: SidebarMenuItem = { key: "settings", label: t("sidebar.menu.settings"), icon: <SettingsIcon size={16} />, trailing: settingsKeyHint(), onSelect: onSettings };
+   const support: SidebarMenuItem = { key: "support", label: t("sidebar.menu.helpShort"), icon: <LifeBuoy size={16} />, submenu: help, onSelect: () => {} };
+-  const news: SidebarMenuItem | null = announcements ? { key: "announcements", label: t("announcements.title"), icon: <Megaphone size={16} />, active: announcements.active,
++  const news: SidebarMenuItem | null = announcements && extraShown("announcements") ? { key: "announcements", label: t("announcements.title"), icon: <Megaphone size={16} />, active: announcements.active,
+     attention: announcements.unread, onSelect: announcements.onSelect } : null;
+   const present = (...items: Array<SidebarMenuItem | null | false>) => items.filter((item): item is SidebarMenuItem => Boolean(item));
+   const out: SidebarMenuItem[] = [...accounts.filter((item) => item.key !== "accounts-sign-out"),
+@@ -639,10 +640,10 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
+   const needsYou = account?.automationsNeedYou === true;
+   const initials = profileInitials(profile);
+   const nameless = simple && initials === "?" ? <UserRound size={16} aria-hidden /> : undefined;
+-  const label = accountLabel(name, { automationsNeedYou: needsYou, update: simple && noteworthy && update ? update.label : null, move: move.kind, announcements: news.unread });
+-  const dot = accountDot({ automationsNeedYou: needsYou, update: noteworthy ? (update.phase === "error" ? "failed" : "news") : null, move: move.kind, announcements: news.unread });
++  const label = accountLabel(name, { automationsNeedYou: needsYou, update: simple && noteworthy && update ? update.label : null, move: move.kind, announcements: news.unread && extraShown("announcements") });
++  const dot = accountDot({ automationsNeedYou: needsYou, update: noteworthy ? (update.phase === "error" ? "failed" : "news") : null, move: move.kind, announcements: news.unread && extraShown("announcements") });
+   // Advanced's full row has its own update badge: its avatar's dot is the move's and the announcements' alone.
+-  const moveDot = accountDot({ automationsNeedYou: false, update: null, move: move.kind, announcements: news.unread });
++  const moveDot = accountDot({ automationsNeedYou: false, update: null, move: move.kind, announcements: news.unread && extraShown("announcements") });
+ 
+   return (
+     <>
+diff --git a/src/components/settings/pages/FeaturesPage.tsx b/src/components/settings/pages/FeaturesPage.tsx
+index 6916121..eef1c42 100644
+--- a/src/components/settings/pages/FeaturesPage.tsx
++++ b/src/components/settings/pages/FeaturesPage.tsx
+@@ -2,6 +2,7 @@ import { useState } from "react";
+ import type { LocaleKey } from "@/locales";
+ import { t } from "@/lib/i18n";
+ import { useFeature, type Feature } from "@/lib/use-feature";
++import { OPENBOT_EXTRAS, useExtra, type OpenbotExtra } from "@/lib/openbot";
+ import { api, type ConfigStatus } from "@/state/store";
+ import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
+ import { SettingRow, SettingsGroup, SettingsRows, Switch } from "../../SettingsPrimitives";
+@@ -43,7 +44,48 @@ function FeatureRow({ name }: { name: Feature }) {
+   );
+ }
+ 
++function ExtraRow({ name }: { name: OpenbotExtra }) {
++  const on = useExtra(name);
++  const shown = useStoreSelector((state) => state.config?.features?.openbot);
++  const dispatch = useStoreDispatch();
++  const [saving, setSaving] = useState(false);
++  const [error, setError] = useState("");
++  const save = async (next: boolean) => {
++    if (saving) return;
++    setSaving(true);
++    setError("");
++    try {
++      const config: ConfigStatus = await api("/api/config", { method: "PATCH", body: JSON.stringify({ features: { openbot: { ...shown, [name]: next } } }) });
++      dispatch({ type: "configStatus", config });
++    } catch {
++      setError(t("settings.features.error"));
++    } finally {
++      setSaving(false);
++    }
++  };
++  const title = t(`settings.features.openbot.${name}`);
++  return (
++    <SettingRow title={title} subtitle={t(`settings.features.openbot.${name}Line`)} message={error ? <p role="alert" className="text-danger">{error}</p> : null}>
++      <Switch data-openbot-extra={name} checked={on} aria-label={title} disabled={saving} onClick={() => void save(!on)}
++        className="disabled:cursor-wait disabled:opacity-50" />
++    </SettingRow>
++  );
++}
++
+ export function FeaturesPage() {
++  return (
++    <>
++      <FeatureSwitches />
++      <SettingsGroup block="openbot-extras" label={t("settings.features.openbot.label")} footnote={t("settings.features.openbot.note")}>
++        <SettingsRows>
++          {OPENBOT_EXTRAS.map((name) => <ExtraRow key={name} name={name} />)}
++        </SettingsRows>
++      </SettingsGroup>
++    </>
++  );
++}
++
++function FeatureSwitches() {
+   return (
+     <SettingsGroup block="features">
+       <SettingsRows>
+diff --git a/src/lib/analytics.ts b/src/lib/analytics.ts
+index fac60c6..35af84d 100644
+--- a/src/lib/analytics.ts
++++ b/src/lib/analytics.ts
+@@ -23,9 +23,9 @@ export function analyticsEnabled(): boolean {
+   const desktop = desktopSwitch()?.enabled();
+   if (typeof desktop === "boolean") return desktop;
+   try {
+-    return localStorage.getItem(OPT_OUT_KEY) !== "1";
++    return localStorage.getItem(OPT_OUT_KEY) === "0";
+   } catch {
+-    return true;
++    return false;
+   }
+ }
+ 
+diff --git a/src/lib/feature-flags.ts b/src/lib/feature-flags.ts
+index ad01aa0..c7f355e 100644
+--- a/src/lib/feature-flags.ts
++++ b/src/lib/feature-flags.ts
+@@ -1,7 +1,7 @@
+ import { t } from "./i18n";
+ 
+ export interface FeatureFlagConfig {
+-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean; usbPhoneTakeover?: boolean; skillBurger?: boolean; threadTabs?: boolean; roomFeed?: boolean; roomFeedSince?: number; teamBoard?: boolean; suggestedReplies?: boolean };
++  features?: { openbot?: Record<string, boolean>; skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean; usbPhoneTakeover?: boolean; skillBurger?: boolean; threadTabs?: boolean; roomFeed?: boolean; roomFeedSince?: number; teamBoard?: boolean; suggestedReplies?: boolean };
+   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
+ }
+ 
+diff --git a/src/lib/openbot.ts b/src/lib/openbot.ts
+new file mode 100644
+index 0000000..a4f7e4d
+--- /dev/null
++++ b/src/lib/openbot.ts
+@@ -0,0 +1,27 @@
++import { useEffect } from "react";
++import type { FeatureFlagConfig } from "./feature-flags";
++import { useStoreSelector } from "@/state/store-select";
++
++/** Parts of the app this installation keeps out of sight until someone turns them on in Settings → Features. Stored on
++ * the server under `features.openbot`, so everyone who uses this place sees the same app. */
++export const OPENBOT_EXTRAS = ["teamMap", "publishedApps", "announcements", "cloud", "computers"] as const;
++export type OpenbotExtra = (typeof OPENBOT_EXTRAS)[number];
++
++let current: Record<string, boolean> = {};
++
++export function extraShown(name: OpenbotExtra, config?: FeatureFlagConfig | null): boolean {
++  return (config ? config.features?.openbot : current)?.[name] === true;
++}
++
++export function useExtra(name: OpenbotExtra): boolean {
++  return useStoreSelector((state) => state.config?.features?.openbot?.[name] === true);
++}
++
++/** Mounted once at the root: keeps `extraShown` and the `data-openbot-hide` list on <html> in step with the server. */
++export function useOpenbotExtras(): void {
++  const shown = useStoreSelector((state) => state.config?.features?.openbot);
++  current = shown ?? {};
++  useEffect(() => {
++    document.documentElement.dataset.openbotHide = OPENBOT_EXTRAS.filter((name) => shown?.[name] !== true).join(" ");
++  }, [shown]);
++}
+diff --git a/src/state/config-status.ts b/src/state/config-status.ts
+index e0b88f5..54b483a 100644
+--- a/src/state/config-status.ts
++++ b/src/state/config-status.ts
+@@ -169,7 +169,7 @@ export interface ConfigStatus {
+   /** What a paired phone calls this computer; "" uses the default. */
+   computerName?: string;
+   /** Opt-in flags. Absent means off. */
+-  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean; usbPhoneTakeover?: boolean; skillBurger?: boolean; threadTabs?: boolean; roomFeed?: boolean; roomFeedSince?: number; teamBoard?: boolean; suggestedReplies?: boolean };
++  features?: { openbot?: Record<string, boolean>; skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean; usbPhoneTakeover?: boolean; skillBurger?: boolean; threadTabs?: boolean; roomFeed?: boolean; roomFeedSince?: number; teamBoard?: boolean; suggestedReplies?: boolean };
+   /** First-run progress: whether the welcome tour was finished and which
+    * one-time hints were dismissed. Server-owned so it follows the workspace. */
+   onboarding?: OnboardingStatus;
