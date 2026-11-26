@@ -1,0 +1,59 @@
+OpenBot: un audio o vídeo que el bot nombra con su ruta en texto sale con reproductor bajo la respuesta.
+
+--- a/src/components/AttachmentGallery.tsx	2026-11-26 22:31:04
++++ b/src/components/AttachmentGallery.tsx	2026-11-26 22:31:13
+@@ -7,6 +7,7 @@
+ import { cn } from "@/lib/cn";
+ import { t } from "@/lib/i18n";
+ import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
++import { linkPlainPaths } from "../../shared/markdown-plain-paths";
+ import { decodedLinkPath, localFilePath } from "./ChatMarkdown";
+ import {
+   AttachedFileChip,
+@@ -40,8 +41,11 @@
+   return decodedLinkPath(path);
+ }
+ 
+-export function collectMessageFiles(text: string, existingPaths: readonly string[] = []): GalleryFile[] {
++/** `plainPaths`: also a path written as plain text, the way the chat already shows it as a link (OpenBot: Hermes often
++ * writes the path of a file it made instead of attaching it). */
++export function collectMessageFiles(text: string, existingPaths: readonly string[] = [], options: { plainPaths?: boolean } = {}): GalleryFile[] {
+   const tree: MarkdownNode = fromMarkdown(text, { mdastExtensions: [windowsPathDestinations] });
++  if (options.plainPaths) linkPlainPaths(tree, text);
+   const definitions = new Map<string, string>();
+   const links: MarkdownNode[] = [];
+   const pending = [tree];
+@@ -104,7 +108,7 @@
+   originals: AttachmentOriginals;
+ } {
+   const attached = splitMessageAttachments(attachments);
+-  const links = collectMessageFiles(text);
++  const links = collectMessageFiles(text, [], { plainPaths: true });
+   const linkedNames = new Set(links.map((link) => link.name));
+   const delivered: Record<string, string> = {};
+   const files: GalleryFile[] = [];
+--- a/src/components/AttachmentGallery.test.ts	2026-11-26 22:31:17
++++ b/src/components/AttachmentGallery.test.ts	2026-11-26 22:31:23
+@@ -2,7 +2,7 @@
+ import { renderToStaticMarkup } from "react-dom/server";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ import { PREVIEW_MAX_BYTES } from "@/lib/composer-attachments";
+-import { AttachmentGallery, collectMessageFiles, isAudioAttachment, isVideoAttachment, loadMessageAudio, loadMessageVideo, MessageAttachmentGallery, splitMessageAttachments } from "./AttachmentGallery";
++import { AttachmentGallery, collectMessageFiles, isAudioAttachment, isVideoAttachment, loadMessageAudio, loadMessageVideo, MessageAttachmentGallery, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
+ 
+ const message = { threadId: "thread/one", messageId: "message two" };
+ const file = { path: "/workspace/demo.mp4", name: "demo.mp4", linked: true };
+@@ -334,5 +334,13 @@
+     } finally {
+       vi.useRealTimers();
+     }
++  });
++});
++
++describe("OpenBot: a file path written as plain text", () => {
++  it("gets the player under the reply for audio and video, and nothing for other files", () => {
++    const text = "Aquí tienes el audio: /Users/x/.openmausbot/task-workspaces/b/t/resumen.mp3\nY las notas en /Users/x/.openmausbot/task-workspaces/b/t/notas.txt";
++    expect(replyAttachmentGroup(text).files.map((file) => file.name)).toEqual(["resumen.mp3"]);
++    expect(collectMessageFiles(text).map((file) => file.name)).toEqual([]);
+   });
+ });

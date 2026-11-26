@@ -44,6 +44,12 @@ tarjetas para elegir, formularios e imágenes adjuntas) en vez de crear archivos
   que el parche convierte en "siempre") y el bot decide con criterio cuándo usar texto,
   tarjeta, formulario, documento, panel o imagen.
 
+- `patches/60-archivos-en-chat.patch`: si el bot escribe la ruta de un audio o vídeo en vez de
+  adjuntarlo, sale igualmente con su reproductor debajo de la respuesta.
+- `rebrand.mjs`: al construir, pone OpenBot en los textos que aún decían MausBot y llama "Hermes"
+  al bot principal (respeta las frases sobre MausBot Cloud y los informes a sus autores).
+- `start.sh`: la app arranca en español si no se ha elegido otro idioma en Ajustes.
+
 Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis competidores" o
 "¿qué opción me recomiendas, A o B?" y comprueba que llega una página o una tarjeta, no un archivo.
 

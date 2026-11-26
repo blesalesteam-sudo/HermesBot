@@ -28,6 +28,9 @@ COPY patches/ /patches/
 RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 --batch < "$p" || exit 1; done
 # Archivos que un parche de texto no puede llevar (imágenes, iconos), con las mismas rutas que la base.
 COPY overlay/ /src/
+# Nombre propio (OpenBot) en vez de la marca de los autores.
+COPY rebrand.mjs /rebrand.mjs
+RUN node /rebrand.mjs
 RUN pnpm build:server && NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 FROM ${HERMES_IMAGE}

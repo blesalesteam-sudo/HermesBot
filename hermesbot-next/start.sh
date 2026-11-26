@@ -20,6 +20,16 @@ if [ -z "$OMB_PUBLIC_URL" ] && [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
 fi
 export OMB_SERVER_NAME="${OMB_SERVER_NAME:-OpenBot}"
 
+# Idioma: español, salvo que ya se haya elegido otro en Ajustes. Sin esto la app sigue el idioma
+# del sistema, que en Railway es inglés, y los bots escriben en inglés (por ejemplo el resumen diario).
+OMB_DEFAULT_LANGUAGE="${OMB_DEFAULT_LANGUAGE:-es}" node -e '
+const fs = require("node:fs"), path = require("node:path");
+const file = path.join(process.env.OMB_DATA_DIR, "config.json");
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { if (e.code !== "ENOENT") process.exit(0); }
+if (!cfg.language) { cfg.language = process.env.OMB_DEFAULT_LANGUAGE; fs.writeFileSync(file, JSON.stringify(cfg, null, 2)); }
+'
+
 node /opt/hermesbot/edge.mjs &
 
 cd /app
