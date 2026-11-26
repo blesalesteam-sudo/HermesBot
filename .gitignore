@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-demo/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# Repositorios de referencia que solo se descargan para estudiarlos (no forman parte de la app)
+referencias/
+data/

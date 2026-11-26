@@ -1,0 +1,10 @@
+{
+  "name": "hermesbot-core-bridge",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "bridge.mjs",
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
