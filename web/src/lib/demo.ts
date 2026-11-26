@@ -462,7 +462,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           emit({ t: 'history', history: summaries() })
           break
         case 'retry': {
-          const last = (messages[cmd.botId] ?? []).findLast(m => m.role === 'user')
+          const last = [...(messages[cmd.botId] ?? [])].reverse().find(m => m.role === 'user')
 
           if (last) {
             add(cmd.botId, { id: uid('n'), role: 'notice', text: `${me.name} pidió otra respuesta.`, ts: Date.now() })
