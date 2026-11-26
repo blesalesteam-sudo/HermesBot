@@ -539,3 +539,36 @@ a.btn { text-decoration: none; color: inherit; }
 .login-hint { margin: -2px 2px 2px; font-size: 12px; line-height: 17px; color: var(--ink-3); text-align: left; }
 .chat-float-spacer > * { pointer-events: auto; }
 .chat-float-spacer.right { gap: 6px; align-items: center; }
+
+/* ── Ajustes: cuentas y modelos de IA ── */
+.step-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 22px 0 10px; }
+.step-label:first-of-type { margin-top: 4px; }
+.step-label i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+.step-label em { font-style: normal; font-weight: 400; color: var(--ink-3); }
+.conn-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--ink-3); }
+.conn-dot.on { background: var(--success); border-color: var(--success); }
+.provider + .provider { border-top: 1px solid var(--edge); }
+.btn.small-primary { height: 28px; padding: 0 14px; font-size: 13px; }
+.link-btn { border: 0; background: transparent; padding: 0; margin: 10px 2px 0; font-size: 13px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:hover { color: var(--ink); }
+.key-form { padding: 0 0 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+.key-form .provider-form { padding: 0; margin: 0; }
+.key-note { margin: 0; font-size: 12px; line-height: 17px; color: var(--ink-2); border-left: 2px solid var(--hairline); padding-left: 10px; }
+.key-link { font-size: 12px; color: var(--ink-2); text-underline-offset: 3px; }
+.model-select { flex: none; max-width: 230px; height: 32px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--app); color: var(--ink); padding: 0 12px; font-size: 13px; outline: none; }
+.model-select:focus-visible { border-color: var(--accent); }
+.signin { padding: 2px 0 16px 20px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.signin-steps { margin: 0; padding: 0; list-style: none; counter-reset: paso; display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.signin-steps li { counter-increment: paso; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; line-height: 19px; color: var(--ink-2); }
+.signin-steps li::before { content: counter(paso); flex: none; width: 20px; height: 20px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+.signin-steps li > span:first-of-type { flex: 1; min-width: 180px; }
+.signin-steps .waiting { display: flex; align-items: center; gap: 10px; }
+.code-chip { display: inline-flex; align-items: baseline; gap: 10px; border: 1px dashed var(--ink-3); background: transparent; border-radius: 10px; padding: 7px 14px; }
+.code-chip b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; letter-spacing: 0.08em; color: var(--ink); }
+.code-chip small { font-size: 11px; color: var(--ink-3); }
+@media (max-width: 720px) {
+  .model-select { max-width: 150px; }
+}
+a.btn.btn-primary { color: var(--app); }
+.code-chip { white-space: nowrap; flex: none; }
+.code-chip { width: auto; min-width: max-content; height: auto; overflow: visible; }

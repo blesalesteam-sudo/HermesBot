@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { USER_COLORS } from '../../shared/defaults'
-import type { Bot, ClientCommand, ModelProvider, User } from '../../shared/protocol'
+import type { Bot, ClientCommand, ModelProvider, SignIn, User } from '../../shared/protocol'
 import { fileSize, shortWhen } from '../lib/format'
 import { canInstall, install, isInstalled, notifyBlocked, notifyOn, notifySupported, onInstallChange, setNotify } from '../lib/notify'
 import type { ClientState } from '../lib/store'
@@ -145,75 +145,215 @@ function BotForm({ bot, send, onDone }: { bot: Bot | null; send: Props['send']; 
   )
 }
 
-function ProviderRow({ p, current, currentModel, send }: { p: ModelProvider; current: boolean; currentModel: string; send: Props['send'] }) {
+// Las cuentas que casi todo el mundo usa van arriba; el resto queda en "Más proveedores".
+const MAIN = ['openai-codex', 'anthropic', 'openrouter', 'gemini', 'openai-api']
+const HELP: Record<string, { name?: string; what: string; keyUrl?: string; note?: string }> = {
+  'openai-codex': { name: 'ChatGPT (Codex)', what: 'Usa tu suscripción de ChatGPT. Se conecta iniciando sesión, sin claves.' },
+  anthropic: {
+    name: 'Claude (Anthropic)',
+    what: 'Los modelos Claude, con una clave de la consola de Anthropic (pago por uso).',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    note: 'La suscripción Claude Pro o Max no se puede usar aquí: Anthropic solo la permite dentro de sus propias aplicaciones.'
+  },
+  openrouter: { what: 'Una sola clave para usar modelos de casi todas las marcas.', keyUrl: 'https://openrouter.ai/keys' },
+  gemini: { name: 'Gemini (Google)', what: 'Los modelos Gemini, con una clave de Google AI Studio.', keyUrl: 'https://aistudio.google.com/apikey' },
+  'openai-api': { name: 'OpenAI (clave)', what: 'Los modelos de OpenAI con una clave de pago por uso.', keyUrl: 'https://platform.openai.com/api-keys' }
+}
+
+const providerName = (p: ModelProvider) => HELP[p.slug]?.name ?? p.name
+
+function SignInSteps({ flow, send }: { flow: SignIn; send: Props['send'] }) {
+  const [copied, setCopied] = useState(false)
+
+  if (flow.status === 'error') {
+    return (
+      <div className="signin">
+        <p className="login-error" role="alert">No se pudo iniciar sesión{flow.error ? ` (${flow.error})` : ''}.</p>
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={() => send({ t: 'login.start', slug: flow.slug })}>Volver a intentarlo</button>
+          <button className="btn" onClick={() => send({ t: 'login.cancel' })}>Cerrar</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!flow.url || !flow.code) {
+    return <div className="signin"><p className="rp-empty small">Preparando el inicio de sesión…</p></div>
+  }
+
+  return (
+    <div className="signin">
+      <ol className="signin-steps">
+        <li>
+          <span>Abre la página de inicio de sesión y entra con tu cuenta.</span>
+          <a className="btn btn-primary" href={flow.url} target="_blank" rel="noreferrer">Abrir la página</a>
+        </li>
+        <li>
+          <span>Cuando te lo pida, escribe este código:</span>
+          <button
+            className="code-chip"
+            title="Copiar el código"
+            onClick={() => void navigator.clipboard?.writeText(flow.code).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1400) }).catch(() => undefined)}
+          >
+            <b>{flow.code}</b><small>{copied ? 'Copiado' : 'Copiar'}</small>
+          </button>
+        </li>
+        <li><span className="waiting"><span className="dots"><i /><i /><i /></span> Esperando a que termines. Esta pantalla se actualiza sola.</span></li>
+      </ol>
+      <button className="btn small" onClick={() => send({ t: 'login.cancel' })}>Cancelar</button>
+    </div>
+  )
+}
+
+function ProviderRow({ p, flow, send }: { p: ModelProvider; flow?: SignIn | null; send: Props['send'] }) {
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState('')
-  const [model, setModel] = useState(current ? currentModel : p.models[0] ?? '')
-
-  useEffect(() => {
-    if (!model && p.models[0]) { setModel(p.models[0]) }
-  }, [p.models]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [confirm, setConfirm] = useState(false)
+  const help = HELP[p.slug]
+  const signing = flow && flow.slug === p.slug && flow.status !== 'done' ? flow : null
 
   return (
     <div className="provider">
       <div className="set-row">
+        <span className={`conn-dot${p.connected ? ' on' : ''}`} aria-hidden="true" />
         <div className="set-row-text">
-          <span>{p.name}{current && <i className="tag">En uso</i>}</span>
-          <small>{p.connected ? `Conectado · ${p.models.length} modelos` : 'Sin conectar'}</small>
+          <span>{providerName(p)}</span>
+          <small>{p.connected ? `Conectada · ${p.models.length === 1 ? '1 modelo' : `${p.models.length} modelos`}` : help?.what ?? 'Se conecta pegando su clave.'}</small>
         </div>
-        {p.keyBased && <button className="btn small" onClick={() => setOpen(o => !o)}>{p.connected ? 'Cambiar clave' : 'Conectar'}</button>}
+        {confirm ? (
+          <>
+            <button className="btn small danger" onClick={() => { send({ t: 'model.disconnect', slug: p.slug }); setConfirm(false) }}>Desconectar</button>
+            <button className="btn small" onClick={() => setConfirm(false)}>Cancelar</button>
+          </>
+        ) : p.connected ? (
+          <>
+            {p.keyBased && <button className="btn small" onClick={() => setOpen(o => !o)}>Cambiar clave</button>}
+            <button className="mini-btn" onClick={() => setConfirm(true)} aria-label={`Desconectar ${providerName(p)}`} title="Desconectar"><IconTrash width={15} height={15} /></button>
+          </>
+        ) : p.signIn ? (
+          !signing && <button className="btn btn-primary small-primary" onClick={() => send({ t: 'login.start', slug: p.slug })}>Iniciar sesión</button>
+        ) : p.keyBased && <button className="btn small" onClick={() => setOpen(o => !o)}>{open ? 'Cerrar' : 'Conectar'}</button>}
       </div>
+      {signing && <SignInSteps flow={signing} send={send} />}
       {open && (
-        <form className="provider-form" onSubmit={e => { e.preventDefault(); send({ t: 'model.key', slug: p.slug, key }); setKey(''); setOpen(false) }}>
-          <input type="password" value={key} onChange={e => setKey(e.target.value)} placeholder={`Pega aquí la clave de ${p.name}`} autoComplete="off" autoFocus aria-label={`Clave de ${p.name}`} />
-          <button className="btn btn-primary" disabled={key.trim().length < 8}>Guardar clave</button>
+        <form className="key-form" onSubmit={e => { e.preventDefault(); send({ t: 'model.key', slug: p.slug, key }); setKey(''); setOpen(false) }}>
+          {help?.note && <p className="key-note">{help.note}</p>}
+          <div className="provider-form">
+            <input type="password" value={key} onChange={e => setKey(e.target.value)} placeholder={`Pega aquí la clave de ${providerName(p)}`} autoComplete="off" autoFocus aria-label={`Clave de ${providerName(p)}`} />
+            <button className="btn btn-primary" disabled={key.trim().length < 8}>Guardar</button>
+          </div>
+          {help?.keyUrl && <a className="key-link" href={help.keyUrl} target="_blank" rel="noreferrer">¿De dónde saco la clave?</a>}
         </form>
-      )}
-      {p.connected && p.models.length > 0 && (
-        <div className="provider-form">
-          <select value={model} onChange={e => setModel(e.target.value)} aria-label={`Modelo de ${p.name}`}>
-            {p.models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <button className="btn" disabled={!model || (current && model === currentModel)} onClick={() => send({ t: 'model.set', slug: p.slug, model })}>Usar este modelo</button>
-        </div>
       )}
     </div>
   )
 }
 
+/** Desplegable con los modelos de todas las cuentas conectadas, agrupados por cuenta. */
+function ModelPicker({ providers, value, onChange, first, label }: { providers: ModelProvider[]; value: string; onChange: (slug: string, model: string) => void; first?: string; label: string }) {
+  const known = !value || providers.some(p => p.models.some(m => `${p.slug}\n${m}` === value))
+
+  return (
+    <select
+      className="model-select"
+      value={value}
+      aria-label={label}
+      onChange={e => {
+        const [slug = '', model = ''] = e.target.value.split('\n')
+
+        onChange(slug, model)
+      }}
+    >
+      {first !== undefined && <option value="">{first}</option>}
+      {!known && <option value={value}>{value.split('\n')[1]}</option>}
+      {providers.map(p => (
+        <optgroup key={p.slug} label={providerName(p)}>
+          {p.models.map(m => <option key={m} value={`${p.slug}\n${m}`}>{m}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
+
 function ModelSection({ state, send }: { state: ClientState; send: Props['send'] }) {
   const [q, setQ] = useState('')
+  const [more, setMore] = useState(false)
   const info = state.model
 
   useEffect(() => { send({ t: 'model.get' }) }, [send])
 
+  if (!info) {
+    return (
+      <>
+        <h3>Cuentas y modelos de IA</h3>
+        <p className="rp-empty small">{state.hermes === 'connected' || state.hermes === 'demo' ? 'Cargando…' : 'Hermes no está conectado ahora mismo.'}</p>
+      </>
+    )
+  }
+
+  const order = (p: ModelProvider) => (MAIN.indexOf(p.slug) === -1 ? 99 : MAIN.indexOf(p.slug))
+  const main = info.providers.filter(p => p.connected || MAIN.includes(p.slug)).sort((a, b) => Number(b.connected) - Number(a.connected) || order(a) - order(b))
   const needle = q.trim().toLowerCase()
-  const list = (info?.providers ?? [])
-    .filter(p => !needle || p.name.toLowerCase().includes(needle))
-    .sort((a, b) => Number(b.slug === info?.provider) - Number(a.slug === info?.provider) || Number(b.connected) - Number(a.connected))
+  const rest = info.providers.filter(p => !main.includes(p) && (!needle || p.name.toLowerCase().includes(needle)))
+  const connected = info.providers.filter(p => p.connected && p.models.length)
+  const team = info.provider && info.model ? `${info.provider}\n${info.model}` : ''
 
   return (
     <>
-      <h3>Modelo de IA</h3>
-      <p className="settings-sub">El modelo es el motor que usan todos los bots. Conecta un proveedor pegando su clave y elige el modelo. La clave se guarda en Hermes y no vuelve a mostrarse.</p>
-      {!info ? (
-        <p className="rp-empty small">{state.hermes === 'connected' || state.hermes === 'demo' ? 'Cargando los modelos…' : 'Hermes no está conectado ahora mismo.'}</p>
-      ) : (
+      <h3>Cuentas y modelos de IA</h3>
+      <p className="settings-sub">El modelo es el motor con el que piensan los bots. Son tres pasos: conecta una cuenta, elige el modelo del equipo y, si quieres, dale uno distinto a algún bot.</p>
+
+      <div className="step-label"><i>1</i> Conecta una cuenta</div>
+      <div className="rows">
+        {main.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}
+      </div>
+      <button className="link-btn" onClick={() => setMore(m => !m)}>{more ? 'Ocultar el resto' : `Más proveedores (${info.providers.length - main.length})`}</button>
+      {more && (
         <>
-          <div className="model-now">
-            <span>Ahora mismo</span>
-            <b>{info.model || 'Sin modelo elegido'}</b>
-            <small>{info.providers.find(p => p.slug === info.provider)?.name ?? info.provider}</small>
-          </div>
           <label className="search modal-search">
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proveedor (OpenRouter, Anthropic, Google…)" aria-label="Buscar proveedor" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proveedor" aria-label="Buscar proveedor" />
           </label>
           <div className="rows">
-            {list.map(p => <ProviderRow key={p.slug} p={p} current={p.slug === info.provider} currentModel={info.model} send={send} />)}
-            {list.length === 0 && <p className="rp-empty small">Ningún proveedor coincide.</p>}
+            {rest.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}
+            {rest.length === 0 && <p className="rp-empty small">Ningún proveedor coincide.</p>}
           </div>
         </>
       )}
+
+      <div className="step-label"><i>2</i> Modelo del equipo</div>
+      {connected.length ? (
+        <div className="rows">
+          <div className="set-row">
+            <div className="set-row-text">
+              <span>Lo usan todos los bots</span>
+              <small>Salvo los que tengan uno propio en el paso 3.</small>
+            </div>
+            <ModelPicker providers={connected} value={team} label="Modelo del equipo" onChange={(slug, model) => slug && send({ t: 'model.set', slug, model })} />
+          </div>
+        </div>
+      ) : <p className="rp-empty small">Conecta primero una cuenta en el paso 1.</p>}
+
+      <div className="step-label"><i>3</i> Un modelo distinto para algún bot <em>(opcional)</em></div>
+      {connected.length ? (
+        <div className="rows">
+          {state.bots.map(b => (
+            <div key={b.id} className="set-row">
+              <Avatar name={b.name} color={b.color} size={30} />
+              <div className="set-row-text">
+                <span>{b.name}</span>
+                <small>{b.model ? `Cuenta: ${providerName(info.providers.find(p => p.slug === b.model!.slug) ?? { slug: b.model.slug, name: b.model.slug, connected: false, keyBased: false, models: [] })}` : 'Usa el modelo del equipo'}</small>
+              </div>
+              <ModelPicker
+                providers={connected}
+                value={b.model ? `${b.model.slug}\n${b.model.model}` : ''}
+                first="El del equipo"
+                label={`Modelo de ${b.name}`}
+                onChange={(slug, model) => send({ t: 'bot.model', id: b.id, slug: slug || undefined, model: model || undefined })}
+              />
+            </div>
+          ))}
+        </div>
+      ) : <p className="rp-empty small">Cuando haya una cuenta conectada podrás elegir aquí.</p>}
     </>
   )
 }
@@ -356,7 +496,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
   }, [onClose])
 
   const go = (s: Section) => { setSection(s); setEditUser(null); setEditBot(null); setConfirm(null) }
-  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Modelo de IA'] as [Section, string]] : []), ['avisos', 'Avisos y app'], ...(admin ? [['copias', 'Copias'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
+  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Cuentas y modelos'] as [Section, string]] : []), ['avisos', 'Avisos y app'], ...(admin ? [['copias', 'Copias'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
   const botBeingEdited = editBot && editBot !== 'new' ? state.bots.find(b => b.id === editBot) ?? null : null
 

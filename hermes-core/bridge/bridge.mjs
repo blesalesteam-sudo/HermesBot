@@ -9,7 +9,7 @@
 // Así la web (otro servicio de Railway) habla el protocolo oficial completo sin exponer
 // el gateway a internet.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { createReadStream, createWriteStream, realpathSync, rmSync, statSync } from 'node:fs'
 import http from 'node:http'
@@ -83,6 +83,45 @@ function reply(res, code, data) {
 
 const lastLine = error => String(error?.stderr || error?.message || error).trim().split('\n').pop().slice(0, 200)
 
+// Inicio de sesión con una suscripción (sin claves): Hermes da una página y un código, la persona
+// los usa en su navegador y Hermes guarda la sesión. Solo una a la vez.
+const SIGN_IN = { 'openai-codex': ['auth', 'add', 'openai-codex', '--type', 'oauth', '--no-browser'] }
+let login = null
+
+function startLogin(provider) {
+  login?.child?.kill()
+
+  const child = spawn('hermes', SIGN_IN[provider], { env: { ...HERMES_ENV, PYTHONUNBUFFERED: '1' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  const flow = { provider, status: 'pending', url: '', code: '', error: '', child, out: '' }
+
+  login = flow
+
+  const read = chunk => {
+    flow.out = (flow.out + String(chunk).replace(/\x1b\[[0-9;]*m/g, '')).slice(-6000)
+    flow.url ||= /https:\/\/\S+/.exec(flow.out)?.[0] ?? ''
+    flow.code ||= /Enter this code:\s*(\S+)/i.exec(flow.out)?.[1] ?? ''
+  }
+
+  child.stdout.on('data', read)
+  child.stderr.on('data', read)
+  child.on('error', error => { flow.status = 'error'; flow.error = error.message })
+  child.on('close', code => {
+    if (flow.status !== 'pending') { return }
+
+    const failed = /(Login failed|Login cancelled|timed out)[^\n]*/i.exec(flow.out)?.[0]
+
+    flow.status = code === 0 && !failed ? 'done' : 'error'
+    flow.error = flow.status === 'error' ? (failed || flow.out.trim().split('\n').pop() || 'no se pudo iniciar sesión').slice(0, 200) : ''
+    log('inicio de sesión', provider, flow.status)
+  })
+  // Nadie espera más de un cuarto de hora con el código en pantalla.
+  setTimeout(() => { if (flow.status === 'pending') { flow.status = 'error'; flow.error = 'Se acabó el tiempo.'; child.kill() } }, 15 * 60_000).unref()
+
+  return flow
+}
+
+const loginView = () => (login ? { provider: login.provider, status: login.status, url: login.url, code: login.code, error: login.error } : { status: 'none' })
+
 /** Órdenes internas que solo puede dar la web de hermesBot (con el token interno). */
 async function admin(req, res, url) {
   // Modelo por defecto del equipo: lo guarda Hermes en su propia configuración, para que
@@ -110,6 +149,21 @@ async function admin(req, res, url) {
     log('modelo por defecto:', provider, model)
 
     return reply(res, 200, { ok: true })
+  }
+
+  if (url.pathname === '/admin/login') {
+    if (req.method === 'POST') {
+      const provider = String(url.searchParams.get('provider') || '')
+
+      if (!SIGN_IN[provider]) { return reply(res, 400, { ok: false, error: 'proveedor sin inicio de sesión' }) }
+
+      startLogin(provider)
+    } else if (req.method === 'DELETE') {
+      login?.child?.kill()
+      login = null
+    }
+
+    return reply(res, 200, loginView())
   }
 
   // Un archivo que el bot ha creado (imagen, documento…), para enseñarlo en el chat.

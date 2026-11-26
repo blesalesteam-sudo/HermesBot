@@ -110,6 +110,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     provider: 'openrouter', model: 'modelo-equilibrado',
     providers: [
       { slug: 'openrouter', name: 'OpenRouter', connected: true, keyBased: true, models: ['modelo-equilibrado', 'modelo-rapido', 'modelo-avanzado'] },
+      { slug: 'openai-codex', name: 'OpenAI Codex', connected: false, keyBased: false, signIn: true, models: [] },
       { slug: 'anthropic', name: 'Anthropic', connected: false, keyBased: true, models: [] },
       { slug: 'gemini', name: 'Google AI Studio', connected: false, keyBased: true, models: [] },
       { slug: 'xai', name: 'xAI', connected: false, keyBased: true, models: [] },
@@ -365,6 +366,32 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           demoModel = { ...demoModel, providers: demoModel.providers.map(p => (p.slug === cmd.slug ? { ...p, connected: true, models: p.models.length ? p.models : ['modelo-rapido', 'modelo-avanzado'] } : p)) }
           emit({ t: 'model', info: demoModel })
           emit({ t: 'toast', text: 'Clave guardada. Ya puedes elegir un modelo.' })
+          break
+        case 'model.disconnect':
+          demoModel = { ...demoModel, providers: demoModel.providers.map(p => (p.slug === cmd.slug ? { ...p, connected: false, models: [] } : p)) }
+          emit({ t: 'model', info: demoModel })
+          break
+        case 'login.start': {
+          const slug = cmd.slug
+
+          emit({ t: 'login', flow: { slug, status: 'pending', url: '', code: '' } })
+          timers.push(window.setTimeout(() => emit({ t: 'login', flow: { slug, status: 'pending', url: 'https://example.com/', code: 'ABCD-12345' } }), 900))
+          // En la vista previa, la sesión "se completa" sola a los pocos segundos.
+          timers.push(window.setTimeout(() => {
+            demoModel = { ...demoModel, providers: demoModel.providers.map(p => (p.slug === slug ? { ...p, connected: true, models: ['modelo-codex', 'modelo-codex-mini'] } : p)) }
+            emit({ t: 'login', flow: { slug, status: 'done', url: '', code: '' } })
+            emit({ t: 'model', info: demoModel })
+            emit({ t: 'toast', text: 'Cuenta conectada.' })
+          }, 9000))
+          break
+        }
+        case 'login.cancel':
+          emit({ t: 'login', flow: null })
+          break
+        case 'bot.model':
+          bots = bots.map(b => (b.id === cmd.id ? { ...b, model: cmd.slug && cmd.model ? { slug: cmd.slug, model: cmd.model } : undefined } : b))
+          emit({ t: 'bots', bots })
+          emit({ t: 'toast', text: cmd.model ? `Ahora usa ${cmd.model}.` : 'Vuelve a usar el modelo del equipo.' })
           break
         case 'model.set':
           demoModel = { ...demoModel, provider: cmd.slug, model: cmd.model }

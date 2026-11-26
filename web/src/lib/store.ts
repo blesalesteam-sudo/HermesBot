@@ -1,4 +1,4 @@
-import type { BackupInfo, ChatMessage, ChatSummary, ModelInfo, ServerEvent, Snapshot } from '../../shared/protocol'
+import type { BackupInfo, ChatMessage, ChatSummary, ModelInfo, ServerEvent, SignIn, Snapshot } from '../../shared/protocol'
 
 export interface ClientState extends Snapshot {
   /** botId → ids de socios escribiendo ahora mismo. */
@@ -10,6 +10,8 @@ export interface ClientState extends Snapshot {
   /** Conversación del historial que se está leyendo. */
   chat?: ChatSummary & { messages: ChatMessage[] }
   backups?: { list: BackupInfo[]; auto: boolean }
+  /** Inicio de sesión con una suscripción que está en marcha. */
+  login?: SignIn | null
 }
 
 export function initialState(snapshot: Snapshot): ClientState {
@@ -89,6 +91,9 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
 
     case 'model':
       return { ...state, model: ev.info }
+
+    case 'login':
+      return { ...state, login: ev.flow }
 
     case 'msgs':
       return { ...state, messages: { ...state.messages, [ev.botId]: ev.messages } }

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 
 import type {
   ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
-  ServerEvent, Snapshot, ToolCall, Upload, User
+  ServerEvent, SignIn, Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
 import { listBackups } from './backup.ts'
@@ -56,6 +56,8 @@ function toolLabel(name: string): string {
   return `Usó ${name.replace(/_/g, ' ')}`
 }
 
+// Proveedores que se conectan iniciando sesión con la suscripción (el puente de hermes-core sabe hacerlo).
+const SIGN_IN = new Set(['openai-codex'])
 const MAX_ARCHIVED = 300
 const MAX_UPLOADS = 6
 const MAX_UPLOAD_CHARS = 11_500_000 // unos 8 MB una vez codificado
@@ -113,6 +115,7 @@ export class Room {
   private gw: GatewayClient | null = null
   private routines: Routine[] = []
   private retry: NodeJS.Timeout | undefined
+  private loginPoll: NodeJS.Timeout | undefined
   private bots: Bot[] = saved.bots ?? config.bots
 
   private get users(): User[] {
@@ -280,6 +283,14 @@ export class Room {
         return this.saveModelKey(viewer, String(cmd.slug), String(cmd.key ?? ''))
       case 'model.set':
         return this.setModel(viewer, String(cmd.slug), String(cmd.model))
+      case 'model.disconnect':
+        return this.disconnectModel(viewer, String(cmd.slug))
+      case 'login.start':
+        return this.startLogin(viewer, String(cmd.slug))
+      case 'login.cancel':
+        return this.cancelLogin(viewer)
+      case 'bot.model':
+        return this.setBotModel(viewer, String(cmd.id), cmd.slug ? String(cmd.slug) : '', cmd.model ? String(cmd.model) : '')
       case 'chat.new':
         return this.newChat(viewer, String(cmd.botId))
       case 'chat.open': {
@@ -422,12 +433,13 @@ export class Room {
       provider: String(res.provider ?? ''),
       model: String(res.model ?? ''),
       providers: (res.providers ?? [])
-        .filter((p: any) => p.authenticated || p.auth_type === 'api_key')
+        .filter((p: any) => p.authenticated || p.auth_type === 'api_key' || SIGN_IN.has(String(p.slug)))
         .map((p: any) => ({
           slug: String(p.slug),
           name: String(p.name || p.slug),
           connected: !!p.authenticated,
           keyBased: p.auth_type === 'api_key',
+          signIn: SIGN_IN.has(String(p.slug)) || undefined,
           models: [...new Set<string>([...(p.featured_models ?? []), ...(p.models ?? [])])].slice(0, 200)
         }))
     }
@@ -507,7 +519,10 @@ export class Room {
       let failed = ''
 
       for (const [botId, sid] of Object.entries(saved.sessions)) {
-        if (this.bot(botId)) {
+        const bot = this.bot(botId)
+
+        // Los bots con modelo propio se quedan con el suyo.
+        if (bot && !bot.model) {
           await this.pickModel(sid, slug, model).catch(error => { failed = (error as Error).message })
         }
       }
@@ -520,6 +535,107 @@ export class Room {
     }
 
     await this.sendModel(viewer)
+  }
+
+  private async disconnectModel(viewer: Viewer, slug: string) {
+    if (!this.isAdmin(viewer) || !this.gw || /\s/.test(slug)) { return }
+
+    try {
+      await this.gw.request('model.disconnect', { slug })
+      viewer.send({ t: 'toast', text: 'Cuenta desconectada.' })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude desconectarla (${(error as Error).message}).`, error: true })
+    }
+
+    await this.sendModel(viewer)
+  }
+
+  // ───────────── Ajustes: iniciar sesión con una suscripción ─────────────
+
+  private async loginCall(method: 'GET' | 'POST' | 'DELETE', slug = ''): Promise<SignIn | null> {
+    const res = await fetch(`${config.hermesAdmin}/admin/login${slug ? `?provider=${encodeURIComponent(slug)}` : ''}`, {
+      method,
+      headers: { authorization: `Bearer ${config.hermesToken}` }
+    })
+    const data = await res.json().catch(() => ({})) as any
+
+    if (!res.ok) { throw new Error(data.error || `respuesta ${res.status}`) }
+
+    return data.provider ? { slug: data.provider, status: data.status, url: data.url || '', code: data.code || '', error: data.error || undefined } : null
+  }
+
+  private toAdmins(ev: ServerEvent) {
+    for (const v of this.viewers) {
+      if (this.isAdmin(v)) { v.send(ev) }
+    }
+  }
+
+  private async startLogin(viewer: Viewer, slug: string) {
+    if (!this.isAdmin(viewer) || !SIGN_IN.has(slug)) { return }
+
+    try {
+      this.toAdmins({ t: 'login', flow: await this.loginCall('POST', slug) })
+    } catch (error) {
+      return viewer.send({ t: 'toast', text: `No pude empezar el inicio de sesión (${(error as Error).message}).`, error: true })
+    }
+
+    clearInterval(this.loginPoll)
+    this.loginPoll = setInterval(async () => {
+      const flow = await this.loginCall('GET').catch(() => null)
+
+      this.toAdmins({ t: 'login', flow })
+
+      if (flow?.status === 'pending') { return }
+
+      clearInterval(this.loginPoll)
+
+      if (flow?.status === 'done') {
+        for (const v of this.viewers) {
+          if (this.isAdmin(v)) { void this.sendModel(v) }
+        }
+      }
+    }, 2500)
+  }
+
+  private async cancelLogin(viewer: Viewer) {
+    if (!this.isAdmin(viewer)) { return }
+
+    clearInterval(this.loginPoll)
+    await this.loginCall('DELETE').catch(() => undefined)
+    this.toAdmins({ t: 'login', flow: null })
+  }
+
+  // ───────────── Ajustes: modelo propio de cada bot ─────────────
+
+  private async setBotModel(viewer: Viewer, id: string, slug: string, model: string) {
+    const bot = this.bot(id)
+
+    if (!this.isAdmin(viewer) || !bot || /\s/.test(slug) || /\s/.test(model) || (!!slug !== !!model)) { return }
+
+    const next: Bot = { ...bot, model: slug ? { slug, model } : undefined }
+
+    this.bots = this.bots.map(b => (b.id === id ? next : b))
+    saved.bots = this.bots
+    persist()
+    this.broadcast({ t: 'bots', bots: this.bots })
+
+    // Si el bot ya tiene una conversación en marcha, el cambio se aplica en ella ahora mismo.
+    const sid = saved.sessions[id]
+    let failed = ''
+
+    if (sid && this.gw && this.hermes === 'connected') {
+      try {
+        const target = next.model ?? await this.modelInfo().then(i => ({ slug: i.provider, model: i.model }))
+
+        if (target.slug && target.model) { await this.pickModel(sid, target.slug, target.model) }
+      } catch (error) {
+        failed = (error as Error).message
+      }
+    }
+
+    viewer.send(failed
+      ? { t: 'toast', text: `Guardado, pero la conversación abierta no pudo cambiar todavía (${failed.slice(0, 120)}).`, error: true }
+      : { t: 'toast', text: next.model ? `${bot.name} usa ahora ${model}.` : `${bot.name} vuelve a usar el modelo del equipo.` })
   }
 
   // ───────────── Ajustes: usuarios y bots ─────────────
@@ -771,6 +887,12 @@ export class Room {
       this.sessionToBot.set(sid, bot.id)
       persist()
       this.afterAttach(bot, sid, created)
+
+      if (bot.model) {
+        await this.pickModel(sid, bot.model.slug, bot.model.model).catch(error => {
+          this.notice(bot.id, `No pude poner el modelo propio de este bot (${(error as Error).message.slice(0, 120)}). Usa el del equipo.`, true)
+        })
+      }
 
       return sid
     })()

@@ -21,6 +21,8 @@ export interface Bot {
   color: string
   /** Instrucciones de personalidad que se le dan a Hermes la primera vez. */
   persona?: string
+  /** Cuenta y modelo propios de este bot. Sin esto usa el modelo del equipo. */
+  model?: { slug: string; model: string }
 }
 
 export interface ToolCall {
@@ -100,7 +102,19 @@ export interface ModelProvider {
   connected: boolean
   /** Se conecta pegando una clave (los demás necesitan pasos fuera de la app). */
   keyBased: boolean
+  /** Se conecta iniciando sesión con la suscripción (página + código), sin claves. */
+  signIn?: boolean
   models: string[]
+}
+
+/** Inicio de sesión con una suscripción que está en marcha. */
+export interface SignIn {
+  slug: string
+  status: 'pending' | 'done' | 'error'
+  /** Página que hay que abrir y código que hay que escribir en ella. */
+  url: string
+  code: string
+  error?: string
 }
 
 export interface ModelInfo {
@@ -163,6 +177,7 @@ export type ServerEvent =
   | { t: 'bots'; bots: Bot[] }
   | { t: 'toast'; text: string; error?: boolean }
   | { t: 'model'; info: ModelInfo }
+  | { t: 'login'; flow: SignIn | null }
   /** Sustituye la conversación visible de un bot (al empezar una nueva o recuperar otra). */
   | { t: 'msgs'; botId: string; messages: ChatMessage[] }
   | { t: 'history'; history: ChatSummary[] }
@@ -188,6 +203,11 @@ export type ClientCommand =
   | { t: 'model.get' }
   | { t: 'model.key'; slug: string; key: string }
   | { t: 'model.set'; slug: string; model: string }
+  | { t: 'model.disconnect'; slug: string }
+  | { t: 'login.start'; slug: string }
+  | { t: 'login.cancel' }
+  /** Sin `slug` el bot vuelve a usar el modelo del equipo. */
+  | { t: 'bot.model'; id: string; slug?: string; model?: string }
   | { t: 'chat.new'; botId: string }
   | { t: 'chat.open'; id: string }
   | { t: 'chat.restore'; id: string }
