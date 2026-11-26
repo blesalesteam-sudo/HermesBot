@@ -1,10 +1,12 @@
-import type { ChatMessage, ServerEvent, Snapshot } from '../../shared/protocol'
+import type { ChatMessage, ModelInfo, ServerEvent, Snapshot } from '../../shared/protocol'
 
 export interface ClientState extends Snapshot {
   /** botId → ids de socios escribiendo ahora mismo. */
   typing: Record<string, string[]>
   /** Aviso breve tras guardar algo en Ajustes. */
   toast?: { text: string; error?: boolean; n: number }
+  /** Modelos de IA disponibles (solo se pide al abrir Ajustes). */
+  model?: ModelInfo
 }
 
 export function initialState(snapshot: Snapshot): ClientState {
@@ -81,6 +83,9 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
 
     case 'toast':
       return { ...state, toast: { text: ev.text, error: ev.error, n: Date.now() } }
+
+    case 'model':
+      return { ...state, model: ev.info }
 
     case 'routines':
       return { ...state, routines: ev.routines }

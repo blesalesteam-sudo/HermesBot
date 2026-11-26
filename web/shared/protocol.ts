@@ -73,6 +73,23 @@ export interface ChatMessage {
   ts: number
 }
 
+/** Un proveedor de IA que Hermes sabe usar (OpenRouter, Anthropic, Google…). */
+export interface ModelProvider {
+  slug: string
+  name: string
+  /** Ya tiene una clave válida guardada. */
+  connected: boolean
+  /** Se conecta pegando una clave (los demás necesitan pasos fuera de la app). */
+  keyBased: boolean
+  models: string[]
+}
+
+export interface ModelInfo {
+  provider: string
+  model: string
+  providers: ModelProvider[]
+}
+
 export type BotState = 'idle' | 'thinking' | 'working'
 
 export interface BotStatus {
@@ -125,6 +142,7 @@ export type ServerEvent =
   | { t: 'users'; users: User[] }
   | { t: 'bots'; bots: Bot[] }
   | { t: 'toast'; text: string; error?: boolean }
+  | { t: 'model'; info: ModelInfo }
 
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 
@@ -141,3 +159,6 @@ export type ClientCommand =
   | { t: 'user.delete'; id: string }
   | { t: 'bot.save'; id?: string; name: string; role: string; color: string; persona?: string }
   | { t: 'bot.delete'; id: string }
+  | { t: 'model.get' }
+  | { t: 'model.key'; slug: string; key: string }
+  | { t: 'model.set'; slug: string; model: string }

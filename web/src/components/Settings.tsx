@@ -1,12 +1,12 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { USER_COLORS } from '../../shared/defaults'
-import type { Bot, ClientCommand, User } from '../../shared/protocol'
+import type { Bot, ClientCommand, ModelProvider, User } from '../../shared/protocol'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
 import { IconBack, IconMoon, IconPlus, IconSun, IconTrash, IconX } from './icons'
 
-type Section = 'perfil' | 'usuarios' | 'bots' | 'apariencia'
+type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apariencia'
 
 interface Props {
   state: ClientState
@@ -141,6 +141,79 @@ function BotForm({ bot, send, onDone }: { bot: Bot | null; send: Props['send']; 
   )
 }
 
+function ProviderRow({ p, current, currentModel, send }: { p: ModelProvider; current: boolean; currentModel: string; send: Props['send'] }) {
+  const [open, setOpen] = useState(false)
+  const [key, setKey] = useState('')
+  const [model, setModel] = useState(current ? currentModel : p.models[0] ?? '')
+
+  useEffect(() => {
+    if (!model && p.models[0]) { setModel(p.models[0]) }
+  }, [p.models]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="provider">
+      <div className="set-row">
+        <div className="set-row-text">
+          <span>{p.name}{current && <i className="tag">En uso</i>}</span>
+          <small>{p.connected ? `Conectado · ${p.models.length} modelos` : 'Sin conectar'}</small>
+        </div>
+        {p.keyBased && <button className="btn small" onClick={() => setOpen(o => !o)}>{p.connected ? 'Cambiar clave' : 'Conectar'}</button>}
+      </div>
+      {open && (
+        <form className="provider-form" onSubmit={e => { e.preventDefault(); send({ t: 'model.key', slug: p.slug, key }); setKey(''); setOpen(false) }}>
+          <input type="password" value={key} onChange={e => setKey(e.target.value)} placeholder={`Pega aquí la clave de ${p.name}`} autoComplete="off" autoFocus aria-label={`Clave de ${p.name}`} />
+          <button className="btn btn-primary" disabled={key.trim().length < 8}>Guardar clave</button>
+        </form>
+      )}
+      {p.connected && p.models.length > 0 && (
+        <div className="provider-form">
+          <select value={model} onChange={e => setModel(e.target.value)} aria-label={`Modelo de ${p.name}`}>
+            {p.models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <button className="btn" disabled={!model || (current && model === currentModel)} onClick={() => send({ t: 'model.set', slug: p.slug, model })}>Usar este modelo</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ModelSection({ state, send }: { state: ClientState; send: Props['send'] }) {
+  const [q, setQ] = useState('')
+  const info = state.model
+
+  useEffect(() => { send({ t: 'model.get' }) }, [send])
+
+  const needle = q.trim().toLowerCase()
+  const list = (info?.providers ?? [])
+    .filter(p => !needle || p.name.toLowerCase().includes(needle))
+    .sort((a, b) => Number(b.slug === info?.provider) - Number(a.slug === info?.provider) || Number(b.connected) - Number(a.connected))
+
+  return (
+    <>
+      <h3>Modelo de IA</h3>
+      <p className="settings-sub">El modelo es el motor que usan todos los bots. Conecta un proveedor pegando su clave y elige el modelo. La clave se guarda en Hermes y no vuelve a mostrarse.</p>
+      {!info ? (
+        <p className="rp-empty small">{state.hermes === 'connected' || state.hermes === 'demo' ? 'Cargando los modelos…' : 'Hermes no está conectado ahora mismo.'}</p>
+      ) : (
+        <>
+          <div className="model-now">
+            <span>Ahora mismo</span>
+            <b>{info.model || 'Sin modelo elegido'}</b>
+            <small>{info.providers.find(p => p.slug === info.provider)?.name ?? info.provider}</small>
+          </div>
+          <label className="search modal-search">
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proveedor (OpenRouter, Anthropic, Google…)" aria-label="Buscar proveedor" />
+          </label>
+          <div className="rows">
+            {list.map(p => <ProviderRow key={p.slug} p={p} current={p.slug === info.provider} currentModel={info.model} send={send} />)}
+            {list.length === 0 && <p className="rp-empty small">Ningún proveedor coincide.</p>}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 export function Settings({ state, send, theme, onTheme, onClose, initial = 'perfil' }: Props) {
   const [section, setSection] = useState<Section>(initial)
   const [editUser, setEditUser] = useState<string | 'new' | null>(null)
@@ -158,7 +231,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
   }, [onClose])
 
   const go = (s: Section) => { setSection(s); setEditUser(null); setEditBot(null); setConfirm(null) }
-  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ['apariencia', 'Apariencia']]
+  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Modelo de IA'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
   const botBeingEdited = editBot && editBot !== 'new' ? state.bots.find(b => b.id === editBot) ?? null : null
 
@@ -253,6 +326,8 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
               {admin && <button className="btn add-btn" onClick={() => setEditBot('new')}><IconPlus width={16} height={16} /> Crear bot</button>}
             </>
           ))}
+
+          {section === 'modelo' && <ModelSection state={state} send={send} />}
 
           {section === 'apariencia' && (
             <>

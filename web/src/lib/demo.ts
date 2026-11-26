@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  ChatMessage, ClientCommand, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
+  ChatMessage, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -83,6 +83,16 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
   const messages = seed()
   const waiting = new Map<string, (answer: string) => void>()
   let toolset = 0
+  let demoModel: ModelInfo = {
+    provider: 'openrouter', model: 'modelo-equilibrado',
+    providers: [
+      { slug: 'openrouter', name: 'OpenRouter', connected: true, keyBased: true, models: ['modelo-equilibrado', 'modelo-rapido', 'modelo-avanzado'] },
+      { slug: 'anthropic', name: 'Anthropic', connected: false, keyBased: true, models: [] },
+      { slug: 'gemini', name: 'Google AI Studio', connected: false, keyBased: true, models: [] },
+      { slug: 'xai', name: 'xAI', connected: false, keyBased: true, models: [] },
+      { slug: 'deepseek', name: 'DeepSeek', connected: false, keyBased: true, models: [] }
+    ]
+  }
   let users: User[] = DEMO_USERS.map(u => ({ ...u }))
   let bots = DEFAULT_BOTS.map(b => ({ ...b }))
   const routines: Routine[] = [
@@ -301,6 +311,19 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           bots = bots.filter(b => b.id !== cmd.id)
           emit({ t: 'bots', bots })
           emit({ t: 'toast', text: 'Bot borrado.' })
+          break
+        case 'model.get':
+          emit({ t: 'model', info: demoModel })
+          break
+        case 'model.key':
+          demoModel = { ...demoModel, providers: demoModel.providers.map(p => (p.slug === cmd.slug ? { ...p, connected: true, models: p.models.length ? p.models : ['modelo-rapido', 'modelo-avanzado'] } : p)) }
+          emit({ t: 'model', info: demoModel })
+          emit({ t: 'toast', text: 'Clave guardada. Ya puedes elegir un modelo.' })
+          break
+        case 'model.set':
+          demoModel = { ...demoModel, provider: cmd.slug, model: cmd.model }
+          emit({ t: 'model', info: demoModel })
+          emit({ t: 'toast', text: `Ahora el equipo usa ${cmd.model}.` })
           break
         case 'routine': {
           const i = routines.findIndex(r => r.id === cmd.id)

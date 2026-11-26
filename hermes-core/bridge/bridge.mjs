@@ -75,6 +75,53 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // Modelo por defecto del equipo: lo guarda Hermes en su propia configuración, para que
+  // las conversaciones nuevas (y los reinicios) usen el modelo elegido en Ajustes.
+  if (req.method === 'POST' && req.url === '/admin/model') {
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+
+    if (!tokenOk(bearer)) {
+      res.writeHead(401)
+      res.end()
+
+      return
+    }
+
+    let body = ''
+
+    req.on('data', chunk => {
+      body += chunk
+
+      if (body.length > 4096) { req.destroy() }
+    })
+    req.on('end', async () => {
+      const reply = (code, data) => {
+        res.writeHead(code, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(data))
+      }
+
+      try {
+        const { model, provider } = JSON.parse(body)
+        const safe = /^[A-Za-z0-9][A-Za-z0-9._:\/@+-]{0,199}$/
+
+        if (!safe.test(String(model)) || !safe.test(String(provider))) {
+          return reply(400, { ok: false, error: 'modelo o proveedor no válido' })
+        }
+
+        for (const [key, value] of [['model.provider', provider], ['model.default', model]]) {
+          await run('hermes', ['config', 'set', key, String(value)], { timeout: 60_000, env: { ...process.env, NO_COLOR: '1' } })
+        }
+
+        log('modelo por defecto:', provider, model)
+        reply(200, { ok: true })
+      } catch (error) {
+        reply(500, { ok: false, error: String(error?.message || error).split('\n').pop().slice(0, 200) })
+      }
+    })
+
+    return
+  }
+
   res.writeHead(404)
   res.end()
 })

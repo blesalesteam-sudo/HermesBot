@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type {
-  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, PendingRequest, Routine, ServerEvent,
+  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine, ServerEvent,
   Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
@@ -238,9 +238,125 @@ export class Room {
         return this.saveBot(viewer, cmd)
       case 'bot.delete':
         return this.removeBot(viewer, String(cmd.id))
+      case 'model.get':
+        return this.sendModel(viewer)
+      case 'model.key':
+        return this.saveModelKey(viewer, String(cmd.slug), String(cmd.key ?? ''))
+      case 'model.set':
+        return this.setModel(viewer, String(cmd.slug), String(cmd.model))
       default:
         return
     }
+  }
+
+  // ───────────── Ajustes: modelo de IA ─────────────
+
+  private async modelInfo(): Promise<ModelInfo> {
+    const res = await this.gw!.request<any>('model.options', { include_unconfigured: true })
+
+    return {
+      provider: String(res.provider ?? ''),
+      model: String(res.model ?? ''),
+      providers: (res.providers ?? [])
+        .filter((p: any) => p.authenticated || p.auth_type === 'api_key')
+        .map((p: any) => ({
+          slug: String(p.slug),
+          name: String(p.name || p.slug),
+          connected: !!p.authenticated,
+          keyBased: p.auth_type === 'api_key',
+          models: [...new Set<string>([...(p.featured_models ?? []), ...(p.models ?? [])])].slice(0, 200)
+        }))
+    }
+  }
+
+  private async sendModel(viewer: Viewer) {
+    if (!this.isAdmin(viewer)) { return }
+
+    if (!this.gw || this.hermes !== 'connected') {
+      return viewer.send({ t: 'toast', text: 'Hermes no está conectado ahora mismo.', error: true })
+    }
+
+    try {
+      viewer.send({ t: 'model', info: await this.modelInfo() })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude leer los modelos (${(error as Error).message}).`, error: true })
+    }
+  }
+
+  private async saveModelKey(viewer: Viewer, slug: string, key: string) {
+    if (!this.isAdmin(viewer) || !this.gw) { return }
+
+    if (key.trim().length < 8) {
+      return viewer.send({ t: 'toast', text: 'Esa clave parece incompleta.', error: true })
+    }
+
+    try {
+      // La clave va directa a Hermes, que la guarda en su disco. Esta web no la almacena ni la muestra.
+      await this.gw.request('model.save_key', { slug, api_key: key.trim() })
+      viewer.send({ t: 'toast', text: 'Clave guardada. Ya puedes elegir un modelo.' })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `Hermes no aceptó la clave (${(error as Error).message}).`, error: true })
+    }
+
+    await this.sendModel(viewer)
+  }
+
+  /** Cambia el modelo de una conversación abierta con la operación oficial de Hermes. */
+  private async pickModel(sid: string, slug: string, model: string) {
+    const payload: Record<string, unknown> = { model, provider: slug }
+    const send = async (extra: Record<string, unknown> = {}) => {
+      const snap = await this.gw!.request<any>('session.resume', { session_id: sid })
+
+      return this.gw!.request<any>('session.mutate', {
+        session_id: sid,
+        request_id: randomUUID(),
+        expected_revision: snap.revision,
+        expected_generation: snap.execution_generation,
+        operation: 'model',
+        payload: { ...payload, ...extra }
+      })
+    }
+    const res = await send()
+
+    // Hermes pide una segunda confirmación para modelos caros; quien lo elige es un administrador.
+    return res?.status === 'confirmation_required' && res.confirm ? send({ confirm: res.confirm }) : res
+  }
+
+  private async setModel(viewer: Viewer, slug: string, model: string) {
+    if (!this.isAdmin(viewer) || !this.gw || !model || /\s/.test(model) || /\s/.test(slug)) { return }
+
+    try {
+      // 1) Queda como modelo por defecto del equipo (conversaciones nuevas y reinicios).
+      const base = config.hermesUrl.replace(/^ws/, 'http').replace(/\/+$/, '').replace(/\/gateway$/, '')
+      const saved_ = await fetch(`${base}/admin/model`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.hermesToken}` },
+        body: JSON.stringify({ model, provider: slug })
+      })
+
+      if (!saved_.ok) {
+        const info = await saved_.json().catch(() => ({})) as { error?: string }
+
+        throw new Error(info.error || `respuesta ${saved_.status}`)
+      }
+
+      // 2) Y se aplica ya a las conversaciones que están en marcha.
+      let failed = ''
+
+      for (const [botId, sid] of Object.entries(saved.sessions)) {
+        if (this.bot(botId)) {
+          await this.pickModel(sid, slug, model).catch(error => { failed = (error as Error).message })
+        }
+      }
+
+      viewer.send(failed
+        ? { t: 'toast', text: `Guardado como modelo del equipo, pero una conversación abierta no pudo cambiar todavía (${failed.slice(0, 120)}).`, error: true }
+        : { t: 'toast', text: `Ahora el equipo usa ${model}.` })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude cambiar el modelo (${(error as Error).message}).`, error: true })
+    }
+
+    await this.sendModel(viewer)
   }
 
   // ───────────── Ajustes: usuarios y bots ─────────────
