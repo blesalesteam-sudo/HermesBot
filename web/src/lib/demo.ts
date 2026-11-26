@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  ChatMessage, ClientCommand, PendingRequest, ServerEvent, Snapshot, ToolCall, User
+  ChatMessage, ClientCommand, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -36,10 +36,17 @@ function seed(): Record<string, ChatMessage[]> {
           '3. **Factura de noviembre** de Grupo Lumen: pendiente de revisar.\n\n' +
           '¿Queréis que os proponga un hueco para la llamada con Estudio Vega?'
       },
-      { id: 'a3', role: 'user', authorId: 'socio-1', text: 'Sí, propón el miércoles por la mañana.', ts: now - 39 * min },
+      { id: 'a3', role: 'user', authorId: 'socio-1', text: 'Sí, propón el miércoles por la mañana. Y pásanos cómo va cada cliente.', ts: now - 39 * min },
       {
         id: 'a4', role: 'assistant', ts: now - 39 * min,
-        text: 'Hecho. He propuesto el **miércoles a las 10:30** y he dejado una nota para recordároslo el martes por la tarde.'
+        tools: [{ id: 't5', name: 'read_file', label: 'Leyó un archivo', status: 'done', detail: 'clientes-noviembre.xlsx' }],
+        text:
+          'Hecho. He propuesto el **miércoles a las 10:30** y he dejado un recordatorio para el martes por la tarde.\n\n' +
+          '| Cliente | Estado | Siguiente paso |\n|---|---|---|\n' +
+          '| Clínica Norte | Presupuesto | Enviar el jueves |\n' +
+          '| Estudio Vega | Arranque | Llamada el miércoles |\n' +
+          '| Grupo Lumen | Facturación | Revisar factura |\n\n' +
+          'Tareas que he apuntado:\n\n- [x] Proponer hueco a Estudio Vega\n- [ ] Enviar presupuesto a Clínica Norte\n- [ ] Revisar la factura de Grupo Lumen'
       }
     ],
     setter: [
@@ -76,6 +83,11 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
   const messages = seed()
   const waiting = new Map<string, (answer: string) => void>()
   let toolset = 0
+  const routines: Routine[] = [
+    { id: 'r1', name: 'Prioridades del día', when: 'De lunes a viernes a las 9:00', what: 'Resumen de prioridades del día', enabled: true },
+    { id: 'r2', name: 'Repaso de acuerdos', when: 'Cada viernes a las 17:00', what: 'Repaso de acuerdos de la semana', enabled: true },
+    { id: 'r3', name: 'Leads sin respuesta', when: 'Cada martes a las 10:00', what: 'Lista de leads que no han contestado', enabled: false }
+  ]
   let closed = false
   const timers: number[] = []
 
@@ -97,7 +109,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
       emit({ t: 'req', req })
     })
 
-  async function reply(botId: string, text: string) {
+  async function reply(botId: string, text: string, uploads: Upload[] = []) {
     emit({ t: 'status', botId, status: { state: 'thinking', label: 'Pensando…' } })
     await sleep(900)
 
@@ -124,6 +136,34 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
       return
     }
 
+    if (/tabla|compara|clientes/.test(lower)) {
+      msg.tools!.push({ id: uid('t'), name: 'read_file', label: 'Leyó un archivo', status: 'done', detail: 'clientes-noviembre.xlsx' })
+      add(botId, msg)
+      await stream(botId, msg,
+        'Aquí tienes la comparación:\n\n| Opción | Coste al mes | Tiempo de puesta en marcha |\n|---|---|---|\n' +
+        '| Plan básico | 49 € | 1 día |\n| Plan equipo | 129 € | 3 días |\n| A medida | Desde 400 € | 2 semanas |\n\n' +
+        'Mi recomendación es el **plan equipo**: cubre lo que pedís y se puede ampliar después.')
+
+      return
+    }
+
+    if (/c[oó]digo|f[oó]rmula|script/.test(lower)) {
+      await stream(botId, msg,
+        'Esta fórmula calcula el total con IVA en vuestra hoja:\n\n```excel\n=SUMA(B2:B20) * 1,21\n```\n\nPuedes copiarla con el botón de arriba a la derecha del recuadro.')
+
+      return
+    }
+
+    if (/rutina|cada (lunes|martes|mi[eé]rcoles|jueves|viernes|d[ií]a|semana)/.test(lower)) {
+      msg.tools!.push({ id: uid('t'), name: 'cronjob', label: 'Gestionó una rutina', status: 'done' })
+      add(botId, msg)
+      routines.push({ id: uid('r'), name: text.replace(/^crea una rutina:?\s*/i, '').slice(0, 60) || 'Nueva rutina', when: 'Cada lunes a las 9:00', what: text, enabled: true })
+      emit({ t: 'routines', routines: [...routines] })
+      await stream(botId, msg, 'Rutina creada. La tienes en el panel de detalles, donde puedes pausarla o borrarla cuando quieras.')
+
+      return
+    }
+
     if (/duda|pregunta|elige|opción|opcion/.test(lower)) {
       emit({ t: 'status', botId, status: { state: 'working', label: 'Esperando vuestra respuesta' } })
       const answer = await ask({
@@ -132,6 +172,18 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
       })
 
       await stream(botId, msg, `Perfecto, lo preparo para **${answer}**. Os paso un primer borrador en unos minutos.`)
+
+      return
+    }
+
+    if (uploads.length) {
+      const images = uploads.filter(u => u.type.startsWith('image/')).length
+
+      msg.tools!.push({ id: uid('t'), name: images ? 'vision_analyze' : 'read_file', label: images ? 'Analizó una imagen' : 'Leyó un archivo', status: 'done', detail: uploads[0]!.name })
+      add(botId, msg)
+      await stream(botId, msg,
+        `He recibido ${uploads.length === 1 ? `**${uploads[0]!.name}**` : `los ${uploads.length} archivos`}. ` +
+        'En la versión conectada, Hermes los abre de verdad: describe imágenes, lee documentos y saca datos de hojas de cálculo.')
 
       return
     }
@@ -149,8 +201,11 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     }
 
     await stream(botId, msg,
-      `Recibido. Esto es una **respuesta de prueba** para enseñar el diseño: cuando conectemos Hermes de verdad, aquí escribirá el agente en tiempo real.\n\n` +
-      `Prueba a escribir algo con la palabra *"borra"* para ver una tarjeta de permiso, o *"duda"* para ver una pregunta con opciones.`)
+      'Recibido. Esto es una **respuesta de prueba**: en la versión conectada aquí escribe Hermes en tiempo real.\n\n' +
+      'Cosas que puedes probar ahora:\n\n' +
+      '- Escribe *"borra"* para ver una tarjeta de permiso\n- Escribe *"duda"* para ver una pregunta con opciones\n' +
+      '- Escribe *"tabla"* o *"código"* para ver respuestas con formato\n- Adjunta una foto con el botón **+** o arrastrándola al chat\n' +
+      '- Pulsa el micrófono para dictar\n- Pulsa **Ctrl + K** para las acciones rápidas')
   }
 
   async function stream(botId: string, msg: ChatMessage, full: string) {
@@ -181,7 +236,8 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     },
     requests: [],
     online: [me.id],
-    hermes: 'demo'
+    hermes: 'demo',
+    routines: [...routines]
   }
 
   queueMicrotask(() => emit({ t: 'hello', snapshot }))
@@ -201,9 +257,22 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     send(cmd: ClientCommand) {
       switch (cmd.t) {
         case 'send':
-          add(cmd.botId, { id: uid('m'), role: 'user', authorId: me.id, text: cmd.text, ts: Date.now() })
-          void reply(cmd.botId, cmd.text)
+          add(cmd.botId, {
+            id: uid('m'), role: 'user', authorId: me.id, text: cmd.text, ts: Date.now(),
+            attachments: cmd.uploads?.map(u => ({ id: uid('f'), name: u.name, kind: u.type.startsWith('image/') ? 'image' as const : 'file' as const, size: u.size, preview: u.preview }))
+          })
+          void reply(cmd.botId, cmd.text, cmd.uploads)
           break
+        case 'routine': {
+          const i = routines.findIndex(r => r.id === cmd.id)
+
+          if (i !== -1) {
+            if (cmd.action === 'remove') { routines.splice(i, 1) } else { routines[i] = { ...routines[i]!, enabled: cmd.action === 'resume' } }
+            emit({ t: 'routines', routines: [...routines] })
+          }
+
+          break
+        }
         case 'approve':
         case 'clarify': {
           const resolve = waiting.get(cmd.reqId)

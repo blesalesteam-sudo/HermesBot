@@ -130,7 +130,7 @@ const server = createServer(async (req, res) => {
   }
 })
 
-const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 })
+const wss = new WebSocketServer({ noServer: true, maxPayload: 80 * 1024 * 1024 })
 
 server.on('upgrade', (req, socket, head) => {
   if ((req.url || '').split('?')[0] !== '/ws' || !sameOrigin(req)) {

@@ -5,11 +5,41 @@ import type { BotStatus } from '../../shared/protocol'
 
 marked.setOptions({ gfm: true, breaks: true })
 
-/** Convierte el texto del bot (Markdown) en HTML seguro. */
+/** Convierte el texto del bot (Markdown) en HTML seguro, con tablas y bloques de código cuidados. */
 export function renderMarkdown(text: string): string {
   const html = marked.parse(text, { async: false }) as string
 
-  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] }).replace(/<a /g, '<a target="_blank" rel="noreferrer" ')
+  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
+    .replace(/<a /g, '<a target="_blank" rel="noreferrer" ')
+    .replace(/<table>/g, '<div class="table-wrap"><table>')
+    .replace(/<\/table>/g, '</table></div>')
+    .replace(/<pre><code(?: class="language-([\w-]+)")?>/g, (_m, lang: string | undefined) =>
+      `<div class="code"><div class="code-head"><span>${lang ?? 'texto'}</span><button type="button" class="code-copy">Copiar</button></div><pre><code>`)
+    .replace(/<\/code><\/pre>/g, '</code></pre></div>')
+}
+
+/** Enlaces que aparecen en un texto (para la Biblioteca). */
+export function extractLinks(text: string): string[] {
+  return [...new Set(text.match(/https?:\/\/[^\s)<>\]"']+/g) ?? [])]
+}
+
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) { return `${bytes} B` }
+  if (bytes < 1024 * 1024) { return `${Math.round(bytes / 1024)} KB` }
+
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
+}
+
+/** Hora corta para la lista de chats: "10:32", "Ayer", "lun", "3 nov". */
+export function shortWhen(ts: number): string {
+  const d = new Date(ts)
+  const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(ts).setHours(0, 0, 0, 0)) / 86_400_000)
+
+  if (days <= 0) { return fmtTime.format(d) }
+  if (days === 1) { return 'Ayer' }
+  if (days < 7) { return new Intl.DateTimeFormat('es-ES', { weekday: 'short' }).format(d) }
+
+  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(d)
 }
 
 const fmtTime = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' })

@@ -28,6 +28,34 @@ export interface ToolCall {
   detail?: string
 }
 
+/** Archivo o imagen adjunta a un mensaje. De las imágenes se guarda una miniatura. */
+export interface Attachment {
+  id: string
+  name: string
+  kind: 'image' | 'file'
+  size: number
+  preview?: string
+}
+
+/** Archivo que sube el navegador junto a un mensaje (contenido como data URL). */
+export interface Upload {
+  name: string
+  type: string
+  size: number
+  data: string
+  preview?: string
+}
+
+/** Tarea programada de Hermes ("todos los lunes a las 9…"). */
+export interface Routine {
+  id: string
+  name: string
+  /** Cuándo se ejecuta, en palabras normales. */
+  when: string
+  what: string
+  enabled: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'notice'
@@ -35,6 +63,7 @@ export interface ChatMessage {
   authorId?: string
   text: string
   tools?: ToolCall[]
+  attachments?: Attachment[]
   streaming?: boolean
   error?: boolean
   ts: number
@@ -74,6 +103,7 @@ export interface Snapshot {
   online: string[]
   hermes: HermesState
   hermesDetail?: string
+  routines?: Routine[]
 }
 
 export type ServerEvent =
@@ -87,11 +117,13 @@ export type ServerEvent =
   | { t: 'req'; req: PendingRequest }
   | { t: 'req.done'; id: string }
   | { t: 'hermes'; state: HermesState; detail?: string }
+  | { t: 'routines'; routines: Routine[] }
 
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 
 export type ClientCommand =
-  | { t: 'send'; botId: string; text: string }
+  | { t: 'send'; botId: string; text: string; uploads?: Upload[] }
+  | { t: 'routine'; id: string; action: 'pause' | 'resume' | 'remove' }
   | { t: 'typing'; botId: string; on: boolean }
   | { t: 'approve'; reqId: string; choice: ApprovalChoice }
   | { t: 'clarify'; reqId: string; answer: string | null }

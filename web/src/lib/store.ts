@@ -71,6 +71,9 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
     case 'req.done':
       return { ...state, requests: state.requests.filter(r => r.id !== ev.id) }
 
+    case 'routines':
+      return { ...state, routines: ev.routines }
+
     case 'hermes':
       return { ...state, hermes: ev.state, hermesDetail: ev.detail }
   }

@@ -66,3 +66,33 @@ export const IconMic = (p: SVGProps<SVGSVGElement>) => (
 export const IconApps = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /><path d="M16.75 4.5v6M13.75 7.5h6" /></svg>
 )
+export const IconCopy = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" /></svg>
+)
+export const IconClip = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="m20 11.5-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.8 17.1a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6" /></svg>
+)
+export const IconImage = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="m4 18 5.5-5 4 3.5 2.5-2 4 3.5" /></svg>
+)
+export const IconFile = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M13 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V9l-6-6z" /><path d="M13 3v6h6" /></svg>
+)
+export const IconPause = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M9 6v12M15 6v12" /></svg>
+)
+export const IconPlay = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M8 5.5v13l10-6.5-10-6.5z" /></svg>
+)
+export const IconTrash = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 11.5A1.5 1.5 0 0 0 8.5 20h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+)
+export const IconLink = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
+)
+export const IconSpark = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 3.5 13.7 9l5.300 1.7-5.300 1.7L12 18l-1.7-5.6L5 10.7 10.300 9 12 3.5z" /><path d="M19 16.5v4M17 18.5h4" /></svg>
+)
+export const IconDown = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 5v14M5 12l7 7 7-7" /></svg>
+)

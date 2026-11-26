@@ -4,8 +4,8 @@
 import { randomUUID } from 'node:crypto'
 
 import type {
-  ApprovalChoice, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, PendingRequest, ServerEvent, Snapshot,
-  ToolCall, User
+  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, PendingRequest, Routine, ServerEvent,
+  Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
 import { type Account, config } from './config.ts'
 import { persist, saved } from './store.ts'
@@ -52,6 +52,46 @@ function toolLabel(name: string): string {
   return `Usó ${name.replace(/_/g, ' ')}`
 }
 
+const MAX_UPLOADS = 6
+const MAX_UPLOAD_CHARS = 11_500_000 // unos 8 MB una vez codificado
+
+const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+/** Traduce el horario de Hermes ("0 9 * * 1-5", "every 30m"…) a una frase normal. */
+export function humanSchedule(raw: string): string {
+  const s = raw.trim()
+  const every = /^every\s+(\d+)\s*(m|min|h|d)\w*$/i.exec(s)
+
+  if (every) {
+    const n = Number(every[1])
+    const unit = every[2]!.toLowerCase().startsWith('m') ? ['minuto', 'minutos'] : every[2]!.toLowerCase() === 'h' ? ['hora', 'horas'] : ['día', 'días']
+
+    return n === 1 ? `Cada ${unit[0]}` : `Cada ${n} ${unit[1]}`
+  }
+
+  const cron = /^(\d{1,2})\s+(\d{1,2})\s+(\S+)\s+(\S+)\s+(\S+)$/.exec(s)
+
+  if (cron) {
+    const [, mm, hh, dom, mon, dow] = cron
+    const time = `a las ${Number(hh)}:${mm!.padStart(2, '0')}`
+
+    if (dom === '*' && mon === '*') {
+      if (dow === '*') { return `Todos los días ${time}` }
+      if (dow === '1-5') { return `De lunes a viernes ${time}` }
+      if (dow === '0,6' || dow === '6,0') { return `Fines de semana ${time}` }
+      if (/^[0-7](,[0-7])*$/.test(dow!)) {
+        const names = dow!.split(',').map(d => DAYS[Number(d) % 7]!)
+
+        return `${names.length === 1 ? 'Cada' : 'Los'} ${names.join(', ').replace(/, ([^,]*)$/, ' y $1')} ${time}`
+      }
+    }
+
+    if (/^\d+$/.test(dom!) && mon === '*' && dow === '*') { return `El día ${dom} de cada mes ${time}` }
+  }
+
+  return s
+}
+
 const publicUser = (a: Account): User => ({ id: a.id, name: a.name, avatar: a.avatar, color: a.color })
 
 export class Room {
@@ -67,6 +107,7 @@ export class Room {
   private current = new Map<string, ChatMessage>()
   private lastSegment = new Map<string, number>()
   private gw: GatewayClient | null = null
+  private routines: Routine[] = []
   private readonly users: User[] = config.accounts.map(publicUser)
   private readonly bots: Bot[] = config.bots
 
@@ -117,7 +158,8 @@ export class Room {
       requests: [...this.requests.values()],
       online: this.online(),
       hermes: this.hermes,
-      hermesDetail: this.hermesDetail
+      hermesDetail: this.hermesDetail,
+      routines: this.routines
     }
   }
 
@@ -175,7 +217,9 @@ export class Room {
 
         return
       case 'send':
-        return this.sendPrompt(viewer.user, cmd.botId, String(cmd.text ?? ''))
+        return this.sendPrompt(viewer.user, cmd.botId, String(cmd.text ?? ''), Array.isArray(cmd.uploads) ? cmd.uploads : [])
+      case 'routine':
+        return this.manageRoutine(String(cmd.id), cmd.action)
       case 'stop':
         return this.stop(cmd.botId)
       case 'approve':
@@ -247,6 +291,7 @@ export class Room {
     // las daría por no contestadas en vez de enseñarlas como tarjetas.
     await gw.request('client.capabilities', { server_requests: true }).catch(() => undefined)
     this.setHermes('connected')
+    void this.refreshRoutines()
 
     // Volvemos a engancharnos a la conversación de cada bot para recibir sus eventos en vivo.
     this.attaching.clear()
@@ -318,14 +363,29 @@ export class Room {
     }
   }
 
-  private async sendPrompt(user: User, botId: string, raw: string) {
+  private async sendPrompt(user: User, botId: string, raw: string, rawUploads: Upload[] = []) {
     const bot = this.bot(botId)
     const text = raw.trim().slice(0, 20_000)
+    const uploads = rawUploads
+      .filter(u => u && typeof u.data === 'string' && u.data.startsWith('data:') && u.data.length <= MAX_UPLOAD_CHARS)
+      .slice(0, MAX_UPLOADS)
 
-    if (!bot || !text) { return }
+    if (!bot || (!text && !uploads.length)) { return }
+
+    const attachments: Attachment[] = uploads.map(u => ({
+      id: randomUUID(),
+      name: String(u.name || 'archivo').slice(0, 120),
+      kind: String(u.type).startsWith('image/') ? 'image' : 'file',
+      size: Number(u.size) || 0,
+      preview: typeof u.preview === 'string' && u.preview.startsWith('data:image/') && u.preview.length < 200_000 ? u.preview : undefined
+    }))
 
     this.setTyping(botId, user.id, false)
-    this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, text, ts: Date.now() })
+    this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, text, attachments: attachments.length ? attachments : undefined, ts: Date.now() })
+
+    if (rawUploads.length > uploads.length) {
+      this.notice(botId, 'Algún archivo no se pudo adjuntar: el máximo son 6 archivos de 8 MB cada uno.', true)
+    }
 
     if (this.hermes !== 'connected' || !this.gw) {
       this.notice(botId, 'Hermes no está conectado ahora mismo. Vuelve a intentarlo en unos segundos.', true)
@@ -336,18 +396,41 @@ export class Room {
     const firstTurn = !saved.sessions[botId]
 
     try {
-      this.setStatus(botId, { state: 'thinking', label: 'Pensando…' })
+      this.setStatus(botId, { state: 'thinking', label: uploads.length ? 'Recibiendo los archivos…' : 'Pensando…' })
 
       const sid = await this.ensureSession(bot)
+      const refs: string[] = []
+
+      // Los adjuntos se entregan a Hermes antes del mensaje: las imágenes las "ve" y los archivos los puede abrir.
+      for (const [i, u] of uploads.entries()) {
+        const name = attachments[i]!.name
+
+        try {
+          if (attachments[i]!.kind === 'image') {
+            await this.gw.request('image.attach_bytes', { session_id: sid, content_base64: u.data.slice(u.data.indexOf(',') + 1), filename: name })
+          } else {
+            const res = await this.gw.request<any>('file.attach', { session_id: sid, data_url: u.data, name })
+
+            if (res?.ref_text) { refs.push(String(res.ref_text)) }
+          }
+        } catch (error) {
+          console.warn('[hermes] adjunto rechazado:', name, (error as Error).message)
+          this.notice(botId, `Hermes no pudo recibir "${name}".`, true)
+        }
+      }
+
+      this.setStatus(botId, { state: 'thinking', label: 'Pensando…' })
+
       // Hermes recibe siempre quién habla (texto para el modelo), pero el mensaje guardado queda limpio.
       const persona = firstTurn && bot.persona
         ? `[Contexto del equipo: ${bot.persona} En este chat te escriben dos socios, ${this.users.map(u => u.name).join(' y ')}; cada mensaje indica quién lo escribe.]\n\n`
         : ''
+      const body = [text || 'Mira lo que te adjunto.', ...refs].join('\n')
 
       await this.gw.request('prompt.submit', {
         session_id: sid,
-        text,
-        api_text: `${persona}[Mensaje de ${user.name}]\n${text}`,
+        text: body,
+        api_text: `${persona}[Mensaje de ${user.name}]\n${body}`,
         submission_id: randomUUID(),
         queued: true,
         turn_author: { id: user.id, name: user.name }
@@ -357,6 +440,42 @@ export class Room {
       this.setStatus(botId, { state: 'idle' })
       this.notice(botId, `No pude entregar el mensaje a Hermes (${(error as Error).message}).`, true)
     }
+  }
+
+  // ───────────── Rutinas (tareas programadas de Hermes) ─────────────
+
+  private async refreshRoutines() {
+    if (!this.gw || this.hermes !== 'connected') { return }
+
+    try {
+      const res = await this.gw.request<any>('cron.manage', { action: 'list', include_disabled: true })
+      const next: Routine[] = (res?.jobs ?? []).map((j: any) => ({
+        id: String(j.job_id),
+        name: String(j.name || 'Rutina'),
+        when: humanSchedule(String(j.schedule ?? '')),
+        what: String(j.prompt_preview || j.skill || '').slice(0, 200),
+        enabled: j.enabled !== false && j.state !== 'paused'
+      }))
+
+      if (JSON.stringify(next) !== JSON.stringify(this.routines)) {
+        this.routines = next
+        this.broadcast({ t: 'routines', routines: next })
+      }
+    } catch (error) {
+      console.warn('[hermes] no pude leer las rutinas:', (error as Error).message)
+    }
+  }
+
+  private async manageRoutine(id: string, action: 'pause' | 'resume' | 'remove') {
+    if (!this.gw || !['pause', 'resume', 'remove'].includes(action) || !this.routines.some(r => r.id === id)) { return }
+
+    try {
+      await this.gw.request('cron.manage', { action, name: id })
+    } catch (error) {
+      console.warn('[hermes] rutina:', (error as Error).message)
+    }
+
+    await this.refreshRoutines()
   }
 
   private async stop(botId: string) {
@@ -563,6 +682,7 @@ export class Room {
         saved.lastActive[botId] = Date.now()
         persist()
         this.setStatus(botId, { state: 'idle', lastActive: saved.lastActive[botId] })
+        void this.refreshRoutines()
         break
       }
 

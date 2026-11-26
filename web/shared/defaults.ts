@@ -41,4 +41,12 @@ export const DEFAULT_BOTS: Bot[] = [
   }
 ]
 
+/** Ideas para empezar una conversación con cada bot (se muestran cuando el chat está vacío). */
+export const SUGGESTIONS: Record<string, string[]> = {
+  hermes: ['¿Qué sabes hacer?', 'Resume lo último que hemos hablado', 'Busca noticias de nuestro sector hoy', 'Crea una rutina para cada lunes'],
+  'chief-of-staff': ['¿Qué tenemos pendiente esta semana?', 'Prepara el orden del día de la reunión', 'Hazme un resumen de los acuerdos', 'Recuérdanos esto el viernes'],
+  setter: ['Escribe un mensaje para reactivar leads', 'Prepara un guion para la llamada', 'Ordena estos contactos por prioridad', 'Propón tres aperturas distintas'],
+  contenido: ['Dame cinco ideas de publicaciones', 'Convierte esta idea en tareas', 'Escribe un post para LinkedIn', 'Ordena el proceso de alta de clientes']
+}
+
 export const USER_COLORS = ['#8d69ce', '#0EA5C6', '#D84F8B', '#01A492']

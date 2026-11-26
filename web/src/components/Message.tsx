@@ -1,24 +1,32 @@
 import { memo, useState } from 'react'
 
-import type { ChatMessage, ToolCall, User } from '../../shared/protocol'
-import { clock, renderMarkdown } from '../lib/format'
+import type { Attachment, ChatMessage, ToolCall, User } from '../../shared/protocol'
+import { clock, fileSize, renderMarkdown } from '../lib/format'
 import { Avatar } from './Avatar'
-import { IconBolt, IconChevron } from './icons'
+import { IconBolt, IconCheck, IconChevron, IconCopy, IconFile } from './icons'
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+
+    return true
+  } catch {
+    return false
+  }
+}
 
 function ToolPill({ tools }: { tools: ToolCall[] }) {
   const [open, setOpen] = useState(false)
-  const running = tools.filter(t => t.status === 'running').length
-  const label = running
-    ? `Usando ${tools.length === 1 ? 'una herramienta' : `${tools.length} herramientas`}…`
+  const running = tools.filter(t => t.status === 'running')
+  const label = running.length
+    ? `${running[running.length - 1]!.label.replace(/^(\S+?)ó /, '$1ando ')}…`
     : `Usó ${tools.length === 1 ? '1 herramienta' : `${tools.length} herramientas`}`
 
   return (
     <div className="tool-pill-wrap">
-      <button className={`tool-pill${running ? ' running' : ''}`} onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <IconBolt width={13} height={13} />
+      <button className={`tool-pill${running.length ? ' running' : ''}`} onClick={() => setOpen(o => !o)} aria-expanded={open}>
+        <span className="tool-pill-icon"><IconBolt width={12} height={12} /></span>
         <span>{label}</span>
-        <span className="tool-pill-sep">·</span>
-        <span className="tool-pill-more">{open ? 'Ocultar' : 'Ver detalle'}</span>
         <IconChevron width={12} height={12} className={`chev${open ? ' open' : ''}`} />
       </button>
       {open && (
@@ -33,6 +41,44 @@ function ToolPill({ tools }: { tools: ToolCall[] }) {
         </ul>
       )}
     </div>
+  )
+}
+
+function Attachments({ items, mine }: { items: Attachment[]; mine: boolean }) {
+  return (
+    <div className={`attachments${mine ? ' mine' : ''}`}>
+      {items.map(a => a.kind === 'image' && a.preview ? (
+        <a key={a.id} className="att-image" href={a.preview} target="_blank" rel="noreferrer" title={a.name}><img src={a.preview} alt={a.name} /></a>
+      ) : (
+        <div key={a.id} className="att-file">
+          <span className="att-icon"><IconFile width={18} height={18} /></span>
+          <span className="att-text">
+            <span className="att-name">{a.name}</span>
+            <span className="att-size">{fileSize(a.size)}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
+
+  return (
+    <button
+      className="msg-action"
+      aria-label="Copiar mensaje"
+      title={done ? 'Copiado' : 'Copiar'}
+      onClick={async () => {
+        if (await copyText(text)) {
+          setDone(true)
+          window.setTimeout(() => setDone(false), 1400)
+        }
+      }}
+    >
+      {done ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
+    </button>
   )
 }
 
@@ -61,9 +107,16 @@ export const Message = memo(function Message({ msg, me, users, first, last }: Pr
         )}
         <div className="row-body">
           {first && !mine && <div className="sender" style={{ color: author?.color }}>{author?.name ?? 'Socio'}</div>}
-          <div className={`bubble ${mine ? 'bubble-me' : 'bubble-partner'}`} title={clock(msg.ts)}>
-            <span className="bubble-text">{msg.text}</span>
-          </div>
+          {!!msg.attachments?.length && <Attachments items={msg.attachments} mine={mine} />}
+          {msg.text && (
+            <div className={`bubble ${mine ? 'bubble-me' : 'bubble-partner'}`}>
+              <span className="bubble-text">{msg.text}</span>
+            </div>
+          )}
+        </div>
+        <div className="row-meta">
+          <span>{clock(msg.ts)}</span>
+          {msg.text && <CopyButton text={msg.text} />}
         </div>
       </div>
     )
@@ -76,11 +129,31 @@ export const Message = memo(function Message({ msg, me, users, first, last }: Pr
       <div className="row-body">
         {!!msg.tools?.length && <ToolPill tools={msg.tools} />}
         {!empty && (
-          <div className={`bubble bubble-bot${msg.error ? ' error' : ''}`} title={clock(msg.ts)}>
+          <div
+            className={`bubble bubble-bot${msg.error ? ' error' : ''}${msg.streaming ? ' streaming' : ''}`}
+            onClick={e => {
+              const btn = (e.target as HTMLElement).closest('.code-copy')
+
+              if (btn) {
+                void copyText(btn.closest('.code')?.querySelector('pre')?.textContent ?? '').then(ok => {
+                  if (ok) {
+                    btn.textContent = 'Copiado'
+                    window.setTimeout(() => { btn.textContent = 'Copiar' }, 1400)
+                  }
+                })
+              }
+            }}
+          >
             <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }} />
           </div>
         )}
       </div>
+      {!empty && !msg.streaming && (
+        <div className="row-meta">
+          <CopyButton text={msg.text} />
+          <span>{clock(msg.ts)}</span>
+        </div>
+      )}
     </div>
   )
 })
