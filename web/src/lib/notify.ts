@@ -13,6 +13,48 @@ export const notifySupported = () => typeof Notification !== 'undefined'
 export const notifyBlocked = () => notifySupported() && Notification.permission === 'denied'
 export const notifyOn = () => notifySupported() && Notification.permission === 'granted' && read()
 
+declare const __DEMO__: boolean
+
+const PUSH_KEY = 'hb-push'
+
+/** Este dispositivo recibe los avisos también con la app cerrada. */
+export const pushOn = () => {
+  try { return notifyOn() && localStorage.getItem(PUSH_KEY) === '1' } catch { return false }
+}
+
+const fromBase64Url = (text: string) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+
+/** Apunta (o borra) este dispositivo para recibir avisos con la app cerrada. */
+async function setPush(on: boolean): Promise<boolean> {
+  let ok = false
+
+  try {
+    if (__DEMO__ || !('serviceWorker' in navigator) || !('PushManager' in window)) { return false }
+
+    const reg = await navigator.serviceWorker.ready
+    const current = await reg.pushManager.getSubscription()
+
+    if (on) {
+      const { key } = await (await fetch('/api/push/key')).json() as { key: string }
+      const sub = current ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromBase64Url(key) })
+
+      ok = (await fetch('/api/push/on', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subscription: sub }) })).ok
+    } else if (current) {
+      await fetch('/api/push/off', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: current.endpoint }) })
+      await current.unsubscribe()
+    }
+  } catch {
+    ok = false
+  } finally {
+    try { localStorage.setItem(PUSH_KEY, ok ? '1' : '0') } catch { /* sin almacenamiento */ }
+  }
+
+  return ok
+}
+
+/** Al abrir la app: si los avisos están encendidos, se asegura de que este dispositivo sigue apuntado. */
+export const refreshPush = () => (notifyOn() ? setPush(true) : Promise.resolve(false))
+
 /** Enciende o apaga los avisos en este dispositivo. Devuelve cómo han quedado. */
 export async function setNotify(on: boolean): Promise<boolean> {
   if (on && notifySupported() && Notification.permission !== 'granted') {
@@ -22,6 +64,8 @@ export async function setNotify(on: boolean): Promise<boolean> {
   const ok = on && notifySupported() && Notification.permission === 'granted'
 
   try { localStorage.setItem(KEY, ok ? '1' : '0') } catch { /* sin almacenamiento */ }
+
+  await setPush(ok)
 
   return ok
 }
@@ -46,7 +90,8 @@ async function show(id: string, title: string, body: string) {
 
 /** Avisa de lo que pasa mientras la app no está a la vista: respuestas, mensajes de otros y permisos. */
 export function notifyFor(ev: ServerEvent, state: ClientState | null) {
-  if (!state || document.visibilityState === 'visible' || !notifyOn()) { return }
+  // Con los avisos de app cerrada activos, el aviso lo manda el servidor: aquí se repetiría.
+  if (!state || document.visibilityState === 'visible' || !notifyOn() || pushOn()) { return }
 
   const botName = (id: string) => state.bots.find(b => b.id === id)?.name ?? 'hermesBot'
 

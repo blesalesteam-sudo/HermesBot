@@ -13,6 +13,7 @@ import { accountFromRequest, checkLogin, clearCookie, createUser, hasUsers, sess
 import { backupPath, makeBackup, restoreBackup, startAutoBackup } from './backup.ts'
 import { config } from './config.ts'
 import { serveBotFile } from './files.ts'
+import { addPushDevice, pushPublicKey, removePushDevice } from './push.ts'
 import { Room } from './room.ts'
 
 const DIST = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
@@ -149,6 +150,29 @@ const server = createServer(async (req, res) => {
       })
 
       return void createReadStream(file).pipe(res)
+    }
+
+    // Avisos con la app cerrada: cada dispositivo se apunta o se borra desde Ajustes.
+    if (path.startsWith('/api/push/')) {
+      const acc = accountFromRequest(req)
+
+      if (!acc) { return json(res, 401, { error: 'no_session' }) }
+      if (path === '/api/push/key') { return json(res, 200, { key: pushPublicKey() }) }
+      if (req.method !== 'POST' || !sameOrigin(req)) { return json(res, 403, { error: 'origin' }) }
+
+      const body = await readBody(req)
+
+      if (path === '/api/push/on') {
+        const proto = String(req.headers['x-forwarded-proto'] ?? 'https').split(',')[0]
+
+        return addPushDevice(acc.id, body.subscription, `${proto}://${req.headers.host}`) ? json(res, 200, { ok: true }) : json(res, 400, { error: 'bad_subscription' })
+      }
+
+      if (path === '/api/push/off') {
+        removePushDevice(String(body.endpoint ?? ''))
+
+        return json(res, 200, { ok: true })
+      }
     }
 
     if (path === '/api/login' && req.method === 'POST') {

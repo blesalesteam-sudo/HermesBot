@@ -47,6 +47,8 @@ interface Saved {
   autoBackup?: boolean
   /** Bots incrustados en otras webs. */
   widgets?: Widget[]
+  /** Avisos con la app cerrada: llaves propias y dispositivos apuntados. */
+  push?: { publicKey: string; privateKey: string; subject?: string; devices: { userId: string; endpoint: string; keys: { p256dh: string; auth: string }; ts: number }[] }
 }
 
 const MAX_MESSAGES_PER_BOT = 600
@@ -59,7 +61,7 @@ function load(): Saved {
 
     return {
       users: data.users ?? [], bots: data.bots, sessions: data.sessions ?? {}, messages: data.messages ?? {},
-      lastActive: data.lastActive ?? {}, archive: data.archive ?? [], files: data.files ?? {}, autoBackup: data.autoBackup, widgets: data.widgets
+      lastActive: data.lastActive ?? {}, archive: data.archive ?? [], files: data.files ?? {}, autoBackup: data.autoBackup, widgets: data.widgets, push: data.push
     }
   } catch {
     return { users: [], sessions: {}, messages: {}, lastActive: {}, archive: [], files: {} }

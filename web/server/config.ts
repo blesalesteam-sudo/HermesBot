@@ -65,5 +65,7 @@ export const config = {
   setupCode: (env.SETUP_CODE || '').trim() || randomBytes(4).toString('hex'),
   setupCodeFromEnv: !!(env.SETUP_CODE || '').trim(),
   dataDir: env.DATA_DIR || './data',
+  /** Dirección pública de la web (Railway la da sola). Solo se usa para firmar los avisos. */
+  publicUrl: env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '',
   production: env.NODE_ENV === 'production'
 }

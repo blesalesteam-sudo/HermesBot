@@ -11,6 +11,7 @@ import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser }
 import { listBackups } from './backup.ts'
 import { config } from './config.ts'
 import { fetchBotFile, findBotFiles } from './files.ts'
+import { sendPush } from './push.ts'
 import { persist, saved, type ArchivedChat, type StoredUser } from './store.ts'
 import { GatewayClient } from './vendor/hermes-shared/node/gateway-client.ts'
 
@@ -22,6 +23,8 @@ interface Viewer {
   close: () => void
   /** Conexión de un widget: solo puede ver y usar este bot. */
   only?: string
+  /** Tiene la app a la vista ahora mismo. */
+  visible?: boolean
 }
 
 // Lo único que puede hacer y ver quien entra desde un widget incrustado.
@@ -253,7 +256,43 @@ export class Room {
     }
   }
 
+  private pushed = new Set<string>()
+
+  /** Aviso con la app cerrada para quien no la tiene a la vista: respuestas, mensajes de otros y permisos. */
+  private pushFor(ev: ServerEvent) {
+    let note: { title: string; body: string; tag: string; botId: string } | null = null
+    let author = ''
+
+    if (ev.t === 'msg' && !ev.msg.streaming && ev.msg.text.trim() && ev.msg.role !== 'notice') {
+      const bot = this.bot(ev.botId)?.name ?? 'hermesBot'
+
+      author = ev.msg.role === 'user' ? ev.msg.authorId ?? '' : ''
+      note = {
+        title: ev.msg.role === 'assistant' ? `${bot} ha respondido` : `${ev.msg.authorName ?? findUser(author)?.name ?? 'Alguien'} escribió a ${bot}`,
+        body: ev.msg.text, tag: ev.msg.id, botId: ev.botId
+      }
+    } else if (ev.t === 'req') {
+      note = {
+        title: `${this.bot(ev.req.botId)?.name ?? 'hermesBot'} os necesita`,
+        body: ev.req.kind === 'approval' ? 'Pide permiso para continuar.' : ev.req.question || 'Tiene una duda.',
+        tag: ev.req.id, botId: ev.req.botId
+      }
+    }
+
+    if (!note || this.pushed.has(note.tag) || !saved.push?.devices.length) { return }
+
+    this.pushed.add(note.tag)
+
+    if (this.pushed.size > 500) { this.pushed = new Set([...this.pushed].slice(-250)) }
+
+    const watching = new Set([...this.viewers].filter(v => v.visible && !v.only).map(v => v.user.id))
+
+    void sendPush(this.users.map(u => u.id).filter(id => id !== author && !watching.has(id)), note)
+  }
+
   private broadcast(ev: ServerEvent, except?: Viewer) {
+    this.pushFor(ev)
+
     for (const v of this.viewers) {
       if (v.only && !this.widgetMaySee(v.only, ev)) { continue }
 
@@ -318,6 +357,10 @@ export class Room {
     }
 
     switch (cmd.t) {
+      case 'visible':
+        viewer.visible = !!cmd.on
+
+        return
       case 'typing':
         if (this.bot(cmd.botId)) { this.setTyping(cmd.botId, viewer.user.id, !!cmd.on, viewer) }
 
@@ -937,7 +980,7 @@ export class Room {
       try {
         const target = next.model ?? await this.modelInfo().then(i => ({ slug: i.provider, model: i.model }))
 
-        if (target.slug && target.model) { await this.pickModel(sid, target.slug, target.model) }
+        if (target?.slug && target.model) { await this.pickModel(sid, target.slug, target.model) }
       } catch (error) {
         failed = (error as Error).message
       }

@@ -12,7 +12,7 @@ import { type Section, Settings } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
 import { type Connection, connectLive } from './lib/connection'
 import { connectDemo, DEMO_USERS } from './lib/demo'
-import { notifyFor } from './lib/notify'
+import { notifyFor, refreshPush } from './lib/notify'
 import { type ClientState, reduce } from './lib/store'
 
 declare const __DEMO__: boolean
@@ -85,7 +85,10 @@ export function App() {
     if (__DEMO__ && demoUser) {
       conn.current = connectDemo(demoUser, onEvent)
     } else if (!__DEMO__ && auth === 'in') {
-      conn.current = connectLive(onEvent, () => undefined)
+      conn.current = connectLive(onEvent, open => {
+        if (open) { conn.current?.send({ t: 'visible', on: document.visibilityState === 'visible' }) }
+      })
+      void refreshPush()
     } else {
       return
     }
@@ -97,6 +100,27 @@ export function App() {
   }, [auth, demoUser])
 
   const send = useCallback((cmd: ClientCommand) => conn.current?.send(cmd), [])
+
+  // El servidor sabe si la app está a la vista (para no avisar de más) y a qué chat lleva un aviso pulsado.
+  useEffect(() => {
+    const onVisible = () => conn.current?.send({ t: 'visible', on: document.visibilityState === 'visible' })
+    const open = (id: unknown) => {
+      if (typeof id === 'string' && id) {
+        setActiveId(id)
+        setMobileChat(true)
+      }
+    }
+    const onMessage = (e: MessageEvent) => open((e.data as { openBot?: string } | null)?.openBot)
+
+    open(new URLSearchParams(location.search).get('bot'))
+    document.addEventListener('visibilitychange', onVisible)
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      navigator.serviceWorker?.removeEventListener('message', onMessage)
+    }
+  }, [])
 
   const bot = state ? state.bots.find(b => b.id === activeId) ?? state.bots[0]! : null
   const activeCount = bot && state ? (state.messages[bot.id] ?? []).length : 0

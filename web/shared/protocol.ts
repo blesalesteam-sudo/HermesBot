@@ -241,6 +241,8 @@ export type ClientCommand =
   | { t: 'send'; botId: string; text: string; uploads?: Upload[] }
   | { t: 'routine'; id: string; action: 'pause' | 'resume' | 'remove' }
   | { t: 'typing'; botId: string; on: boolean }
+  /** Este navegador tiene (o deja de tener) la app a la vista: así no se le manda un aviso de más. */
+  | { t: 'visible'; on: boolean }
   | { t: 'approve'; reqId: string; choice: ApprovalChoice }
   | { t: 'clarify'; reqId: string; answer: string | null }
   | { t: 'secret'; reqId: string; value: string | null }

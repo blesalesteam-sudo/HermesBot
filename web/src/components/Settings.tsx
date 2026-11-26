@@ -396,7 +396,7 @@ function AlertsSection() {
         <label className="set-row">
           <div className="set-row-text">
             <span>Avisarme cuando pase algo</span>
-            <small>{!notifySupported() ? 'Este navegador no admite avisos. En iPhone, instala primero la aplicación.' : notifyBlocked() ? 'Los avisos están bloqueados para esta página en el navegador. Permítelos en el candado de la barra de direcciones.' : 'Cuando un bot responde, pide permiso o alguien del equipo escribe y no estás mirando hermesBot.'}</small>
+            <small>{!notifySupported() ? 'Este navegador no admite avisos. En iPhone, instala primero la aplicación.' : notifyBlocked() ? 'Los avisos están bloqueados para esta página en el navegador. Permítelos en el candado de la barra de direcciones.' : 'Cuando un bot responde, pide permiso o alguien del equipo escribe y no estás mirando hermesBot. También con la aplicación cerrada. En iPhone hay que instalarla antes.'}</small>
           </div>
           <input type="checkbox" className="switch" checked={on} disabled={!notifySupported() || notifyBlocked()} onChange={async e => setOn(await setNotify(e.target.checked))} aria-label="Avisos del navegador" />
         </label>
