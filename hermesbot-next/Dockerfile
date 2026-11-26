@@ -7,7 +7,7 @@
 ARG HERMES_IMAGE=nousresearch/hermes-agent@sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f
 
 FROM node:24-bookworm-slim AS build
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git patch \
   && rm -rf /var/lib/apt/lists/* && npm install -g pnpm@10.33.0
 ARG OMB_REPO=https://github.com/milind-soni/OpenMausBot.git
 ARG OMB_COMMIT=83d18e3af95960a9791aacd662c0d6e38a929934
@@ -17,6 +17,8 @@ RUN git init -q . && git remote add origin "$OMB_REPO" \
   && rm -rf enterprise .git
 COPY patches/ /patches/
 RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 < "$p"; done
+# Archivos que un parche de texto no puede llevar (imágenes, iconos), con las mismas rutas que la base.
+COPY overlay/ /src/
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN pnpm install --frozen-lockfile
 RUN pnpm build:server && NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build

@@ -1,0 +1,141 @@
+--- a/server/drivers/device-auth.ts
++++ b/server/drivers/device-auth.ts
+@@ -35,6 +35,8 @@
+   homeEnv: string;
+   homeDir: string;
+   loginArgs: readonly string[];
++  /** hermesBot: commands run after a successful login and before it is confirmed (best effort). */
++  afterLogin?: readonly (readonly string[])[];
+   /** Set for every command of this sign-in, such as a CLI's switch that keeps it from opening a browser on the server. */
+   env?: Readonly<Record<string, string>>;
+   install: string;
+@@ -145,10 +147,13 @@
+           this.finish(flow, "failed", this.spec.failure(loginOutput));
+           return;
+         }
+-        flow.startupTimer = setTimeout(() => this.finish(flow, "failed", `${product} finished sign-in but could not confirm the account. Refresh Settings and try again.`), this.options.startupTimeoutMs ?? 30_000);
++        flow.startupTimer = setTimeout(() => this.finish(flow, "failed", `${product} finished sign-in but could not confirm the account. Refresh Settings and try again.`), (this.options.startupTimeoutMs ?? 30_000) * (1 + (this.spec.afterLogin?.length ?? 0)));
+         flow.startupTimer.unref();
+-        this.confirm(flow, env, home, (signedIn) => this.finish(flow, signedIn ? "succeeded" : "failed",
++        const confirm = () => this.confirm(flow, env, home, (signedIn) => this.finish(flow, signedIn ? "succeeded" : "failed",
+           `${product} finished sign-in but did not confirm a ${account} account. Refresh Settings and try again.`));
++        const steps = [...(this.spec.afterLogin ?? [])];
++        const next = (): void => { const step = steps.shift(); if (step) this.run(flow, [...step], env, home, next); else confirm(); };
++        next();
+       }, true);
+       // Never overwrite a working login; one the provider refused is not working, whatever status says.
+       if (!status) { login(); return; }
+--- a/server/drivers/acp/hermes.ts
++++ b/server/drivers/acp/hermes.ts
+@@ -10,10 +10,50 @@
+ import { findCliCandidates, harnessHome, resolveCliSpawn, splitCliString, whichWin } from "../../env-path.ts";
+ import { killCliTree, resolveCli, spawnCli } from "../../procs.ts";
+ import { decodeInjectId, hostApiKey, INJECT_SEP, localHost, mergeLocalInject } from "../local-inject.ts";
++import type { DeviceSignIn } from "../device-auth.ts";
+ import { createAcpDriver, type AcpSupport } from "./core.ts";
+ import { hermesPermissionRequest } from "./hermes-mcp-trust.ts";
+ import { selectAdvertisedMode } from "./session-modes.ts";
+ 
++/** hermesBot: sign the server's Hermes in to a ChatGPT account from the app, with a one-time code
++ * (`hermes auth add openai-codex` prints OpenAI's device page and the code, as `codex login --device-auth` does). */
++export const HERMES_CHATGPT_SIGN_IN: DeviceSignIn = {
++  provider: "codex",
++  product: "Hermes",
++  account: "ChatGPT",
++  homeEnv: "HERMES_HOME",
++  homeDir: ".hermes",
++  loginArgs: ["auth", "add", "openai-codex", "--type", "oauth", "--no-browser"],
++  afterLogin: [
++    ["config", "set", "model.provider", "openai-codex"],
++    ["config", "set", "model.default", process.env.HERMESBOT_CHATGPT_MODEL || "gpt-6.2-sol"],
++  ],
++  install: "Install Hermes Agent on this server, then try again.",
++  failure: (output) => (/expired|timed out/i.test(output)
++    ? "The ChatGPT sign-in code expired. Start sign-in again for a new code."
++    : "ChatGPT sign-in did not finish. Check the server's connection, then try again."),
++  status: {
++    args: ["auth", "status", "openai-codex"],
++    read: (code, output) => (code !== 0 ? "unknown" : /^openai-codex: logged in\b/m.test(output) ? "signed-in" : "signed-out"),
++  },
++  logoutArgs: ["auth", "logout", "openai-codex"],
++};
++
++/** hermesBot: whether this Hermes has an AI account or key to think with, other than Nous' free tier.
++ * Reads provider names and presence only, never values. */
++export function hermesHasProvider(env: Record<string, string | undefined> = process.env): boolean {
++  const dir = env.HERMES_HOME || harnessHome("hermes", env);
++  const read = (name: string): string => { try { return readFileSync(join(dir, name), "utf8"); } catch { return ""; } };
++  try {
++    const auth = JSON.parse(read("auth.json") || "{}") as Record<string, unknown>;
++    const names = (value: unknown) => (value && typeof value === "object" ? Object.keys(value as object) : []);
++    const paid = (name: string) => name !== "nous";
++    if (names(auth.providers).some(paid) || names(auth.credential_pool).some(paid)) return true;
++  } catch {}
++  if (/^\s*api_key:\s*\S+/m.test(read("config.yaml"))) return true;
++  return /^[A-Z0-9_]*API_KEY=\S+/m.test(read(".env"));
++}
++
+ const EMPTY: ModelCatalog = { default: "", options: [] };
+ 
+ export const HERMES_OPENMAUS_SCREENSHOT_COMPAT = "HERMES_OPENMAUS_SCREENSHOT_COMPAT";
+@@ -437,6 +477,7 @@
+     docsUrl: "https://hermes-agent.nousresearch.com/docs/getting-started/quickstart",
+     signInCommand: "hermes setup",
+   },
++  deviceSignIn: HERMES_CHATGPT_SIGN_IN,
+   spawnArgs: () => ["acp"],
+   // Hermes keeps the first MCP server it registers under a name for the process's life, so a new bearer needs a fresh process.
+   restartOnMcpChange: true,
+@@ -451,7 +492,8 @@
+   },
+   pickAuthMethod: () => null,
+   authFailure: "continue",
+-  isAuthenticated: () => true,
++  // hermesBot: a fresh Hermes with no AI account reads as signed out, so the app offers the Nous sign-in.
++  isAuthenticated: (env) => hermesHasProvider(env),
+   async configureSession({ request, sessionId, config, turn, sessionModes, expectMode }) {
+     if (sessionModes) {
+       const modeId = selectAdvertisedMode(sessionModes.availableModes, turn.approvalMode, config.fullAuto);
+--- a/src/components/onboarding/MeetScreen.tsx
++++ b/src/components/onboarding/MeetScreen.tsx
+@@ -86,6 +86,11 @@
+     chatgpt: useSignInPill(choice("chatgpt"), "meet"),
+     opencode: useSignInPill(choice("opencode"), "meet"),
+   };
++  // hermesBot: the server's own Hermes comes first; one sign-in with a ChatGPT account connects it.
++  const hermesEngine = state.instances.find((instance) => instance.driverKind === "hermesAgent");
++  const hermes = hermesEngine?.snapshot.state === "available" && hermesEngine.snapshot.authenticated === false
++    && hermesEngine.authentication ? hermesEngine : undefined;
++  const hermesPill = useSignInPill(hermesEngine, "meet");
+   const shown = first.length ? first : [{ kind: "claude" as const, instance: lead }];
+   const [dialog, setDialog] = useState(false);
+   const [typing, setTyping] = useState(false);
+@@ -94,7 +99,7 @@
+   const face = typing ? "listening" : "idle";
+   const testing = tested?.state === "testing" ? tested.instance.instanceId : null;
+   const waitsFor = shown.some(({ instance }) => instance?.instanceId === testing) ? testing : shown[0]?.instance?.instanceId;
+-  const failure = shown.map(({ kind }) => pills[kind].error).find(Boolean)
++  const failure = hermesPill.error ?? shown.map(({ kind }) => pills[kind].error).find(Boolean)
+     ?? (tested?.state === "failed" ? tested.error ?? t("onboarding.engines.noAnswer", { name: tested.instance.displayName }) : null);
+   const signingIn = asking && !ready;
+   return (
+@@ -127,8 +132,18 @@
+         )}
+         {signingIn ? (
+           <div data-first-ais="" className="flex flex-col items-center gap-2">
++            {hermes && (hermesPill.slot.kind === "start" && !(testing !== null && hermes.instanceId === testing) ? (
++              <button key="hermes" type="button" data-primary="" data-sign-in="sign-in" className={PILL}
++                onClick={() => { setChosen(hermes.instanceId); void hermesPill.start(); }}>
++                {t("onboarding.meet.signIn", { name: "ChatGPT" })}
++              </button>
++            ) : (
++              <SignInPill key="hermes" pill={hermesPill} instance={hermes} name="ChatGPT"
++                waiting={testing !== null && hermes.instanceId === testing}
++                onDialog={() => setDialog(true)} onPick={() => setChosen(hermes.instanceId)} />
++            ))}
+             {shown.map(({ kind, instance }, index) => (
+-              <SignInPill key={kind} pill={pills[kind]} instance={instance} quiet={index > 0}
++              <SignInPill key={kind} pill={pills[kind]} instance={instance} quiet={index > 0 || Boolean(hermes)}
+                 name={kind === "chatgpt" ? t("cloudSignIn.codex") : undefined}
+                 setUp={kind === "chatgpt" && instance?.snapshot.state !== "available"}
+                 waiting={(testing !== null && instance?.instanceId === waitsFor) || settling(instance)}
