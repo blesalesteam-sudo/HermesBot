@@ -1,0 +1,285 @@
+OpenBot: varios usuarios con usuario y contraseña; cada mensaje con su autor y los bots saben quién habla; bots solo para algunos usuarios.
+
+--- a/packages/phone-protocol/src/environment.ts	2026-11-26 22:54:42
++++ b/packages/phone-protocol/src/environment.ts	2026-11-26 22:54:49
+@@ -49,6 +49,8 @@
+     install?: ServerInstall;
+     /** Whether /pair offers "sign in with your email" (an allow-list is set). */
+     emailSignIn?: boolean;
++    /** OpenBot: people sign in with a username and password (server/local-accounts.ts). */
++    passwordSignIn?: boolean;
+     /** GET /api/threads/:id/job answers, long-polled (the headless CLI needs it). */
+     jobs: true;
+   };
+--- a/server/environment.ts	2026-11-26 22:54:42
++++ b/server/environment.ts	2026-11-26 22:54:49
+@@ -126,7 +126,7 @@
+  * /api/auth/session answer, never in the description anyone may read before pairing. */
+ export const OWNER_LENDING = Object.freeze({ sharedComputers: true, lendingDetails: true, commandTimeouts: true, longCommands: true, fileEdits: true, lentMcp: true, mcpCaller: true } as const);
+ 
+-export function environmentDescriptor(input: { environmentId: string; desktopManaged: boolean; emailSignIn?: boolean; sharedComputers?: boolean; cloudHome?: boolean; cloudTeam?: boolean; ownHome?: boolean; label?: string }): EnvironmentDescriptor {
++export function environmentDescriptor(input: { environmentId: string; desktopManaged: boolean; emailSignIn?: boolean; passwordSignIn?: boolean; sharedComputers?: boolean; cloudHome?: boolean; cloudTeam?: boolean; ownHome?: boolean; label?: string }): EnvironmentDescriptor {
+   return {
+     environmentId: input.environmentId,
+     label: input.label?.trim() || process.env.OMB_ENVIRONMENT_LABEL?.trim() || process.env.OMB_SERVER_NAME?.trim() || hostname(),
+@@ -147,6 +147,7 @@
+       selfUpdate: input.desktopManaged ? "desktop-managed" : "operator",
+       ...(input.desktopManaged ? {} : { install: serverInstall() }),
+       emailSignIn: input.emailSignIn === true,
++      ...(input.passwordSignIn === true ? { passwordSignIn: true as const } : {}),
+       jobs: true,
+     },
+   };
+--- a/server/index.ts	2026-11-26 22:54:42
++++ b/server/index.ts	2026-11-26 22:55:11
+@@ -667,6 +667,11 @@
+ } dataFormatAtStart("stamp", DATA_DIR, serverVersion()); doctorAtStart(DATA_DIR, serverVersion()); // the first start of a version: safe repairs, before anything reads the data
+ const workspaceMaintenance = new WorkspaceBackupMaintenance(), moveFreeze = createMoveFreeze({ dataDir: DATA_DIR, exportOnly: (process.env.OMB_CLOUD_ROLE === "home" || process.env.OMB_CLOUD_ROLE === "team") && process.env.OMB_CLOUD_EXPORT_ONLY === "1" });
+ // Only after ensureDirs(), whose one-time legacy data-dir rename must not find ~/.openmausbot already there.
++// OpenBot: people sign in with a username and password; each is a `<usuario>@local` person to the rest of the app.
++import { createLocalAccounts, seedFirstAdmin } from "./local-accounts.ts";
++import { createLocalAccountsRoutes, passwordSignInRoute } from "./routes/local-accounts.ts";
++const localAccounts = createLocalAccounts(DATA_DIR);
++{ const seeded = seedFirstAdmin(localAccounts); if (seeded) console.log(`OpenBot: primer administrador creado (${seeded})`); }
+ const ENVIRONMENT_ID = loadEnvironmentId(DATA_DIR);
+ const signInAllowList = cacheUntilConfigChanges((config) => ({
+   admins: parseAllowList(config.signIn?.admins?.join(",")),
+@@ -676,7 +681,7 @@
+   file: join(DATA_DIR, "sessions.json"),
+   emailScopesSnapshot: () => {
+     const membership = signInAllowList();
+-    return (email) => allowedScopes(email, membership);
++    return (email) => localAccounts.scopes(email) ?? allowedScopes(email, membership);
+   },
+   portalMembership: hostedWorkspaceConfiguration()?.portalMembership === true, recheckMs: 1_000,
+ }); onConfigSaved(() => sessions.membershipChanged());
+@@ -806,6 +811,8 @@
+ // Set only when a turn is admitted, never on queue or steer, so a second person's words cannot re-book the first person's turn.
+ const threadMaps = createThreadMaps(); const turnTriggers = threadMaps.track(new Map<string, UsageTrigger>());
+ const NOBODY_PROFILE: MemberProfile = { name: "", email: "", aboutMe: "" }; const personNames = createPersonNames(DATA_DIR), SELF_HOSTED = !CLOUD_HOME && !HOSTED_WORKSPACE;
++// OpenBot: each account goes by its own name in messages and in the note that tells the bots who is speaking.
++for (const account of localAccounts.list()) if (!personNames.of({ id: "", email: account.email })) personNames.save({ id: "", email: account.email }, account.displayName);
+ 
+ /** What a signed-in person is called on their lines, cards and reactions: first the name they chose, on a Team Cloud or here. */
+ function sessionPersonName(session: SessionRecord): string {
+@@ -850,7 +857,7 @@
+ }
+ 
+ function sharedMembership(): boolean {
+-  return CLOUD_TEAM !== null || hostedWorkspaceConfiguration()?.portalMembership === true || signInAllowList().members.length > 0;
++  return CLOUD_TEAM !== null || hostedWorkspaceConfiguration()?.portalMembership === true || signInAllowList().members.length > 0 || localAccounts.count() > 1;
+ } const ownHome = createOwnHome({ dataDir: DATA_DIR, facts: () => ({ managed: CLOUD_HOME !== null || HOSTED_WORKSPACE, shared: sharedMembership(), admins: signInAllowList().admins }) }); const placesElsewhere = createPlacesElsewhere({ dataDir: DATA_DIR, here: CLOUD_HOME ? "cloud" : HOSTED_WORKSPACE ? null : DESKTOP_MANAGED ? "computer" : "server" });
+ 
+ /** Everyone is "user" where one person uses the workspace; where several do, each reacts as their own key. */
+@@ -6944,7 +6951,7 @@
+   if (m.roomRequest?.phase !== "request") return peerLineText(name, text, "report");
+   return `${coordinator.note(m.roomRequest.id) ?? peerProvenanceNote({ botName: name, delivery: "coordinate_bots" })}\n${JSON.stringify(escapeNotes(text))}`;
+ }
+-const { lineLabels, personPrompt, routineRunNote } = createLineLabels({ sharedChat: (threadId) => sharedMembership() && !store.groupByThread(threadId) && audienceMember(teamHost.audienceOf(threadId)) === null, userName: userNameFor, teamRole: (key) => (teamOwners.people?.list() ?? []).find((one) => personKey({ id: "", email: one.email }) === key)?.role, routineName: (threadId) => { const run = routines?.runForThread(threadId); return routines?.listRoutines().find((one) => one.id === run?.routineId)?.name; } });
++const { lineLabels, personPrompt, routineRunNote } = createLineLabels({ sharedChat: (threadId) => sharedMembership() && !store.groupByThread(threadId) && (!CLOUD_TEAM || audienceMember(teamHost.audienceOf(threadId)) === null), /* OpenBot: off a team every chat says who wrote each line */ userName: userNameFor, teamRole: (key) => (teamOwners.people?.list() ?? []).find((one) => personKey({ id: "", email: one.email }) === key)?.role, routineName: (threadId) => { const run = routines?.runForThread(threadId); return routines?.listRoutines().find((one) => one.id === run?.routineId)?.name; } });
+ 
+ const { replayInputs, sessionConfigFor, nextTurnResumes } = createResumeCheck({ store, directContext, latestCompaction, context: () => cfg.context, everyBotRules: () => cfg.everyBotRules, sectionPrompt: sectionContextSystemPrompt,
+   folderToFollow: (bot, threadId, task, driverKind) => folderToFollow(bot, threadId, task.cwd, { worksInFolders: supportsWorkspaceFiles(driverKind), keepsPrivateFolder: keepsPrivateFolder(threadId) }),
+@@ -12030,6 +12037,8 @@
+ }));
+ const teamMoveIn = CLOUD_TEAM ? createTeamMoveIn({ team: CLOUD_TEAM, dataDir: DATA_DIR, sessions, store, routines: () => routines, library: () => readSkillLibraryIndex(), starters: threadStarters }) : null; const cloudSendOwner = (auth: RequestAuth) => teamMoveIn ? teamMoveIn.owner(auth) : (CLOUD_HOME && auth.kind === "session" && auth.scopes.includes("admin")) || ownHome.owner(auth) ? { person: actorKey(auth as RequestAuth & { kind: "session" }), name: cfg.profile?.name?.trim() || "User" } : desktopMainMover(auth, { desktopManaged: DESKTOP_MANAGED, managed: Boolean(CLOUD_HOME || HOSTED_WORKSPACE) }) ? thisComputerOwner(cfg.profile?.name) : null; const botMoves = CLOUD_PERSONAL || DESKTOP_MANAGED ? createBotMoves({ store, routines: () => routines, webhooks: () => webhooks, appEvents: () => appTriggers.manager, waits: () => botWaits, busy: (id) => botHasActiveTurn(id) || Boolean(routines?.activeRunForBot(id)), computer: !CLOUD_HOME, mcp: (id) => mcpServersHere(cfg, id), arrivals: arrivalsFile(DATA_DIR), stays: (id) => staysOnCloud(store.bot(id), { logins: logins.changes().length, secrets: logins.listSecrets(TEAM_READER).length, onePassword: logins.onePasswordConnectedAt() !== null, mcpServers: Object.keys(cfg.mcpServers ?? {}) }), lapseCheckMs: 15_000, log: (line) => console.error(line) }) : null; ROUTES.push(createBotMoveRoutes({ moves: botMoves, enabled: Boolean(botMoves) })); if (teamMoveIn) { ROUTES.unshift(teamMoveIn.guard); ROUTES.push(teamMoveIn.routes); teamOwners.backfill(teamMoveIn.list()); } ROUTES.push(createDeciderRoutes({ decider, extractor, config: () => cfg }), createImageSettingsRoutes({ config: () => cfg }), createTtsRoutes({ config: () => cfg }), createHelperSuggestionRoutes({ notNow: proactive.suggestionNotNow }), createSetupRequestRoutes({ store, language: personLanguages.forPlace, sendRefusal: cloudGuestSendRefusal, presser: (auth) => setupPresser(sharedMembership(), auth, messageSender(auth)), canSetUp: (botId, threadId) => registry.get(store.projectBotForTask(botId, threadId)?.modelSelection.instanceId ?? "")?.adapter.capabilities.agentsMcp === true, send: (auth, botId, threadId, text) => acceptDirectSend({ botId, threadId, text, sender: messageSender(auth), trigger: usageTriggerFor(auth), personPresent: auth.kind === "session" || DESKTOP_MANAGED }) }), createNotificationRoutes(undefined, notificationListed), createUpdateCheckRoutes(updateRouteDeps({ desktopManaged: DESKTOP_MANAGED, managed: Boolean(CLOUD_HOME || HOSTED_WORKSPACE), dataDir: DATA_DIR, activeTurns: () => liveTurnByThread.size, actor: adminActorFor })), createSeatsRoutes({ signInList: signInAllowList, sessions: () => sessions.list() }), createTimeZoneRoutes({ adopts: Boolean(CLOUD_HOME), dataDir: DATA_DIR, changed: () => routines?.rescheduleLocalTimes() }), createCloudSendRoutes({ appVersion: serverVersion(), ...(CLOUD_TEAM ? { refusal: personalMoveRefusal(CLOUD_TEAM), scope: (auth) => teamMoveIn?.scope(auth) ?? null } : {}), bots: () => store.bots, messagesTail: (threadId, limit) => store.messagesTail(threadId, limit), skills: (bot) => listSkills(bot.id), logins, config: () => cfg, lineLanguage: personLanguages.forLine, changes: { bots: () => store.bots, instances: () => cfg.instances ?? {}, mcpServers: () => cfg.mcpServers, skills: (bot) => listSkills(bot.id).map((skill) => ({ name: skill.name, enabled: skill.enabled, text: readSkillFile(bot.id, skill.name) })) }, chats: { store, dataDir: DATA_DIR, owner: cloudSendOwner, ...(CLOUD_OWNER_KEY ? { ownerKey: CLOUD_OWNER_KEY } : {}), stamped: (threadId) => ownerOnlyCache.delete(threadId), instanceExists: (id) => Boolean(registry.get(id)), approvalSupported: (selection, mode) => supportsApprovalMode(selection, mode) }, cloudHome: Boolean(CLOUD_HOME), ownHome: ownHome.owner, automations: { routines: () => routines, calls: () => calendarCalls, webhooks: () => webhooks, appEvents: () => appTriggers.manager, waits: () => botWaits }, connectionsMoved: (language) => cloudConnections.moved(language), connections: () => cloudConnections.connections(), connectionFingerprints: (nonce) => cloudConnections.fingerprints(nonce), move: { dataDir: DATA_DIR, store, routines: () => routines, calls: () => calendarCalls, webhooks: () => webhooks, appEvents: () => appTriggers.manager, claudeCodeSkills: () => (claudeUserSkillsEnabled(cfg) ? claudeCodeSkillInputs() : []), instanceExists: (id) => Boolean(registry.get(id)), owner: cloudSendOwner, ownRoutine: (routine, person) => { cloudRoutineAuthors?.record(routine.id, routine); cloudRoutineAuthors?.wrote(routine.id, person); }, arrived: () => ownerOnlyCache.clear(), teamMemory, aboutMe: () => cfg.profile?.aboutMe ?? "", saveAboutMe: (text) => { saveConfig({ profile: { ...cfg.profile, aboutMe: text } }); Object.assign(cfg, loadConfig()); broadcast({ kind: "config", ...configStatus() }); } } }), cloudConnections.routes, createTodayRoutes({ visibleFor: (auth) => visibleTo(viewerFor(auth)), ...(teamOwners.asks ? { asks: teamOwners.asks, messages: teamMessages.needsYou } : {}), sources: () => ({ bots: store.bots, groups: store.groups, routines, parked: coordinator.active(), engines: registry.instances().map((instance) => ({ instanceId: instance.instanceId, snapshot: registry.lastSnapshot(instance.instanceId) })) }) }), createInboxRoutes(teamMessages)); const conversationSharing = createConversationSharing({ team: CLOUD_TEAM, store: () => store, shares: conversationShares, saves: createTeamMemorySaves({ dataDir: DATA_DIR }), starter: (threadId) => threadStarters.get(threadId), audienceOf: teamHost.audienceOf, sees: (auth, threadId) => visibleTo(viewerFor(auth)).thread(threadId), levelOf, levelFor: (person, botId) => visibleTo(person.role === "member" ? { kind: "member", email: person.email } : { kind: "all", email: person.email }).level(botId), people: () => teamOwners.people?.list() ?? [], nameOf: (email) => teamHost.personName(personKey({ id: "", email })) ?? email, language: (person) => personLanguages.forLine(person), busy: threadBusy, routinesIn: (threadId) => (routines?.listRoutines() ?? []).filter((routine) => routine.sourceThreadId === threadId || routine.resultsThreadId === threadId).length, outside: cloudGuestDriven, audienceChanged: (botId, threadId) => { store.patchTask(botId, threadId, { rewound: true, resumeCursors: {} }); }, changed: (botId) => { const bot = store.bot(botId); if (bot) broadcast({ kind: "bot", bot: wireBot(bot) }); }, inbox: () => teamMessages.inbox, looking: (email, threadId) => teamPresence.looking(email, threadId), notify, botOf: (threadId) => store.botByThread(threadId)?.id, handTo: (threadId, person) => threadStarters.handTo(threadId, person) }); ROUTES.push(conversationSharing.routes);
+ if (CLOUD_TEAM) teamHost.adoptServerProfile(sessions.list().flatMap((session) => session.email ? [session.email] : []));
++// OpenBot: admins manage the username and password accounts (Settings → People).
++ROUTES.push(createLocalAccountsRoutes({ accounts: localAccounts, names: personNames, changed: () => { sessions.membershipChanged(); broadcast({ kind: "config", ...configStatus() }); } }));
+ const sidebarRoutes = createSidebarSectionRoutes({ store, teamComputers, maxBots: MAX_WORKSPACE_BOTS, assertTeamComputerChangeIdle, wireBot, renamed: (from, to) => (to ? botHolds.rename(from, to) : botHolds.forget("department", from)) }); ROUTES.push(teamPresence.routes, sidebarRoutes, createPresenceRoutes({ isOwner: ownerOrAdmin, heard: (auth, language) => personLanguages.heard(auth.kind === "session" ? actorKey(auth) : THIS_COMPUTER, language), sawChat: (_auth, threadId, typing) => { if (!store.botByThread(threadId)) return; if (typing) enginePrestart.typedIn(threadId); sawThread(threadId); }, active: async (source, zone, language) => { const answer = await proactive.brief.active(source, zone, language); firstHourHooks.arrived(); return answer; }, ...(CLOUD_TEAM ? { member: (auth) => { noAiNotice.flush(); return teamMessages.arrived(auth); } } : {}) }), createMeRoutes({ team: CLOUD_TEAM, session: (auth) => (auth.kind === "session" ? auth.session : null), welcome: teamWelcome, profile: teamHost.memberProfile, save: teamHost.saveMemberProfile, seed: teamHost.seedMemberProfile, seeded: teamHost.seededFields, changed: () => broadcast({ kind: "config", ...configStatus() }), names: SELF_HOSTED ? { store: personNames, shownAs: sessionPersonName } : null }), teamAway.routes, createTeamPhoneRoutes({ team: CLOUD_TEAM, sessions, publicBase: (req, auth) => pairingLinkBase(publicUrl(), auth.kind === "session" ? requestOrigin(req) : null) }),
+   createTeamConnectionRoutes({ host: teamConnections, cfg: () => cfg, composio, policy: managedPolicy, publicOrigin: CLOUD_HOME?.publicOrigin ?? null, record: (auth, row) => appendAdminAction(DATA_DIR, { ...row, actor: decisionActorFor(auth) }) }), createSignInCardRoutes({ settle: signInSettle.settle, saveLogin: (botId, threadId, messageId, body, auth) => CLOUD_TEAM && !auth.scopes.includes("admin") ? Promise.resolve({ status: 403 as const, body: memberLoginRefusal(CLOUD_TEAM) }) : saveLoginFromCard(botId, threadId, messageId, body), saveTarget: signInSaveTarget, threadVisible: (auth, threadId) => visibleTo(viewerFor(auth)).thread(threadId), vault: createSignInVaultChoices({ logins, cardBots: (id) => botLogins.cardBots(id), settle: signInSettle.settle, openCard: (botId, threadId, messageId) => { const card = signInMessage(botId, threadId, messageId)?.signIn; return card && card.place === "browser" && !card.superseded && !card.answeredInChat && !card.stopped && !signInOutcome(card) ? card : null; } }) })); const appSuggestions = createAppSuggestions({ dataDir: DATA_DIR, store, configured: () => composio.configured(cfg), catalog: () => composio.listToolkits(cfg), services: async (live) => live ? composio.connectedServices(cfg) : (await composio.sharedConnectedInventory(cfg)).services, offerable: (slug) => !managedPolicy.appRefusal(slug) && !managedConnectorUnavailableReason(composio.connectionMode(cfg), slug) && !teamConnections.personApps().includes(slug), pickAvailable: () => appPickAvailable(cfg), decider }); ROUTES.push(createAppSuggestionRoutes(appSuggestions));
+ ROUTES.push(createConnectorListingRoutes({ cfg: () => cfg, composio, managedHost: DESKTOP_MANAGED || CLOUD_HOME !== null })); composio.rememberCatalogIn(DATA_DIR); composio.onCatalogChange(() => broadcast({ kind: "apps-catalog" }, { adminOnly: true })); const githubSignIn = createGithubSignIn({ dataDir: DATA_DIR, team: Boolean(CLOUD_TEAM), vault: logins, tools: createGhTools({ dataDir: DATA_DIR, personalAllowed: () => !CLOUD_HOME && !HOSTED_WORKSPACE && !botBox.enabled() }), remember: (token) => heldSecrets.remember(token, "password") }); provideGithubSignIn(githubSignIn); ROUTES.push(createGithubSignInRoutes({ signIn: githubSignIn, team: Boolean(CLOUD_TEAM) })); const githubSignInCards = createGithubSignInCards({ store, signIn: githubSignIn, team: Boolean(CLOUD_TEAM), turnPerson: (threadId, generation) => teamConnections.turnPerson(threadId, generation), language: threadLanguage, threadVisible: (auth, threadId) => visibleTo(viewerFor(auth)).thread(threadId), resume: (threadId, resumeKey) => void maybeResumeConnectors(threadId, resumeKey), release: (threadId, messageId) => releaseCardNode(threadId, messageId, "The connection request was dismissed") }); provideGithubSignInCards(githubSignInCards); ROUTES.push(createGitCredentialRoutes({ port: PORT, enabled: () => !CLOUD_HOME && !HOSTED_WORKSPACE && !CLOUD_TEAM && !botBox.enabled() }));
+@@ -12425,7 +12434,7 @@
+     // Two public routes come first; everything else needs the loopback owner or a paired session with the right scope.
+     if (method === "GET" && !path.startsWith("/api/") && !path.startsWith("/.well-known/") && (moveFreeze.screen(path) ? (res.writeHead(302, { location: moveFreeze.screen(path)!, "cache-control": "no-store" }).end(), true) : serveStatic(res, path, STATIC_DIR))) return;
+     if (method === "GET" && path === "/.well-known/openmausbot/environment") {
+-      return json(res, 200, environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED, emailSignIn: !HOSTED_WORKSPACE && !CLOUD_HOME && emailSignIn.enabled(), sharedComputers: lendingEnabled(), cloudHome: Boolean(CLOUD_HOME), cloudTeam: CLOUD_TEAM !== null, ownHome: ownHome.takesMove() }));
++      return json(res, 200, environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED, emailSignIn: !HOSTED_WORKSPACE && !CLOUD_HOME && emailSignIn.enabled(), passwordSignIn: SELF_HOSTED, sharedComputers: lendingEnabled(), cloudHome: Boolean(CLOUD_HOME), cloudTeam: CLOUD_TEAM !== null, ownHome: ownHome.takesMove() }));
+     }
+     const domainCheck = /^\/\.well-known\/openmausbot\/domain-check\/([a-f0-9]{64})$/.exec(path);
+     if (method === "GET" && domainCheck) {
+@@ -12433,6 +12442,8 @@
+       const challenge = customDomainVerifier.challenge(domainCheck[1]);
+       return json(res, challenge ? 200 : 404, challenge ?? { error: "No active domain check." });
+     }
++    if (await passwordSignInRoute({ disabled: !SELF_HOSTED, accounts: localAccounts, sessions, cookieName: SESSION_COOKIE,
++      environment: () => environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED, passwordSignIn: true, sharedComputers: lendingEnabled() }) }, req, res, path, method)) return;
+     if (await emailSignInRoute({ cloudHome: Boolean(CLOUD_HOME), emailSignIn, sessions, cookieName: SESSION_COOKIE, target: (r) => signInMailTarget(publicUrl(), requestOrigin(r)),
+       environment: () => environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED, emailSignIn: true, sharedComputers: lendingEnabled() }) }, req, res, path, method)) return;
+     if ((cloudSigned && await cloudSigned({ req, res, url, path, method })) || chatApps.serveFile(req, res, path, method) || await cliLogin.open(req, res, path, method)) return;
+--- a/src/components/bot-settings/VisibilitySection.tsx	2026-11-26 22:56:29
++++ b/src/components/bot-settings/VisibilitySection.tsx	2026-11-26 22:56:29
+@@ -15,12 +15,14 @@
+ export function formFromVisibility(visibility: BotVisibility | undefined): { mode: VisibilityMode; people: string } {
+   if (!visibility || visibility === "everyone") return { mode: "everyone", people: "" };
+   if (visibility === "admins") return { mode: "admins", people: "" };
+-  return { mode: "people", people: visibility.people.join("\n") };
++  // OpenBot: a username account (<usuario>@openbot.local) shows as just its username.
++  return { mode: "people", people: visibility.people.map((entry) => entry.replace(/@openbot\.local$/i, "")).join("\n") };
+ }
+ 
+ export function visibilityFromForm(mode: VisibilityMode, people: string): { ok: true; visibility: BotVisibility } | { ok: false } {
+   if (mode !== "people") return { ok: true, visibility: mode };
+-  const entries = [...new Set(people.split(/[\s,;]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean))];
++  // OpenBot: a plain username means that username account.
++  const entries = [...new Set(people.split(/[\s,;]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean).map((entry) => (entry.includes("@") ? entry : `${entry}@openbot.local`)))];
+   return entries.length ? { ok: true, visibility: { people: entries } } : { ok: false };
+ }
+ 
+--- a/src/components/settings/pages/DataPages.tsx	2026-11-26 22:56:05
++++ b/src/components/settings/pages/DataPages.tsx	2026-11-26 22:56:05
+@@ -1,3 +1,4 @@
++import { LocalAccountsSection } from "../../LocalAccountsSection"; // OpenBot
+ import { t } from "@/lib/i18n";
+ import { ActivitySection } from "../../ActivitySection";
+ import { AdminOnly } from "../../AdminOnly";
+@@ -53,6 +54,7 @@
+ export function PeoplePage() {
+   const { ctx } = useSettingsShell();
+   return <>
++    {!ctx.desktop && !ctx.cloud && <SettingsGroup label="Usuarios" block="openbot-accounts"><LocalAccountsSection /></SettingsGroup>}
+     {!ctx.desktop && !ctx.cloud && <SettingsGroup label={t("settings.people.members")} block="members"><PeopleSection /></SettingsGroup>}
+     {ctx.team && <SettingsGroup label={t("settings.section.botAccess")} block="bot-access"
+       footnote={!ctx.desktop ? t("settings.people.activityIn") : undefined}><AccessOverview /></SettingsGroup>}
+--- a/src/lib/session.ts	2026-11-26 22:54:42
++++ b/src/lib/session.ts	2026-11-26 22:59:21
+@@ -8,7 +8,7 @@
+   label: string;
+   platform: string;
+   version: string;
+-  capabilities: { remoteSessions: true; selfUpdate: "desktop-managed" | "operator"; emailSignIn?: boolean; sharedComputers?: true; cloudHome?: true; cloudTeam?: true };
++  capabilities: { remoteSessions: true; selfUpdate: "desktop-managed" | "operator"; emailSignIn?: boolean; passwordSignIn?: true; sharedComputers?: true; cloudHome?: true; cloudTeam?: true };
+ }
+ 
+ /** A Team Cloud's session: the team and this person's role in it (owner, admin or member). */
+@@ -197,6 +197,11 @@
+   return { ok: false, error: refusalText(parsed, res) };
+ }
+ 
++/** OpenBot: sign in with a username and password (server/routes/local-accounts.ts). */
++export function signInWithPassword(input: { username: string; password: string; label: string }, fetchImpl: typeof serverFetch = serverFetch): Promise<{ ok: true } | { ok: false; error: string }> {
++  return postAuth("/api/auth/password", { username: input.username, password: input.password, label: input.label }, fetchImpl);
++}
++
+ export function startEmailSignIn(email: string, fetchImpl: typeof serverFetch = serverFetch): Promise<{ ok: true } | { ok: false; error: string }> {
+   return postAuth("/api/auth/email/start", { email }, fetchImpl);
+ }
+--- a/src/locales/es.json	2026-11-26 22:56:35
++++ b/src/locales/es.json	2026-11-26 22:56:35
+@@ -3258,8 +3258,8 @@
+   "botSettings.visibility.everyone": "Todos los que pueden iniciar sesión",
+   "botSettings.visibility.admins": "Solo admins",
+   "botSettings.visibility.people": "Solo estas personas",
+-  "botSettings.visibility.peopleLabel": "Direcciones de correo",
+-  "botSettings.visibility.peoplePlaceholder": "Un correo o @empresa.com por línea",
++  "botSettings.visibility.peopleLabel": "Usuarios",
++  "botSettings.visibility.peoplePlaceholder": "Un usuario por línea (por ejemplo: dani)",
+   "botSettings.visibility.rooms": "Un grupo solo se muestra a las personas que pueden ver todos sus bots, y este bot solo trabaja con compañeros visibles exactamente para las mismas personas.",
+   "botSettings.visibility.save": "Guardar",
+   "botSettings.visibility.saving": "Guardando…",
+--- a/src/pair/PairPage.tsx	2026-11-26 22:54:42
++++ b/src/pair/PairPage.tsx	2026-11-26 22:55:30
+@@ -8,6 +8,7 @@
+   newAttemptId,
+   pairWithCode,
+   readSessionState,
++  signInWithPassword,
+   reasonWorthShowing,
+   rememberedTeamSignIn,
+   startEmailSignIn,
+@@ -91,7 +92,9 @@
+   const [busy, setBusy] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [attemptId, setAttemptId] = useState(() => newAttemptId());
+-  const [mode, setMode] = useState<"email" | "code">(initialEmail && !initialCode ? "email" : "code");
++  const [mode, setMode] = useState<"email" | "code" | "password">(initialEmail && !initialCode ? "email" : "code");
++  const [username, setUsername] = useState("");
++  const [password, setPassword] = useState("");
+   const [email, setEmail] = useState(initialEmail ?? "");
+   const [otp, setOtp] = useState("");
+   const [sent, setSent] = useState(false);
+@@ -115,6 +118,8 @@
+       .then((r) => (r.ok ? r.json() : null))
+       .then((d: EnvironmentDescriptor | null) => {
+         setEnvironment(d);
++        // OpenBot: a username and password is the usual way in; a pairing code or a link stays available.
++        if (d?.capabilities.passwordSignIn === true && !initialCode && !initialEmail) setMode("password");
+       })
+       .catch(() => {
+         setEnvironment(null);
+@@ -124,6 +129,7 @@
+ 
+   const connected = isConnected(session);
+   const emailOffered = environment?.capabilities.emailSignIn === true;
++  const passwordOffered = environment?.capabilities.passwordSignIn === true;
+   const cloudHome = environment?.capabilities.cloudHome === true;
+   const ownServer = !cloudHome && environment?.capabilities.cloudTeam !== true;
+   const problem = codeProblem(code);
+@@ -159,7 +165,20 @@
+     setSent(true);
+   }
+ 
+-  function switchMode(next: "email" | "code") {
++  async function submitPassword(e: React.FormEvent) {
++    e.preventDefault();
++    setBusy(true);
++    setError(null);
++    const result = await signInWithPassword({ username: username.trim(), password, label });
++    setBusy(false);
++    if (result.ok) {
++      location.replace(pairedDestination(location.search));
++      return;
++    }
++    setError(result.error);
++  }
++
++  function switchMode(next: "email" | "code" | "password") {
+     setMode(next);
+     setError(null);
+   }
+@@ -172,10 +191,10 @@
+         {opening ? (
+           <p role="status" className="text-[20px] font-semibold">{cloudHome ? t("pair.openingCloud") : t("pair.connectingTo", { name: environment?.label ?? t("pair.thisOpenMausBot") })}</p>
+         ) : <>
+-        <h1 className="text-[20px] font-semibold">{pairTitle(environment, mode)}</h1>
++        <h1 className="text-[20px] font-semibold">{mode === "password" ? `Entrar en ${environment?.label ?? productName()}` : pairTitle(environment, mode)}</h1>
+         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
+           {environment && !cloudHome ? `${t("pair.version", { version: environment.version, platform: environment.platform })} ` : ""}
+-          {pairIntro({ mode, sent, email, cloudHome })}
++          {mode === "password" ? "Entra con tu usuario y tu contraseña." : pairIntro({ mode, sent, email, cloudHome })}
+         </p>
+         {reasonWorthShowing(reason) && !connected ? <p className="mt-3 text-[13px] text-ink-secondary">{reasonWorthShowing(reason)}</p> : null}
+         {error && cloudHome && initialCode ? <p className="mt-3 text-[13px] text-ink-secondary">{t("pair.expired", { app: productName(), open: t("cloudHome.connect"), section: t("settings.section.cloudAccount") })}</p> : null}
+@@ -191,6 +210,20 @@
+               {t("pair.openApp")}
+             </a>
+           </p>
++        ) : mode === "password" ? (
++          <form onSubmit={submitPassword}>
++            <label className={fieldLabel} htmlFor="signin-username">Usuario</label>
++            <input id="signin-username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} className={input} />
++            <label className={fieldLabel} htmlFor="signin-password">Contraseña</label>
++            <input id="signin-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className={input} />
++            {error ? <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p> : null}
++            <button type="submit" disabled={busy || !username.trim() || !password} className={button}>
++              {busy ? "Entrando…" : "Entrar"}
++            </button>
++            <button type="button" onClick={() => switchMode("code")} className="mt-3 w-full text-[13px] text-ink-secondary underline">
++              Usar un código de emparejamiento
++            </button>
++          </form>
+         ) : mode === "email" ? (
+           <form onSubmit={submitEmail}>
+             <label className={fieldLabel} htmlFor="signin-email">
+@@ -283,6 +316,11 @@
+                 {t("pair.noCode")} <code className="select-all rounded bg-inset px-1.5 py-0.5 text-[12px] text-ink">npx openmausbot pair</code>
+               </p>
+             ) : null}
++            {passwordOffered ? (
++              <p className="mt-5 border-t border-hairline/40 pt-4 text-[13px] text-ink-secondary">
++                <button type="button" onClick={() => switchMode("password")} className="text-accent underline">Entrar con usuario y contraseña</button>
++              </p>
++            ) : null}
+             {emailOffered ? (
+               <p className="mt-5 border-t border-hairline/40 pt-4 text-[13px] text-ink-secondary">
+                 {t("pair.invitedByEmail")}{" "}

@@ -31,6 +31,24 @@ iniciarla una vez dentro del servicio. Nunca se copian claves ni `auth.json` a m
 3. Comprueba: `runuser -u hermes -- env HOME=/opt/data HERMES_HOME=/opt/data hermes auth status`
 4. En la app, crea o edita el bot con el modelo "Hermes default (config)": usa lo elegido en el paso 2.
 
+## Varios usuarios (por ejemplo, dos socios)
+
+Cada persona entra con su usuario y su contraseña. Todos trabajan con los mismos bots, cada mensaje
+lleva quién lo escribió y los bots lo saben: en cada mensaje reciben una nota con el nombre de quien habla.
+
+- **Primer administrador:** en Railway, pon las variables `OPENBOT_ADMIN_USER` y
+  `OPENBOT_ADMIN_PASSWORD` (y si quieres `OPENBOT_ADMIN_NAME`). Al arrancar se crea esa cuenta si
+  todavía no hay ninguna. Después puedes quitar la contraseña de las variables.
+- **Más usuarios:** Ajustes → Personas → Usuarios. Ahí se crean, se cambia su contraseña, se hacen
+  administradores o se borran. Siempre queda al menos un administrador.
+- **Bots solo para algunos:** en los ajustes del bot, "Quién puede verlo" → "Solo estas personas",
+  y escribe sus usuarios (uno por línea).
+- Por dentro, cada usuario es la dirección `<usuario>@openbot.local`; nunca se envía correo a ella.
+
+Archivos: `overlay/server/local-accounts.ts` (cuentas, contraseñas con scrypt),
+`overlay/server/routes/local-accounts.ts` (entrar y gestionar), `overlay/src/components/LocalAccountsSection.tsx`
+(Ajustes) y `patches/70-usuarios.patch` (conexión con la app, pantalla de entrada y visibilidad de bots).
+
 ## Respuestas visuales en el chat
 
 Para que el bot enseñe las cosas como en Grok Bot (documentos con índice y cifras, dashboards,
