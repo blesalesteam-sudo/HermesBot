@@ -1,5 +1,5 @@
 diff --git a/src/locales/en.json b/src/locales/en.json
-index 0f63876..61e6069 100644
+index 0f63876..361a917 100644
 --- a/src/locales/en.json
 +++ b/src/locales/en.json
 @@ -33,7 +33,7 @@
@@ -961,7 +961,7 @@ index 0f63876..61e6069 100644
    "template.publishUnavailable": "Publishing isn't available here",
    "template.savedTo": "Saved to {path}",
    "template.update": "Update",
-@@ -12247,5 +12247,17 @@
+@@ -12247,5 +12247,25 @@
    "server.github.card.clone": "{bot} couldn't clone {repo}: GitHub isn't connected.",
    "server.github.card.fetch": "{bot} couldn't fetch from {repo}: GitHub isn't connected.",
    "server.github.card.description": "Connect GitHub so {bot} can push its work to your repositories.",
@@ -978,10 +978,18 @@ index 0f63876..61e6069 100644
 +  "settings.features.openbot.cloud": "Paid cloud offers",
 +  "settings.features.openbot.cloudLine": "Suggestions to try the paid cloud service of the open-source base.",
 +  "settings.features.openbot.computers": "Bot computers",
-+  "settings.features.openbot.computersLine": "The screen button above the chat, for bots that use their own computer."
++  "settings.features.openbot.computersLine": "The screen button above the chat, for bots that use their own computer.",
++  "settings.features.openbot.liveCalls": "Live voice calls",
++  "settings.features.openbot.liveCallsLine": "The call button next to the message box. It needs its own voice key.",
++  "settings.features.openbot.inspector": "Inspector",
++  "settings.features.openbot.inspectorLine": "A technical view of what a bot did, in its panel.",
++  "settings.features.openbot.updates": "Update notices",
++  "settings.features.openbot.updatesLine": "Version and update checks in Settings. Your server updates on its own.",
++  "settings.features.openbot.themes": "All colour themes",
++  "settings.features.openbot.themesLine": "Show every theme, including the festive ones. Off, only the plain ones are offered."
  }
 diff --git a/src/locales/es.json b/src/locales/es.json
-index f149131..8353c8e 100644
+index f149131..71fde3b 100644
 --- a/src/locales/es.json
 +++ b/src/locales/es.json
 @@ -66,25 +66,25 @@
@@ -1401,7 +1409,7 @@ index f149131..8353c8e 100644
    "together.notice.off": "Desactivado: los bots de My Cloud y los de este equipo vuelven a aparecer por separado, como antes.",
    "together.notice.done": "Entendido",
    "together.notice.background": "Los bots de este equipo y sus rutinas ahora se ejecutan mientras la app está abierta.",
-@@ -6745,5 +6745,5519 @@
+@@ -6745,5 +6745,5527 @@
    "server.github.card.description": "Conecta GitHub para que {bot} pueda subir su trabajo a tus repositorios.",
    "server.github.card.connectInApps": "Conecta GitHub desde esta tarjeta en la app de tu ordenador o en Apps.",
    "githubSignIn.title": "Inicio de sesión en GitHub",
@@ -6920,5 +6928,13 @@ index f149131..8353c8e 100644
 +  "settings.features.openbot.cloud": "Ofertas de nube de pago",
 +  "settings.features.openbot.cloudLine": "Sugerencias para probar el servicio de nube de pago de la base de código abierto.",
 +  "settings.features.openbot.computers": "Ordenadores de los bots",
-+  "settings.features.openbot.computersLine": "El botón de pantalla encima del chat, para bots que usan su propio ordenador."
++  "settings.features.openbot.computersLine": "El botón de pantalla encima del chat, para bots que usan su propio ordenador.",
++  "settings.features.openbot.liveCalls": "Llamadas de voz en vivo",
++  "settings.features.openbot.liveCallsLine": "El botón de llamada junto a la caja de escribir. Necesita una clave de voz aparte.",
++  "settings.features.openbot.inspector": "Inspector",
++  "settings.features.openbot.inspectorLine": "Una vista técnica de lo que ha hecho un bot, en su panel.",
++  "settings.features.openbot.updates": "Avisos de actualización",
++  "settings.features.openbot.updatesLine": "La versión y la búsqueda de actualizaciones en Ajustes. Vuestro servidor se actualiza solo.",
++  "settings.features.openbot.themes": "Todos los temas de colores",
++  "settings.features.openbot.themesLine": "Muestra todos los temas, también los de fiestas. Apagado, solo se ofrecen los sencillos."
  }

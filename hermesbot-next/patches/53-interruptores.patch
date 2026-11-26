@@ -32,6 +32,19 @@ index 0695438..500fd62 100644
        savedSteps: savedStepsEnabled(cfg), savedStepsHere: savedSteps.here(), skillBurger: skillBurgerEnabled(cfg), threadTabs: cfg.features?.threadTabs === true, suggestedReplies: cfg.features?.suggestedReplies !== false, roomFeed: true, roomFeedSince: roomFeedSince(DATA_DIR), teamBoard: CLOUD_TEAM ? cfg.features?.teamBoard === true : undefined,
        usbPhoneTakeover: HAS_USB_PORT ? usbPhoneTakeoverEnabled(cfg) : undefined,
      },
+diff --git a/server/skill-burger/store.ts b/server/skill-burger/store.ts
+index 6054c00..44c8217 100644
+--- a/server/skill-burger/store.ts
++++ b/server/skill-burger/store.ts
+@@ -22,7 +22,7 @@ const PROMPT_MAX_BYTES = 2_000;
+ 
+ /** Skill Burgers are on unless `features.skillBurger` is false; off, saved ones stay where they are. */
+ export function skillBurgerEnabled(cfg: { features?: { skillBurger?: boolean } }): boolean {
+-  return cfg.features?.skillBurger !== false;
++  return cfg.features?.skillBurger === true;
+ }
+ 
+ /** Where a saved burger is: the shared library, or (saved before burgers were for every chat, until moved) one bot's own. */
 diff --git a/src/App.tsx b/src/App.tsx
 index f09cdaf..bc89b0d 100644
 --- a/src/App.tsx
@@ -124,6 +137,45 @@ index 5ed565f..504b488 100644
  
    return (
      <>
+diff --git a/src/components/SkinPicker.tsx b/src/components/SkinPicker.tsx
+index d3ad29b..fb79bdd 100644
+--- a/src/components/SkinPicker.tsx
++++ b/src/components/SkinPicker.tsx
+@@ -9,6 +9,9 @@ import { setDressUp, useDressUp } from "@/lib/festival-dress";
+ import { FESTIVALS, isFestival, type CostumeColor, type FestivalId } from "../../shared/bot-body";
+ import { MausAvatar } from "./Avatar";
+ import { useContext } from "react";
++import { useExtra } from "@/lib/openbot";
++
++const EVERYDAY_SKINS: ReadonlySet<string> = new Set(["midnight", "daylight", "graphite", "linen"]);
+ import { SettingsLook, Switch } from "./SettingsPrimitives";
+ import { useSkinChoice } from "./ThemeRow";
+ 
+@@ -81,13 +84,14 @@ export function DressUpRow({ festival }: { festival: FestivalId }) {
+ 
+ export function SkinPicker() {
+   const active = resolveSkin(useSkinChoice());
++  const allThemes = useExtra("themes");
+   const settings = useContext(SettingsLook);
+   if (settings) {
+     // Settings: no tile borders; an 80 px preview, the name under it, and the chosen one ringed in ink.
+     return (
+       <>
+         <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4" role="radiogroup" aria-label={t("settings.theme.title")}>
+-          {SKINS.map((skin) => {
++          {SKINS.filter((skin) => allThemes || EVERYDAY_SKINS.has(skin.id) || skin.id === active).map((skin) => {
+             const selected = skin.id === active;
+             return (
+               <button key={skin.id} type="button" role="radio" aria-checked={selected} onClick={() => { applySkin(skin.id); takeOffTheme(); }}
+@@ -113,7 +117,7 @@ export function SkinPicker() {
+   return (
+     <>
+       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+-        {SKINS.map((skin) => {
++        {SKINS.filter((skin) => allThemes || EVERYDAY_SKINS.has(skin.id) || skin.id === active).map((skin) => {
+           const selected = skin.id === active;
+           return (
+             <button
 diff --git a/src/components/settings/pages/FeaturesPage.tsx b/src/components/settings/pages/FeaturesPage.tsx
 index 6916121..eef1c42 100644
 --- a/src/components/settings/pages/FeaturesPage.tsx
@@ -202,7 +254,7 @@ index fac60c6..35af84d 100644
  }
  
 diff --git a/src/lib/feature-flags.ts b/src/lib/feature-flags.ts
-index ad01aa0..c7f355e 100644
+index ad01aa0..4fb082a 100644
 --- a/src/lib/feature-flags.ts
 +++ b/src/lib/feature-flags.ts
 @@ -1,7 +1,7 @@
@@ -214,9 +266,18 @@ index ad01aa0..c7f355e 100644
    browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
  }
  
+@@ -99,7 +99,7 @@ export function usbPhoneTakeoverEnabled(config: FeatureFlagConfig | null | undef
+ }
+ 
+ export function skillBurgerEnabled(config: FeatureFlagConfig | null | undefined): boolean {
+-  return config?.features?.skillBurger !== false;
++  return config?.features?.skillBurger === true;
+ }
+ 
+ /** A faded next-line suggestion in an empty composer after a bot replies. The server reports it on unless switched off; a
 diff --git a/src/lib/openbot.ts b/src/lib/openbot.ts
 new file mode 100644
-index 0000000..a4f7e4d
+index 0000000..0470a9f
 --- /dev/null
 +++ b/src/lib/openbot.ts
 @@ -0,0 +1,27 @@
@@ -226,7 +287,7 @@ index 0000000..a4f7e4d
 +
 +/** Parts of the app this installation keeps out of sight until someone turns them on in Settings → Features. Stored on
 + * the server under `features.openbot`, so everyone who uses this place sees the same app. */
-+export const OPENBOT_EXTRAS = ["teamMap", "publishedApps", "announcements", "cloud", "computers"] as const;
++export const OPENBOT_EXTRAS = ["teamMap", "publishedApps", "announcements", "cloud", "computers", "liveCalls", "inspector", "updates", "themes"] as const;
 +export type OpenbotExtra = (typeof OPENBOT_EXTRAS)[number];
 +
 +let current: Record<string, boolean> = {};
