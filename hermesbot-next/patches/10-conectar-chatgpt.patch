@@ -152,3 +152,36 @@
    const usable = (list: readonly SelectableInstance[]) => list.find((instance) => context.answered?.(instance) === true)
      ?? list.find((instance) => context.answered?.(instance) !== false);
    return usable(ranked.filter((instance) => !freeFallback(instance))) ?? usable(ranked) ?? ranked[0];
+--- a/src/components/EnginesSettings.tsx
++++ b/src/components/EnginesSettings.tsx
+@@ -504,7 +504,7 @@
+   /** The sponsor's provider sits in the main list, among its first three rows, where it may be offered (modelgoOfferable). */
+   offerModelgo?: boolean;
+ }) {
+-  const [opened, setOpened] = useState<string | null>(null);
++  const [opened, setOpened] = useState<string | null>(() => rows.find((instance) => instance.driverKind === "hermesAgent" && instance.snapshot.state === "available" && instance.snapshot.authenticated === false)?.instanceId ?? null);
+   // A hidden provider is gone from the instance list, so without these rows nothing in Settings brings it back.
+   const allHidden = useHiddenProviders(), hidden = accountsOnly ? [] : allHidden;
+   const featured = rows.filter((instance) => accountsOnly || isReady(instance) || instance.authentication !== undefined || hasGeminiServer([instance]));
+@@ -513,7 +513,9 @@
+   // A hidden Gemini server comes back through its own hidden row; adding another would only make a second one.
+   const gemini = offerGemini && !hidden.some((provider) => provider.driverKind === "openai-compat" && provider.displayName === GEMINI_PRESET.name);
+   const main = sponsorRowRaised<InstanceInfo | "google-ai-studio">([...featured, ...(gemini ? ["google-ai-studio" as const] : []),
+-    ...(modelgo && !featured.includes(modelgo) ? [modelgo] : [])], modelgo, (entry) => entry !== "google-ai-studio" && entry.driverKind === "cursorAgent");
++    ...(modelgo && !featured.includes(modelgo) ? [modelgo] : [])], modelgo, (entry) => entry !== "google-ai-studio" && entry.driverKind === "cursorAgent")
++    // OpenBot: Hermes, the server's own agent, is always the first row, open while it still needs a sign-in.
++    .sort((a, b) => Number(b !== "google-ai-studio" && b.driverKind === "hermesAgent") - Number(a !== "google-ai-studio" && a.driverKind === "hermesAgent"));
+   const folded = others.length + hidden.length;
+   const row = (instance: InstanceInfo, compact: boolean) => {
+     const open = opened === instance.instanceId;
+--- a/server/routes/instances.ts
++++ b/server/routes/instances.ts
+@@ -375,7 +375,7 @@
+             if (instance.authenticationMethod === "browser") {
+               return json(res, 403, { error: `This sign-in happens in a browser on the computer running ${productName()}. Open ${productName()} there to sign in.` });
+             }
+-            return json(res, 403, { error: `Continue with ChatGPT on the computer running ${productName()}: this sign-in finishes in a browser there. Open ${productName()} on that computer to sign in.` });
++            return json(res, 403, { error: `Esta conexión directa con ChatGPT no funciona en un servidor. Conecta tu cuenta de ChatGPT a través de Hermes: en Ajustes, apartado IA, pulsa Hermes e inicia sesión (o en el selector de modelo, bajo Local, pulsa Hermes).` });
+           }
+           const started = await providerAuthSessions.start(instance, owner);
+           if (started.phase === "succeeded") registry.forgetSnapshots();
