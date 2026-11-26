@@ -25,7 +25,7 @@ RUN sed -i '/^supportedArchitectures:/,/^allowBuilds:/{/- arm64/d}' pnpm-workspa
 RUN OMB_DUCKDB_ARCH=x64 node scripts/prepare-duckdb.mjs && mv dist-native/duckdb/linux-x64 dist-native/duckdb/target
 # Lo que cambia a menudo (nuestros parches e imágenes) va después.
 COPY patches/ /patches/
-RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 < "$p"; done
+RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 --batch < "$p" || exit 1; done
 # Archivos que un parche de texto no puede llevar (imágenes, iconos), con las mismas rutas que la base.
 COPY overlay/ /src/
 RUN pnpm build:server && NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
