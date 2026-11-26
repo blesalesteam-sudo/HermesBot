@@ -162,4 +162,12 @@ wss.on('connection', client => {
     })
 })
 
+// Railway usa red privada IPv6; si el sistema no tiene IPv6 se usa IPv4.
+server.once('error', error => {
+  if (error.code === 'EAFNOSUPPORT' && HOST === '::') {
+    server.listen(PORT, '0.0.0.0', () => log(`escuchando en 0.0.0.0:${PORT}`))
+  } else {
+    throw error
+  }
+})
 server.listen(PORT, HOST, () => log(`escuchando en [${HOST}]:${PORT}`))

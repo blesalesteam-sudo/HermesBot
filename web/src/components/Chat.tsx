@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { Bot, ClientCommand } from '../../shared/protocol'
-import { dayLabel, statusLine } from '../lib/format'
+import { dayLabel } from '../lib/format'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
-import { IconBack, IconPanel, IconSend, IconStop } from './icons'
+import { IconBack, IconMic, IconPlus, IconSend, IconStop } from './icons'
 import { Message } from './Message'
 import { RequestCard } from './RequestCard'
 
@@ -12,7 +12,6 @@ interface Props {
   state: ClientState
   bot: Bot
   send: (cmd: ClientCommand) => void
-  panelOpen: boolean
   onTogglePanel: () => void
   onBack: () => void
 }
@@ -21,7 +20,7 @@ function senderKey(m: { role: string; authorId?: string }) {
   return m.role === 'user' ? `u:${m.authorId}` : m.role
 }
 
-export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Props) {
+export function Chat({ state, bot, send, onTogglePanel, onBack }: Props) {
   const [draft, setDraft] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
@@ -45,10 +44,8 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
   }, [messages.length, lastLen, requests.length, typers.length, working])
 
   useEffect(() => {
-    stick.current = true
-    setDraft('')
-    textarea.current?.focus()
-  }, [bot.id])
+    textarea.current?.focus({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     const el = textarea.current
@@ -86,25 +83,20 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
   const typerNames = typers.map(id => state.users.find(u => u.id === id)?.name ?? 'Tu socio')
 
   return (
-    <section className="chat" aria-label={`Conversación con ${bot.name}`}>
-      <header className="chat-head">
-        <button className="icon-btn only-mobile" onClick={onBack} aria-label="Volver a los bots"><IconBack /></button>
-        <Avatar name={bot.name} color={bot.color} size={36} />
-        <div className="chat-head-text">
-          <div className="chat-head-name">{bot.name}</div>
-          <div className={`chat-head-status${working ? ' busy' : ''}`}>
-            {working && <span className="pulse" />}
-            {working ? statusLine(status) : bot.role}
-          </div>
-        </div>
-        {state.hermes !== 'connected' && state.hermes !== 'demo' && (
-          <span className="conn-chip" title={state.hermesDetail}>{state.hermes === 'connecting' ? 'Conectando con Hermes…' : 'Hermes no responde'}</span>
-        )}
-        {state.hermes === 'demo' && <span className="conn-chip demo">Vista previa · datos de prueba</span>}
-        <button className={`icon-btn${panelOpen ? ' on' : ''}`} onClick={onTogglePanel} aria-label="Mostrar u ocultar el panel lateral" title="Panel lateral">
-          <IconPanel />
+    <section className="chat" style={{ ['--bot' as string]: bot.color }} aria-label={`Conversación con ${bot.name}`}>
+      <div className="chat-float">
+        <button className="round-btn only-mobile" onClick={onBack} aria-label="Volver a los bots"><IconBack width={18} height={18} /></button>
+        <span className="chat-float-spacer" />
+        <button className="bot-pill" onClick={onTogglePanel} aria-label="Ver detalles de la conversación" title="Ver detalles">
+          <Avatar name={bot.name} color={bot.color} size={24} />
+          <span>{bot.name}</span>
         </button>
-      </header>
+        <span className="chat-float-spacer right">
+          {state.hermes === 'demo' && <span className="conn-chip demo">Vista previa</span>}
+          {state.hermes === 'connecting' && <span className="conn-chip" title={state.hermesDetail}>Conectando con Hermes…</span>}
+          {state.hermes === 'offline' && <span className="conn-chip" title={state.hermesDetail}>Hermes no responde</span>}
+        </span>
+      </div>
 
       <div
         className="transcript"
@@ -118,10 +110,9 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
         <div className="transcript-inner">
           {messages.length === 0 && (
             <div className="welcome">
-              <Avatar name={bot.name} color={bot.color} size={64} />
+              <Avatar name={bot.name} color={bot.color} size={72} />
               <h2>{bot.name}</h2>
               <p>{bot.role}</p>
-              <p className="welcome-hint">Escribid lo que necesitéis. Los dos veréis esta conversación en vivo.</p>
             </div>
           )}
           {messages.map((m, i) => {
@@ -134,11 +125,17 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
             return (
               <Fragment key={m.id}>
                 {newDay && <div className="day"><span>{dayLabel(m.ts)}</span></div>}
-                <Message msg={m} bot={bot} me={state.me} users={state.users} first={first} last={last} waiting={requests.length > 0} />
+                <Message msg={m} me={state.me} users={state.users} first={first} last={last} />
               </Fragment>
             )
           })}
           {requests.map(r => <RequestCard key={r.id} req={r} send={send} />)}
+          {working && requests.length === 0 && (
+            <div className="activity">
+              <Avatar name={bot.name} color={bot.color} size={20} />
+              <span className="shimmer">{status?.label || 'Pensando…'}</span>
+            </div>
+          )}
           {typerNames.length > 0 && (
             <div className="typing-line">
               <span className="dots"><i /><i /><i /></span>
@@ -150,6 +147,7 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
 
       <form className="composer-wrap" onSubmit={e => { e.preventDefault(); submit() }}>
         <div className="composer">
+          <button type="button" className="composer-btn" aria-label="Adjuntar" title="Adjuntar archivos (próximamente)" disabled><IconPlus width={18} height={18} /></button>
           <textarea
             ref={textarea}
             rows={1}
@@ -161,20 +159,22 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack }: Pro
                 submit()
               }
             }}
-            placeholder={`Escribe a ${bot.name}…`}
+            placeholder={`Escríbele a ${bot.name}`}
             aria-label="Mensaje"
           />
+          {!draft.trim() && !working && (
+            <button type="button" className="composer-btn" aria-label="Dictar" title="Dictar por voz (próximamente)" disabled><IconMic width={18} height={18} /></button>
+          )}
           {working && !draft.trim() ? (
-            <button type="button" className="send stop" onClick={() => send({ t: 'stop', botId: bot.id })} aria-label="Detener">
+            <button type="button" className="send" onClick={() => send({ t: 'stop', botId: bot.id })} aria-label="Detener">
               <IconStop width={16} height={16} />
             </button>
           ) : (
             <button type="submit" className="send" disabled={!draft.trim()} aria-label="Enviar">
-              <IconSend width={18} height={18} />
+              <IconSend width={17} height={17} />
             </button>
           )}
         </div>
-        <div className="composer-hint">Lo que escribas lo verá también tu socio. Hermes sabrá quién de los dos habla.</div>
       </form>
     </section>
   )

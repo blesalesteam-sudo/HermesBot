@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import type { ClientCommand, ServerEvent } from '../shared/protocol'
+import { AppsModal } from './components/AppsModal'
 import { Chat } from './components/Chat'
 import { Login } from './components/Login'
 import { RightPanel } from './components/RightPanel'
@@ -42,8 +43,9 @@ export function App() {
   const [demoUser, setDemoUser] = useState<string | null>(null)
   const [state, dispatch] = useReducer(reduce, null)
   const [activeId, setActiveId] = useState<string>(() => store.get('hb-bot') ?? 'chief-of-staff')
-  const [panelOpen, setPanelOpen] = useState(() => store.get('hb-panel') !== '0' && window.innerWidth > 1100)
+  const [panelOpen, setPanelOpen] = useState(() => store.get('hb-panel') === '1' && window.innerWidth > 1100)
   const [mobileChat, setMobileChat] = useState(false)
+  const [appsOpen, setAppsOpen] = useState(false)
   const conn = useRef<Connection | null>(null)
 
   useEffect(() => {
@@ -110,17 +112,18 @@ export function App() {
         theme={theme}
         onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         onLogout={() => void logout()}
+        onOpenApps={() => setAppsOpen(true)}
       />
       <Chat
         key={`${bot.id}-${mobileChat ? 'm' : 'd'}`}
         state={state}
         bot={bot}
         send={send}
-        panelOpen={panelOpen}
         onTogglePanel={() => setPanelOpen(o => { store.set('hb-panel', o ? '0' : '1'); return !o })}
         onBack={() => setMobileChat(false)}
       />
       {panelOpen && <RightPanel state={state} bot={bot} onClose={() => { setPanelOpen(false); store.set('hb-panel', '0') }} />}
+      {appsOpen && <AppsModal onClose={() => setAppsOpen(false)} />}
     </div>
   )
 }

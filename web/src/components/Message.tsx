@@ -1,6 +1,6 @@
 import { memo, useState } from 'react'
 
-import type { Bot, ChatMessage, ToolCall, User } from '../../shared/protocol'
+import type { ChatMessage, ToolCall, User } from '../../shared/protocol'
 import { clock, renderMarkdown } from '../lib/format'
 import { Avatar } from './Avatar'
 import { IconBolt, IconChevron } from './icons'
@@ -38,17 +38,14 @@ function ToolPill({ tools }: { tools: ToolCall[] }) {
 
 interface Props {
   msg: ChatMessage
-  bot: Bot
   me: User
   users: User[]
   /** Primer mensaje de una racha del mismo remitente: muestra nombre y avatar. */
   first: boolean
   last: boolean
-  /** El bot espera una respuesta de los socios: no se pintan los puntos de "escribiendo". */
-  waiting?: boolean
 }
 
-export const Message = memo(function Message({ msg, bot, me, users, first, last, waiting }: Props) {
+export const Message = memo(function Message({ msg, me, users, first, last }: Props) {
   if (msg.role === 'notice') {
     return <div className={`notice${msg.error ? ' error' : ''}`}>{msg.text}</div>
   }
@@ -76,18 +73,11 @@ export const Message = memo(function Message({ msg, bot, me, users, first, last,
 
   return (
     <div className={`row row-bot${first ? ' first' : ''}${last ? ' last' : ''}`}>
-      <div className="row-avatar">{last && <Avatar name={bot.name} color={bot.color} size={28} />}</div>
       <div className="row-body">
-        {first && <div className="sender" style={{ color: bot.color }}>{bot.name}</div>}
         {!!msg.tools?.length && <ToolPill tools={msg.tools} />}
-        {(!empty || (msg.streaming && !msg.tools?.length && !waiting)) && (
+        {!empty && (
           <div className={`bubble bubble-bot${msg.error ? ' error' : ''}`} title={clock(msg.ts)}>
-            {empty ? (
-              <span className="dots" aria-label="Escribiendo"><i /><i /><i /></span>
-            ) : (
-              <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }} />
-            )}
-            {msg.streaming && !empty && <span className="caret" aria-hidden="true" />}
+            <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }} />
           </div>
         )}
       </div>

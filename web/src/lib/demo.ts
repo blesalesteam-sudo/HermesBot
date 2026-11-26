@@ -53,7 +53,8 @@ function seed(): Record<string, ChatMessage[]> {
           'Es corto, recuerda el contexto y termina con una pregunta fácil de responder.'
       }
     ],
-    contenido: []
+    contenido: [],
+    hermes: []
   }
 }
 
@@ -175,7 +176,8 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     status: {
       'chief-of-staff': { state: 'idle', lastActive: Date.now() - 39 * min },
       setter: { state: 'idle', lastActive: Date.now() - 180 * min },
-      contenido: { state: 'idle' }
+      contenido: { state: 'idle' },
+      hermes: { state: 'idle' }
     },
     requests: [],
     online: [me.id],

@@ -57,3 +57,12 @@ export const IconX = (p: SVGProps<SVGSVGElement>) => (
 export const IconBack = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="m15 6-6 6 6 6" /></svg>
 )
+export const IconPlus = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 5v14M5 12h14" /></svg>
+)
+export const IconMic = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+)
+export const IconApps = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /><path d="M16.75 4.5v6M13.75 7.5h6" /></svg>
+)

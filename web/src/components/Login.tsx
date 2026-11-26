@@ -43,7 +43,7 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn }: Props) {
   return (
     <main className="login">
       <div className="login-card">
-        <span className="brand-mark big" aria-hidden="true">h</span>
+        <span className="brand-mark" aria-hidden="true">h</span>
         <h1>hermesBot</h1>
         <p className="login-sub">El espacio de trabajo privado del equipo</p>
 

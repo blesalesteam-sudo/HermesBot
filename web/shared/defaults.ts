@@ -5,10 +5,18 @@ import type { Bot } from './protocol'
 // propio papel.
 export const DEFAULT_BOTS: Bot[] = [
   {
+    id: 'hermes',
+    name: 'Hermes',
+    role: 'El asistente general del equipo',
+    color: '#6d5bd0',
+    persona:
+      'Eres Hermes, el asistente general de un equipo de dos socios. Respondes en español, claro y directo.'
+  },
+  {
     id: 'chief-of-staff',
     name: 'Chief of Staff',
     role: 'Coordina prioridades, agenda y seguimiento',
-    color: '#377FE6',
+    color: '#2f9e8f',
     persona:
       'Eres el Chief of Staff del equipo: ayudas a los dos socios a priorizar, organizar la semana, ' +
       'hacer seguimiento de acuerdos y preparar resúmenes claros. Respondes en español, con frases cortas.'
