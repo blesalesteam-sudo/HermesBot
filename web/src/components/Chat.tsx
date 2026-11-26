@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { SUGGESTIONS } from '../../shared/defaults'
 import type { Bot, ClientCommand, Upload } from '../../shared/protocol'
@@ -82,6 +82,8 @@ export function Chat({ state, bot, send, onTogglePanel, onBack, onOpenHistory, p
   const messages = state.messages[bot.id] ?? []
   const requests = state.requests.filter(r => r.botId === bot.id)
   const status = state.status[bot.id]
+  const retry = useCallback(() => send({ t: 'retry', botId: bot.id }), [send, bot.id])
+  const canRetry = (status?.state ?? 'idle') === 'idle' && state.hermes !== 'offline'
   const working = !!status && status.state !== 'idle'
   const typers = (state.typing[bot.id] ?? []).filter(id => id !== state.me.id)
   const lastLen = messages.length ? messages[messages.length - 1]!.text.length : 0
@@ -280,7 +282,7 @@ export function Chat({ state, bot, send, onTogglePanel, onBack, onOpenHistory, p
             return (
               <Fragment key={m.id}>
                 {newDay && <div className="day"><span>{dayLabel(m.ts)}</span></div>}
-                <Message msg={m} me={state.me} users={state.users} first={first} last={last} />
+                <Message msg={m} me={state.me} users={state.users} first={first} last={last} onRetry={!next && m.role === 'assistant' && canRetry ? retry : undefined} />
               </Fragment>
             )
           })}

@@ -3,7 +3,7 @@ import { memo, useState } from 'react'
 import type { Attachment, ChatMessage, ToolCall, User } from '../../shared/protocol'
 import { clock, fileSize, renderMarkdown } from '../lib/format'
 import { Avatar } from './Avatar'
-import { IconBolt, IconCheck, IconChevron, IconCopy, IconFile } from './icons'
+import { IconBolt, IconCheck, IconChevron, IconCopy, IconFile, IconHistory } from './icons'
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -99,9 +99,11 @@ interface Props {
   /** Primer mensaje de una racha del mismo remitente: muestra nombre y avatar. */
   first: boolean
   last: boolean
+  /** Solo en la última respuesta del chat: pedirla otra vez. */
+  onRetry?: () => void
 }
 
-export const Message = memo(function Message({ msg, me, users, first, last }: Props) {
+export const Message = memo(function Message({ msg, me, users, first, last, onRetry }: Props) {
   if (msg.role === 'notice') {
     return <div className={`notice${msg.error ? ' error' : ''}`}>{msg.text}</div>
   }
@@ -162,6 +164,7 @@ export const Message = memo(function Message({ msg, me, users, first, last }: Pr
       {!empty && !msg.streaming && (
         <div className="row-meta">
           <CopyButton text={msg.text} />
+          {onRetry && <button className="msg-action" onClick={onRetry} aria-label="Pedir otra respuesta" title="Pedir otra respuesta"><IconHistory width={14} height={14} /></button>}
           <span>{clock(msg.ts)}</span>
         </div>
       )}

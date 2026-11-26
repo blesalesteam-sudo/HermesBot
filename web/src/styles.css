@@ -621,3 +621,6 @@ a.btn.btn-primary { color: var(--app); }
   .settings-nav { overflow-y: visible; }
 }
 .app-grid { grid-auto-flow: dense; }
+.state-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--success); margin: 0 4px; }
+.state-dot.warn { background: var(--warning); }
+.state-dot.bad { background: var(--danger); }

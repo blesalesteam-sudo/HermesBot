@@ -11,7 +11,7 @@ import { IconBack, IconDownload, IconMoon, IconPlus, IconSun, IconTrash, IconX }
 
 declare const __DEMO__: boolean
 
-export type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apps' | 'capacidades' | 'avisos' | 'copias' | 'apariencia'
+export type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apps' | 'capacidades' | 'avisos' | 'copias' | 'estado' | 'apariencia'
 
 interface Props {
   state: ClientState
@@ -411,6 +411,43 @@ function AlertsSection() {
   )
 }
 
+function StatusSection({ state, send }: { state: ClientState; send: Props['send'] }) {
+  useEffect(() => {
+    send({ t: 'model.get' })
+    send({ t: 'backup.list' })
+  }, [send])
+
+  const ok = state.hermes === 'connected' || state.hermes === 'demo'
+  const lastBackup = state.backups?.list[0]
+  const working = state.bots.filter(b => (state.status[b.id]?.state ?? 'idle') !== 'idle')
+  const rows: [string, string, 'ok' | 'warn' | 'bad'][] = [
+    ['Hermes (el cerebro)', ok ? 'Conectado y respondiendo' : state.hermes === 'connecting' ? 'Conectando…' : `Sin conexión${state.hermesDetail ? `: ${state.hermesDetail}` : ''}`, ok ? 'ok' : state.hermes === 'connecting' ? 'warn' : 'bad'],
+    ['Modelo de IA', state.model?.model ? state.model.model : state.model ? 'Sin elegir. Ve a Conexiones → Inteligencia.' : 'Comprobando…', state.model?.model ? 'ok' : state.model ? 'bad' : 'warn'],
+    ['Bots', working.length ? `${working.map(b => b.name).join(', ')} ${working.length === 1 ? 'está trabajando' : 'están trabajando'}` : `${state.bots.length} en reposo`, 'ok'],
+    ['Equipo', `${state.online.length} de ${state.users.length} en línea`, 'ok'],
+    ['Última copia de seguridad', lastBackup ? shortWhen(lastBackup.ts) : state.backups ? 'Todavía ninguna' : 'Comprobando…', lastBackup && Date.now() - lastBackup.ts < 36 * 3600_000 ? 'ok' : 'warn']
+  ]
+
+  return (
+    <>
+      <h3>Estado</h3>
+      <p className="settings-sub">De un vistazo, si todo está funcionando.</p>
+      <div className="rows">
+        {rows.map(([name, text, level]) => (
+          <div key={name} className="set-row">
+            <span className={`state-dot ${level}`} aria-hidden="true" />
+            <div className="set-row-text">
+              <span>{name}</span>
+              <small>{text}</small>
+            </div>
+            {name.startsWith('Hermes') && !ok && <button className="btn small" onClick={() => send({ t: 'hermes.retry' })}>Reconectar</button>}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 function BackupSection({ state, send }: { state: ClientState; send: Props['send'] }) {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
@@ -523,7 +560,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
     ['Tú', [['perfil', 'Mi perfil'], ['avisos', 'Avisos y app'], ['apariencia', 'Apariencia']]],
     ['Equipo', [['usuarios', 'Usuarios'], ['bots', 'Bots']]],
     ['Conexiones', [...(admin ? [['modelo', 'Inteligencia'] as [Section, string]] : []), ['apps', 'Aplicaciones'], ['capacidades', 'Capacidades']]],
-    ...(admin ? [['Sistema', [['copias', 'Copias']]] as [string, [Section, string][]]] : [])
+    ...(admin ? [['Sistema', [['estado', 'Estado'], ['copias', 'Copias']]] as [string, [Section, string][]]] : [])
   ]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
   const botBeingEdited = editBot && editBot !== 'new' ? state.bots.find(b => b.id === editBot) ?? null : null
@@ -628,6 +665,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
           {section === 'modelo' && <ModelSection state={state} send={send} />}
           {section === 'apps' && <AppsSection state={state} send={send} />}
           {section === 'capacidades' && <CapsSection state={state} send={send} />}
+          {section === 'estado' && <StatusSection state={state} send={send} />}
           {section === 'avisos' && <AlertsSection />}
           {section === 'copias' && <BackupSection state={state} send={send} />}
 

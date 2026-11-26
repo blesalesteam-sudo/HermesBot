@@ -461,6 +461,16 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           archive = archive.filter(c => c.id !== cmd.id)
           emit({ t: 'history', history: summaries() })
           break
+        case 'retry': {
+          const last = (messages[cmd.botId] ?? []).findLast(m => m.role === 'user')
+
+          if (last) {
+            add(cmd.botId, { id: uid('n'), role: 'notice', text: `${me.name} pidió otra respuesta.`, ts: Date.now() })
+            void reply(cmd.botId, last.text)
+          }
+
+          break
+        }
         case 'apps.get':
           emit({ t: 'apps', apps, telegram })
           break

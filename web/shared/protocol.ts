@@ -228,6 +228,9 @@ export type ClientCommand =
   | { t: 'clarify'; reqId: string; answer: string | null }
   | { t: 'secret'; reqId: string; value: string | null }
   | { t: 'stop'; botId: string }
+  /** Vuelve a pedir la respuesta al último mensaje del chat. */
+  | { t: 'retry'; botId: string }
+  | { t: 'hermes.retry' }
   // Ajustes. Sin `id` se crea; con `id` se edita. Solo un administrador toca a otros usuarios y a los bots.
   | { t: 'user.save'; id?: string; username?: string; name?: string; avatar?: string | null; password?: string; admin?: boolean }
   | { t: 'user.delete'; id: string }

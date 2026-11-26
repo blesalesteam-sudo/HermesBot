@@ -265,6 +265,22 @@ export class Room {
         return this.manageRoutine(String(cmd.id), cmd.action)
       case 'stop':
         return this.stop(cmd.botId)
+      case 'retry': {
+        const last = (saved.messages[String(cmd.botId)] ?? []).findLast(m => m.role === 'user' && m.text.trim())
+
+        if (last && this.status[String(cmd.botId)]?.state === 'idle') {
+          return this.sendPrompt(viewer.user, String(cmd.botId), last.text, [], false)
+        }
+
+        return
+      }
+      case 'hermes.retry':
+        if (this.isAdmin(viewer) && this.hermes !== 'connected') {
+          this.setHermes('connecting', 'Reconectando con Hermes…')
+          this.start()
+        }
+
+        return
       case 'approve':
         return this.answer(cmd.reqId, viewer.user, { choice: cmd.choice })
       case 'clarify':
@@ -1150,7 +1166,7 @@ export class Room {
     }
   }
 
-  private async sendPrompt(user: User, botId: string, raw: string, rawUploads: Upload[] = []) {
+  private async sendPrompt(user: User, botId: string, raw: string, rawUploads: Upload[] = [], echo = true) {
     const bot = this.bot(botId)
     const text = raw.trim().slice(0, 20_000)
     const uploads = rawUploads
@@ -1168,7 +1184,11 @@ export class Room {
     }))
 
     this.setTyping(botId, user.id, false)
-    this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, text, attachments: attachments.length ? attachments : undefined, ts: Date.now() })
+    if (echo) {
+      this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, text, attachments: attachments.length ? attachments : undefined, ts: Date.now() })
+    } else {
+      this.notice(botId, `${user.name} pidió otra respuesta.`)
+    }
 
     if (rawUploads.length > uploads.length) {
       this.notice(botId, 'Algún archivo no se pudo adjuntar: el máximo son 6 archivos de 8 MB cada uno.', true)
