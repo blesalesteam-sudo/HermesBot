@@ -265,15 +265,10 @@ export class Room {
         return this.manageRoutine(String(cmd.id), cmd.action)
       case 'stop':
         return this.stop(cmd.botId)
-      case 'retry': {
-        const last = (saved.messages[String(cmd.botId)] ?? []).findLast(m => m.role === 'user' && m.text.trim())
-
-        if (last && this.status[String(cmd.botId)]?.state === 'idle') {
-          return this.sendPrompt(viewer.user, String(cmd.botId), last.text, [], false)
-        }
-
-        return
-      }
+      case 'retry':
+        return this.redoLast(viewer.user, String(cmd.botId))
+      case 'edit':
+        return this.redoLast(viewer.user, String(cmd.botId), { id: String(cmd.id), text: String(cmd.text ?? '') })
       case 'hermes.retry':
         if (this.isAdmin(viewer) && this.hermes !== 'connected') {
           this.setHermes('connecting', 'Reconectando con Hermes…')
@@ -1247,6 +1242,69 @@ export class Room {
       this.setStatus(botId, { state: 'idle' })
       this.notice(botId, `No pude entregar el mensaje a Hermes (${(error as Error).message}).`, true)
     }
+  }
+
+  /** Borra de la memoria de Hermes el último mensaje de una persona y todo lo que vino después. */
+  private async rewindLast(botId: string) {
+    const sid = saved.sessions[botId]
+
+    if (!sid || !this.gw || this.hermes !== 'connected') { return false }
+
+    const snap = await this.gw.request<any>('session.resume', { session_id: sid })
+    const target = [...(snap?.messages ?? [])].reverse().find((m: any) => m.role === 'user' && !m.archived && Number.isInteger(m.row_id))
+
+    if (!target) { return false }
+
+    const res = await this.gw.request<any>('session.mutate', {
+      session_id: sid,
+      request_id: randomUUID(),
+      expected_revision: snap.revision,
+      expected_generation: snap.execution_generation,
+      operation: 'rewind',
+      payload: { target_message_id: target.row_id }
+    })
+
+    return Number(res?.rewound_count) > 0
+  }
+
+  /**
+   * Rehace el último turno: con `edit` se corrige el último mensaje propio; sin él se pide otra respuesta.
+   * En los dos casos Hermes olvida la versión anterior, para que no le quede repetida en la conversación.
+   */
+  private async redoLast(user: User, botId: string, edit?: { id: string; text: string }) {
+    const list = saved.messages[botId] ?? []
+    const at = list.findLastIndex(m => m.role === 'user')
+    const last = list[at]
+
+    if (!last || this.status[botId]?.state !== 'idle') { return }
+
+    const text = edit ? edit.text.trim() : last.text
+
+    if (edit && (last.id !== edit.id || last.authorId !== user.id || last.attachments?.length || !text || text === last.text)) { return }
+    if (!text.trim()) { return }
+
+    let rewound = false
+
+    // Con adjuntos no se rebobina: al repetir solo viajaría el texto y Hermes perdería los archivos.
+    if (!last.attachments?.length) {
+      rewound = await this.rewindLast(botId).catch(error => {
+        console.warn('[hermes] no pude rebobinar', botId, (error as Error).message)
+
+        return false
+      })
+    }
+
+    if (edit && !rewound) {
+      return this.notice(botId, 'No se pudo corregir el mensaje. Escríbelo de nuevo como mensaje normal.', true)
+    }
+
+    if (rewound) {
+      saved.messages[botId] = list.slice(0, edit ? at : at + 1)
+      persist()
+      this.broadcast({ t: 'msgs', botId, messages: saved.messages[botId]! })
+    }
+
+    return this.sendPrompt(user, botId, text, [], !!edit)
   }
 
   // ───────────── Rutinas (tareas programadas de Hermes) ─────────────

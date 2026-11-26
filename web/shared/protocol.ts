@@ -230,6 +230,8 @@ export type ClientCommand =
   | { t: 'stop'; botId: string }
   /** Vuelve a pedir la respuesta al último mensaje del chat. */
   | { t: 'retry'; botId: string }
+  /** Corregir el último mensaje propio: sustituye al anterior y el bot responde de nuevo. */
+  | { t: 'edit'; botId: string; id: string; text: string }
   | { t: 'hermes.retry' }
   // Ajustes. Sin `id` se crea; con `id` se edita. Solo un administrador toca a otros usuarios y a los bots.
   | { t: 'user.save'; id?: string; username?: string; name?: string; avatar?: string | null; password?: string; admin?: boolean }

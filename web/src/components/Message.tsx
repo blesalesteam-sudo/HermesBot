@@ -1,9 +1,9 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 
 import type { Attachment, ChatMessage, ToolCall, User } from '../../shared/protocol'
 import { clock, fileSize, renderMarkdown } from '../lib/format'
 import { Avatar } from './Avatar'
-import { IconBolt, IconCheck, IconChevron, IconCopy, IconFile, IconHistory } from './icons'
+import { IconBolt, IconCheck, IconChevron, IconCopy, IconFile, IconHistory, IconPencil } from './icons'
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -101,9 +101,53 @@ interface Props {
   last: boolean
   /** Solo en la última respuesta del chat: pedirla otra vez. */
   onRetry?: () => void
+  /** Solo en el último mensaje propio: corregirlo. */
+  onEdit?: (text: string) => void
 }
 
-export const Message = memo(function Message({ msg, me, users, first, last, onRetry }: Props) {
+function EditBox({ text, onSave, onCancel }: { text: string; onSave: (text: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(text)
+  const box = useRef<HTMLTextAreaElement>(null)
+  const ok = !!value.trim() && value.trim() !== text.trim()
+
+  useEffect(() => {
+    const el = box.current
+
+    if (el) {
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    }
+  }, [])
+
+  return (
+    <div className="edit-box">
+      <textarea
+        ref={box}
+        value={value}
+        rows={Math.min(8, Math.max(2, value.split('\n').length))}
+        aria-label="Corregir mensaje"
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') { onCancel() }
+
+          if (e.key === 'Enter' && !e.shiftKey && ok) {
+            e.preventDefault()
+            onSave(value)
+          }
+        }}
+      />
+      <div className="edit-actions">
+        <span className="edit-hint">El bot responderá de nuevo a la versión corregida.</span>
+        <button className="btn small" onClick={onCancel}>Cancelar</button>
+        <button className="btn small btn-primary" disabled={!ok} onClick={() => onSave(value)}>Guardar y enviar</button>
+      </div>
+    </div>
+  )
+}
+
+export const Message = memo(function Message({ msg, me, users, first, last, onRetry, onEdit }: Props) {
+  const [editing, setEditing] = useState(false)
+
   if (msg.role === 'notice') {
     return <div className={`notice${msg.error ? ' error' : ''}`}>{msg.text}</div>
   }
@@ -112,8 +156,16 @@ export const Message = memo(function Message({ msg, me, users, first, last, onRe
     const mine = msg.authorId === me.id
     const author = users.find(u => u.id === msg.authorId)
 
+    if (editing && onEdit) {
+      return (
+        <div className="row row-me row-editing">
+          <EditBox text={msg.text} onCancel={() => setEditing(false)} onSave={text => { setEditing(false); onEdit(text) }} />
+        </div>
+      )
+    }
+
     return (
-      <div className={`row ${mine ? 'row-me' : 'row-them'}${first ? ' first' : ''}${last ? ' last' : ''}`}>
+      <div className={`row ${mine ? 'row-me' : 'row-them'}${first ? ' first' : ''}${last ? ' last' : ''}${onEdit ? ' editable' : ''}`}>
         {!mine && (
           <div className="row-avatar">{last && author && <Avatar name={author.name} color={author.color} src={author.avatar} size={28} />}</div>
         )}
@@ -128,6 +180,7 @@ export const Message = memo(function Message({ msg, me, users, first, last, onRe
         </div>
         <div className="row-meta">
           <span>{clock(msg.ts)}</span>
+          {onEdit && <button className="msg-action" onClick={() => setEditing(true)} aria-label="Corregir mensaje" title="Corregir"><IconPencil width={14} height={14} /></button>}
           {msg.text && <CopyButton text={msg.text} />}
         </div>
       </div>

@@ -108,3 +108,6 @@ export const IconHistory = (p: SVGProps<SVGSVGElement>) => (
 export const IconDownload = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg>
 )
+export const IconPencil = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="m15 5 4 4L8.5 19.5 4 20l.5-4.5z" /><path d="m13 7 4 4" /></svg>
+)

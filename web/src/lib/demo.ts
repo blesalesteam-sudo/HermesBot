@@ -471,6 +471,19 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
 
           break
         }
+        case 'edit': {
+          const list = messages[cmd.botId] ?? []
+          const at = list.findIndex(m => m.id === cmd.id)
+
+          if (at >= 0) {
+            messages[cmd.botId] = list.slice(0, at)
+            emit({ t: 'msgs', botId: cmd.botId, messages: messages[cmd.botId]! })
+            add(cmd.botId, { id: uid('m'), role: 'user', authorId: me.id, text: cmd.text.trim(), ts: Date.now() })
+            void reply(cmd.botId, cmd.text)
+          }
+
+          break
+        }
         case 'apps.get':
           emit({ t: 'apps', apps, telegram })
           break
