@@ -18,7 +18,10 @@ RUN git init -q . && git remote add origin "$OMB_REPO" \
 # Lo que casi nunca cambia va primero, para que Railway lo guarde y no lo repita:
 # descargar dependencias y el motor de datos solo depende de la versión de la base.
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
-RUN pnpm install --frozen-lockfile
+# Solo la app principal y solo para procesadores x64: no se bajan la web de
+# documentación, el panel de Cloudflare ni las piezas para ARM (unos 1,2 GB menos).
+RUN sed -i '/^supportedArchitectures:/,/^allowBuilds:/{/- arm64/d}' pnpm-workspace.yaml \
+  && pnpm install --frozen-lockfile --filter openmausbot
 RUN OMB_DUCKDB_ARCH=x64 node scripts/prepare-duckdb.mjs && mv dist-native/duckdb/linux-x64 dist-native/duckdb/target
 # Lo que cambia a menudo (nuestros parches e imágenes) va después.
 COPY patches/ /patches/
