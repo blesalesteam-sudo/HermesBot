@@ -79,6 +79,7 @@ export interface Snapshot {
 export type ServerEvent =
   | { t: 'hello'; snapshot: Snapshot }
   | { t: 'msg'; botId: string; msg: ChatMessage }
+  | { t: 'msg.gone'; botId: string; id: string }
   | { t: 'delta'; botId: string; id: string; text: string }
   | { t: 'status'; botId: string; status: BotStatus }
   | { t: 'typing'; botId: string; userId: string; on: boolean }

@@ -38,6 +38,9 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
       return { ...state, messages: { ...state.messages, [ev.botId]: upsert(list, ev.msg) } }
     }
 
+    case 'msg.gone':
+      return { ...state, messages: { ...state.messages, [ev.botId]: (state.messages[ev.botId] ?? []).filter(m => m.id !== ev.id) } }
+
     case 'delta': {
       const list = state.messages[ev.botId] ?? []
 
