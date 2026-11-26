@@ -27,7 +27,7 @@
        if (!status) { login(); return; }
 --- a/server/drivers/acp/hermes.ts
 +++ b/server/drivers/acp/hermes.ts
-@@ -10,10 +10,50 @@
+@@ -10,10 +10,51 @@
  import { findCliCandidates, harnessHome, resolveCliSpawn, splitCliString, whichWin } from "../../env-path.ts";
  import { killCliTree, resolveCli, spawnCli } from "../../procs.ts";
  import { decodeInjectId, hostApiKey, INJECT_SEP, localHost, mergeLocalInject } from "../local-inject.ts";
@@ -68,17 +68,18 @@
 +  try {
 +    const auth = JSON.parse(read("auth.json") || "{}") as Record<string, unknown>;
 +    const names = (value: unknown) => (value && typeof value === "object" ? Object.keys(value as object) : []);
-+    const paid = (name: string) => name !== "nous";
-+    if (names(auth.providers).some(paid) || names(auth.credential_pool).some(paid)) return true;
++    // OpenBot: Hermes counts as signed in only once it holds the ChatGPT account, so the sign-in stays offered
++    // while it runs on any other provider (Nous' free tier included).
++    const chatgpt = (name: string) => /codex/i.test(name);
++    return names(auth.providers).some(chatgpt) || names(auth.credential_pool).some(chatgpt);
 +  } catch {}
-+  if (/^\s*api_key:\s*\S+/m.test(read("config.yaml"))) return true;
-+  return /^[A-Z0-9_]*API_KEY=\S+/m.test(read(".env"));
++  return false;
 +}
 +
  const EMPTY: ModelCatalog = { default: "", options: [] };
  
  export const HERMES_OPENMAUS_SCREENSHOT_COMPAT = "HERMES_OPENMAUS_SCREENSHOT_COMPAT";
-@@ -437,6 +477,7 @@
+@@ -437,6 +478,7 @@
      docsUrl: "https://hermes-agent.nousresearch.com/docs/getting-started/quickstart",
      signInCommand: "hermes setup",
    },
@@ -86,7 +87,7 @@
    spawnArgs: () => ["acp"],
    // Hermes keeps the first MCP server it registers under a name for the process's life, so a new bearer needs a fresh process.
    restartOnMcpChange: true,
-@@ -451,7 +492,8 @@
+@@ -451,7 +493,8 @@
    },
    pickAuthMethod: () => null,
    authFailure: "continue",
@@ -154,6 +155,15 @@
    return usable(ranked.filter((instance) => !freeFallback(instance))) ?? usable(ranked) ?? ranked[0];
 --- a/src/components/EnginesSettings.tsx
 +++ b/src/components/EnginesSettings.tsx
+@@ -404,7 +404,7 @@
+   return (
+     <EngineCard instance={instance} bare={bare}>
+       {policyNote}
+-      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} description={instance.codexEndpoint ? t("agentEndpoints.codexHint") : undefined} unframed />}
++      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" && instance.driverKind !== "hermesAgent" ? "inject" : "cloud"} description={instance.codexEndpoint ? t("agentEndpoints.codexHint") : undefined} unframed />}
+       {engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
+       {engineReady(instance) && instance.serverKind === "ollama" && <OllamaModels instance={instance} className="mt-3" />}
+       {/* A server added by address (LM Studio, Ollama, a gateway) is removed here too, not only from API keys. */}
 @@ -504,7 +504,7 @@
    /** The sponsor's provider sits in the main list, among its first three rows, where it may be offered (modelgoOfferable). */
    offerModelgo?: boolean;
@@ -185,3 +195,15 @@
            }
            const started = await providerAuthSessions.start(instance, owner);
            if (started.phase === "succeeded") registry.forgetSnapshots();
+--- a/src/components/EngineLibrary.tsx
++++ b/src/components/EngineLibrary.tsx
+@@ -12,7 +12,8 @@
+ export function engineReady(instance: InstanceInfo): boolean {
+   // Only found installed while its checks could not finish: its sign-in is not known yet.
+   if (instance.snapshot.unverified === true) return false;
+-  if (instance.driverKind === "clineAgent") {
++  // OpenBot: Hermes is ready once it holds the ChatGPT account; until then its sign-in is offered.
++  if (instance.driverKind === "clineAgent" || instance.driverKind === "hermesAgent") {
+     return instance.snapshot.state === "available" && instance.snapshot.authenticated === true;
+   }
+   return instance.snapshot.state === "available" &&
