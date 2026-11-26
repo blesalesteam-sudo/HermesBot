@@ -15,14 +15,17 @@ WORKDIR /src
 RUN git init -q . && git remote add origin "$OMB_REPO" \
   && git fetch -q --depth 1 origin "$OMB_COMMIT" && git checkout -q FETCH_HEAD \
   && rm -rf enterprise .git
+# Lo que casi nunca cambia va primero, para que Railway lo guarde y no lo repita:
+# descargar dependencias y el motor de datos solo depende de la versión de la base.
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
+RUN pnpm install --frozen-lockfile
+RUN OMB_DUCKDB_ARCH=x64 node scripts/prepare-duckdb.mjs && mv dist-native/duckdb/linux-x64 dist-native/duckdb/target
+# Lo que cambia a menudo (nuestros parches e imágenes) va después.
 COPY patches/ /patches/
 RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 < "$p"; done
 # Archivos que un parche de texto no puede llevar (imágenes, iconos), con las mismas rutas que la base.
 COPY overlay/ /src/
-ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
-RUN pnpm install --frozen-lockfile
 RUN pnpm build:server && NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
-RUN OMB_DUCKDB_ARCH=x64 node scripts/prepare-duckdb.mjs && mv dist-native/duckdb/linux-x64 dist-native/duckdb/target
 
 FROM ${HERMES_IMAGE}
 COPY --from=build /src/dist-native/duckdb/target /app/duckdb
