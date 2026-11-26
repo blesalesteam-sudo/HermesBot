@@ -1,0 +1,43 @@
+OpenBot: miniatura de página más baja (portada), título mientras carga e imágenes enteras.
+
+--- a/src/components/AttachmentPreview.tsx	2026-11-27 00:46:12
++++ b/src/components/AttachmentPreview.tsx	2026-11-27 00:46:12
+@@ -738,7 +738,8 @@
+               if (explainRefusal) void messageImageOutsideWorkspace(image.src).then(setOutsideWorkspace);
+             }}
+             className={cn(
+-              "block size-full object-cover transition duration-200 group-hover/image:scale-[1.015]",
++              // OpenBot: the whole picture, never cropped at the sides (a wide image keeps its words).
++              "block size-full object-contain transition duration-200 group-hover/image:scale-[1.015]",
+               state === "ready" ? "opacity-100" : "opacity-0",
+             )}
+           />
+--- a/src/components/app/AppMessage.tsx	2026-11-27 00:46:12
++++ b/src/components/app/AppMessage.tsx	2026-11-27 00:46:12
+@@ -310,11 +310,12 @@
+           {...onDraft}
+         />
+       ) : (
+-        <AppPlaceholder height={boxHeight - (titled ? CARD_TITLE_HEIGHT : 0)} loading={slot.live} open={slot.live ? undefined : reloadNow} />
++        // OpenBot: the card shows the page's title while the page loads, never an empty box.
++        <AppPlaceholder height={boxHeight - (titled ? CARD_TITLE_HEIGHT : 0)} loading={slot.live} open={slot.live ? undefined : reloadNow}>{compact && !titled ? <span data-page-loading-title className="line-clamp-2 max-w-full text-[15px] font-medium text-ink"><bdi dir="auto">{payload.title}</bdi></span> : null}</AppPlaceholder>
+       )}
+       {undecided && (
+         <div data-page-settling className="absolute inset-0 bg-composer">
+-          <AppPlaceholder height={boxHeight} loading />
++          <AppPlaceholder height={boxHeight} loading><span data-page-loading-title className="line-clamp-2 max-w-full text-[15px] font-medium text-ink"><bdi dir="auto">{payload.title}</bdi></span></AppPlaceholder>
+         </div>
+       )}
+       {compact && current && !undecided && previewHeight > PAGE_PREVIEW_HEIGHT && (
+--- a/src/components/app/PageTools.tsx	2026-11-27 00:46:12
++++ b/src/components/app/PageTools.tsx	2026-11-27 00:46:12
+@@ -317,7 +317,8 @@
+ export const PagePaneContext = createContext<HTMLElement | null>(null);
+ 
+ /** How tall the preview on a page's compact card is, at most. */
+-export const PAGE_PREVIEW_HEIGHT = 296;
++// OpenBot: a shorter preview that reads as the page's cover (documentos-visuales skill), like a card, not a crop.
++export const PAGE_PREVIEW_HEIGHT = 180;
+ 
+ function typing(target: EventTarget | null): boolean {
+   return target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
