@@ -205,7 +205,6 @@ export function App() {
         state={state}
         bot={bot}
         send={send}
-        panelOpen={panelOpen}
         onTogglePanel={togglePanel}
         onBack={() => setMobileChat(false)}
         prefill={prefill?.botId === bot.id ? prefill : null}

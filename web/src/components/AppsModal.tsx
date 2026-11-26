@@ -90,8 +90,8 @@ export function AppsModal({ onClose, onAsk }: { onClose: () => void; onAsk: (tex
         {open ? (
           <div className="app-detail" key={open.id}>
             <div className="modal-head">
-              <button className="round-btn ghost" onClick={() => setOpen(null)} aria-label="Volver"><IconBack width={17} height={17} /></button>
-              <button className="round-btn ghost" onClick={onClose} aria-label="Cerrar"><IconX width={17} height={17} /></button>
+              <button className="round-btn" onClick={() => setOpen(null)} aria-label="Volver"><IconBack width={17} height={17} /></button>
+              <button className="round-btn" onClick={onClose} aria-label="Cerrar"><IconX width={17} height={17} /></button>
             </div>
             <div className="app-hero">
               <span className="app-icon big" style={{ ['--c' as string]: open.color }}>{open.name[0]}</span>
@@ -123,7 +123,7 @@ export function AppsModal({ onClose, onAsk }: { onClose: () => void; onAsk: (tex
           <>
             <div className="modal-head">
               <h2>Conectar aplicaciones</h2>
-              <button className="round-btn ghost" onClick={onClose} aria-label="Cerrar"><IconX width={17} height={17} /></button>
+              <button className="round-btn" onClick={onClose} aria-label="Cerrar"><IconX width={17} height={17} /></button>
             </div>
             <p className="modal-sub">Dale al equipo de bots acceso a las herramientas que ya usáis.</p>
             <label className="search modal-search">

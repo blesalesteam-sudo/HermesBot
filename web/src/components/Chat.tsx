@@ -5,7 +5,7 @@ import type { Bot, ClientCommand, Upload } from '../../shared/protocol'
 import { dayLabel, fileSize } from '../lib/format'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
-import { IconBack, IconClock, IconDown, IconFile, IconImage, IconMic, IconPanel, IconPlus, IconSend, IconStop, IconX } from './icons'
+import { IconBack, IconClock, IconDown, IconFile, IconImage, IconMic, IconPlus, IconSend, IconStop, IconX } from './icons'
 import { Message } from './Message'
 import { RequestCard } from './RequestCard'
 
@@ -13,7 +13,6 @@ interface Props {
   state: ClientState
   bot: Bot
   send: (cmd: ClientCommand) => void
-  panelOpen: boolean
   onTogglePanel: () => void
   onBack: () => void
   /** Texto que otra parte de la app quiere dejar escrito en la caja (ideas, rutinas…). */
@@ -62,7 +61,7 @@ function speechRecognition(): (new () => Recognition) | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as (new () => Recognition) | null
 }
 
-export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack, prefill }: Props) {
+export function Chat({ state, bot, send, onTogglePanel, onBack, prefill }: Props) {
   const [draft, setDraft] = useState('')
   const [uploads, setUploads] = useState<(Upload & { id: string })[]>([])
   const [hint, setHint] = useState('')
@@ -230,22 +229,17 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack, prefi
         void addFiles([...e.dataTransfer.files])
       }}
     >
-      <div className="chat-glow" aria-hidden="true" />
       <div className="chat-float">
         <button className="round-btn only-mobile" onClick={onBack} aria-label="Volver a los bots"><IconBack width={18} height={18} /></button>
         <span className="chat-float-spacer" />
         <button className="bot-pill" onClick={onTogglePanel} aria-label="Ver detalles de la conversación" title="Ver detalles">
-          <Avatar name={bot.name} color={bot.color} size={26} status={working ? 'busy' : null} />
-          <span className="bot-pill-text">
-            <span className="bot-pill-name">{bot.name}</span>
-            <span className={`bot-pill-sub${working ? ' live' : ''}`}>{working ? status?.label || 'Trabajando…' : bot.role}</span>
-          </span>
+          <Avatar name={bot.name} color={bot.color} size={24} />
+          <span>{bot.name}</span>
         </button>
         <span className="chat-float-spacer right">
           {state.hermes === 'demo' && <span className="conn-chip demo">Vista previa</span>}
           {state.hermes === 'connecting' && <span className="conn-chip" title={state.hermesDetail}>Conectando con Hermes…</span>}
           {state.hermes === 'offline' && <span className="conn-chip" title={state.hermesDetail}>Hermes no responde</span>}
-          <button className={`round-btn no-mobile${panelOpen ? ' on' : ''}`} onClick={onTogglePanel} aria-label="Panel de detalles" title="Panel de detalles"><IconPanel width={17} height={17} /></button>
         </span>
       </div>
 
@@ -263,7 +257,7 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack, prefi
         <div className="transcript-inner">
           {messages.length === 0 && (
             <div className="welcome">
-              <span className="welcome-avatar"><Avatar name={bot.name} color={bot.color} size={76} /></span>
+              <Avatar name={bot.name} color={bot.color} size={72} />
               <h2>{bot.name}</h2>
               <p>{bot.role}</p>
               <div className="suggestions">
@@ -290,7 +284,7 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack, prefi
           {requests.map(r => <RequestCard key={r.id} req={r} send={send} />)}
           {working && requests.length === 0 && (
             <div className="activity">
-              <span className="activity-orb" />
+              <Avatar name={bot.name} color={bot.color} size={20} />
               <span className="shimmer">{status?.label || 'Pensando…'}</span>
             </div>
           )}
@@ -391,7 +385,6 @@ export function Chat({ state, bot, send, panelOpen, onTogglePanel, onBack, prefi
             )}
           </div>
         </div>
-        <p className="composer-foot">Intro para enviar · Mayús + Intro para saltar de línea · arrastra archivos aquí</p>
       </form>
 
       {dragging && (

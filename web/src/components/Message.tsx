@@ -17,16 +17,18 @@ async function copyText(text: string): Promise<boolean> {
 
 function ToolPill({ tools }: { tools: ToolCall[] }) {
   const [open, setOpen] = useState(false)
-  const running = tools.filter(t => t.status === 'running')
-  const label = running.length
-    ? `${running[running.length - 1]!.label.replace(/^(\S+?)ó /, '$1ando ')}…`
+  const running = tools.filter(t => t.status === 'running').length
+  const label = running
+    ? `Usando ${tools.length === 1 ? 'una herramienta' : `${tools.length} herramientas`}…`
     : `Usó ${tools.length === 1 ? '1 herramienta' : `${tools.length} herramientas`}`
 
   return (
     <div className="tool-pill-wrap">
-      <button className={`tool-pill${running.length ? ' running' : ''}`} onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <span className="tool-pill-icon"><IconBolt width={12} height={12} /></span>
+      <button className={`tool-pill${running ? ' running' : ''}`} onClick={() => setOpen(o => !o)} aria-expanded={open}>
+        <IconBolt width={13} height={13} />
         <span>{label}</span>
+        <span className="tool-pill-sep">·</span>
+        <span className="tool-pill-more">{open ? 'Ocultar' : 'Ver detalle'}</span>
         <IconChevron width={12} height={12} className={`chev${open ? ' open' : ''}`} />
       </button>
       {open && (

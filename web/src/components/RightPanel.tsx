@@ -32,23 +32,13 @@ export function RightPanel({ state, bot, send, onClose, onPrefill }: Props) {
     () => [...new Set(messages.filter(m => m.role !== 'notice').flatMap(m => extractLinks(m.text)))].reverse().slice(0, 30),
     [messages]
   )
-  const stats = useMemo(() => ({
-    total: messages.filter(m => m.role !== 'notice').length,
-    tools: messages.reduce((n, m) => n + (m.tools?.length ?? 0), 0)
-  }), [messages])
-
   return (
     <aside className="right-panel" aria-label="Detalles del bot" style={{ ['--bot' as string]: bot.color }}>
-      <button className="round-btn ghost rp-close" onClick={onClose} aria-label="Cerrar panel"><IconX width={17} height={17} /></button>
+      <button className="round-btn rp-close" onClick={onClose} aria-label="Cerrar panel"><IconX width={17} height={17} /></button>
       <div className="rp-hero">
-        <span className="welcome-avatar"><Avatar name={bot.name} color={bot.color} size={68} /></span>
+        <Avatar name={bot.name} color={bot.color} size={64} />
         <h2>{bot.name}</h2>
         <p>{bot.role}</p>
-        <div className="rp-stats">
-          <div><b>{stats.total}</b><span>mensajes</span></div>
-          <div><b>{stats.tools}</b><span>acciones</span></div>
-          <div><b>{files.length + links.length}</b><span>recursos</span></div>
-        </div>
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'actividad'} className={tab === 'actividad' ? 'on' : ''} onClick={() => setTab('actividad')}>Actividad</button>
           <button role="tab" aria-selected={tab === 'biblioteca'} className={tab === 'biblioteca' ? 'on' : ''} onClick={() => setTab('biblioteca')}>Biblioteca</button>
@@ -58,21 +48,12 @@ export function RightPanel({ state, bot, send, onClose, onPrefill }: Props) {
       {tab === 'actividad' ? (
         <>
           <div className="rp-label">Pantalla del bot</div>
-          <div className={`screen${awake ? ' live' : ''}`}>
-            <div className="screen-bar"><i /><i /><i /><span>{awake ? 'En directo' : waiting ? 'En pausa' : 'En reposo'}</span></div>
-            <div className="screen-body">
-              {awake ? (
-                <>
-                  <span className="activity-orb big" />
-                  <span className="shimmer">{st?.label || 'Trabajando…'}</span>
-                </>
-              ) : (
-                <>
-                  <IconMonitor width={22} height={22} />
-                  <span>{waiting ? 'Espera vuestra respuesta en el chat' : 'Se enciende cuando el bot trabaja'}</span>
-                </>
-              )}
+          <div className="rp-card computer">
+            <div>
+              <div className="rp-card-title">Ordenador del bot</div>
+              <div className={`rp-card-sub${awake ? ' live' : ''}`}>{awake ? st?.label || 'Trabajando…' : waiting ? 'Espera vuestra respuesta' : 'Dormido'}</div>
             </div>
+            <div className={`thumb${awake ? ' live' : ''}`}><IconMonitor width={20} height={20} /></div>
           </div>
 
           <div className="rp-label">Últimas acciones</div>
