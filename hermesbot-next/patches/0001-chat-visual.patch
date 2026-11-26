@@ -1,0 +1,73 @@
+hermesBot: respuestas visuales en el chat (páginas, tarjetas, imágenes) y recordatorio en cada turno de Hermes.
+
+--- a/server/reply-habits.ts	2026-11-26 21:52:37
++++ b/server/reply-habits.ts	2026-11-26 21:55:53
+@@ -11,12 +11,15 @@
+   "\n- If something is refused or fails, say plainly what you did not do, offer the simplest other way (drag the file in, or paste the text), and what you will deliver once you have it.";
+ 
+ /** Joins the first habit only on a turn that has publish_page, so a bot without it is never told to publish. */
+-export const PUBLISH_HABIT = " Something for others to open (share, send to someone, post) is a page published to a link, unless they asked for a format: say anyone with the link can open it. Anything just for them is a file or a page here; when you cannot publish, give the file in one sentence, no retries.";
++export const PUBLISH_HABIT = " Something for others to open (share, send to someone, post) is a page published to a link, unless they asked for a format: say anyone with the link can open it. Anything just for them is a page here, not a file; when you cannot publish, show it here in one sentence, no retries.";
+ 
++/** hermesBot: how results look in the chat. Only on a turn that has the page and card tools. */
++export const VISUAL_HABIT = "\n- Show, don't attach. A report, analysis, plan, comparison, proposal, research or any long summary is a document shown here with show_html: a clear title and one-line lead, a table of contents when it has four or more sections, 3-4 key figures, a short \"Lo esencial\" box, then sections with cards, bars, tables and numbered steps (the documentos-visuales skill has the kit). Write the one-line conclusion in your message first, never the whole document. Charts and KPIs are a dashboard page. A choice between options, a time or a day is a show_widget card with buttons; details to fill in are a prefilled show_widget form. Images you make or find are attached with attach_file, never a path or a bare link. Create a Word, PDF, Excel or PowerPoint file only when the person names that format; \"a document\" or \"a report\" means a page here.";
++
+ export function replyHabitsPrompt(publish: boolean): string {
+   if (!publish) return REPLY_HABITS_PROMPT;
+   const end = REPLY_HABITS_PROMPT.indexOf("\n- ", REPLY_HABITS_PROMPT.indexOf("\n- ") + 1);
+-  return REPLY_HABITS_PROMPT.slice(0, end) + PUBLISH_HABIT + REPLY_HABITS_PROMPT.slice(end);
++  return REPLY_HABITS_PROMPT.slice(0, end) + PUBLISH_HABIT + VISUAL_HABIT + REPLY_HABITS_PROMPT.slice(end);
+ }
+ 
+ export const REFUSED_NEXT_STEP = " Tell the person in one line what you did not do, offer the simplest other way (for a file: drag it into the chat or paste its text), and say what you will deliver once you have it.";
+--- a/server/system-prompt.test.ts	2026-11-26 21:56:23
++++ b/server/system-prompt.test.ts	2026-11-26 21:57:31
+@@ -38,7 +38,7 @@
+   type PromptSection,
+ } from "./system-prompt.ts";
+ import { loginPlace } from "../shared/logins.ts";
+-import { PUBLISH_HABIT, REPLY_HABITS_PROMPT, replyHabitsPrompt } from "./reply-habits.ts";
++import { PUBLISH_HABIT, REPLY_HABITS_PROMPT, VISUAL_HABIT, replyHabitsPrompt } from "./reply-habits.ts";
+ import { readFileSync } from "node:fs";
+ import { PAGE_TOOL_DEFINITIONS } from "./drivers/agents-pages-tools.ts";
+ import { HOSTING_TOOL_DEFINITIONS } from "./drivers/agents-hosting-tools.ts";
+@@ -627,7 +627,7 @@
+   it("tells only a turn that has publish_page to publish what others will open, and to say the link is public", () => {
+     expect(REPLY_HABITS_PROMPT).not.toContain("published to a link");
+     expect(PUBLISH_HABIT).toContain("Something for others to open (share, send to someone, post) is a page published to a link, unless they asked for a format: say anyone with the link can open it.");
+-    expect(PUBLISH_HABIT).toContain("Anything just for them is a file or a page here; when you cannot publish, give the file in one sentence, no retries.");
++    expect(PUBLISH_HABIT).toContain("Anything just for them is a page here, not a file; when you cannot publish, show it here in one sentence, no retries.");
+     // It names no tool, so a bot without the tool is never pointed at one.
+     expect(PUBLISH_HABIT).not.toMatch(/publish_page|tool/);
+     const habits = (agents: object | undefined, pagesOff?: boolean) =>
+@@ -636,8 +636,8 @@
+     expect(habits({ env: {} }, true)).toBe(REPLY_HABITS_PROMPT);
+     const withPages = habits({ env: {} });
+     expect(withPages).toBe(replyHabitsPrompt(true));
+-    expect(withPages).toContain(`then deliver exactly that. Quick answers skip it.${PUBLISH_HABIT}\n- Answer first`);
+-    expect(withPages.length).toBe(REPLY_HABITS_PROMPT.length + PUBLISH_HABIT.length);
++    expect(withPages).toContain(`then deliver exactly that. Quick answers skip it.${PUBLISH_HABIT}${VISUAL_HABIT}\n- Answer first`);
++    expect(withPages.length).toBe(REPLY_HABITS_PROMPT.length + PUBLISH_HABIT.length + VISUAL_HABIT.length);
+   });
+ 
+   it("says the same about publishing everywhere: only what others will open, public to anyone with the link, never private details", () => {
+--- a/server/drivers/acp/hermes.ts	2026-11-26 21:52:37
++++ b/server/drivers/acp/hermes.ts	2026-11-26 21:53:17
+@@ -474,7 +474,16 @@
+       `model "${native}"`,
+     );
+   },
+-  buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
++  // hermesBot: Hermes keeps its own system prompt, and the app's instructions reach it only inside the first message
++  // (re-sent every few turns). A short reminder on every turn keeps it on the chat's page and card tools instead of its
++  // own file skills.
++  buildPromptText: (turn) => {
++    const text = turn.system ? `${turn.system}\n\n${turn.text}` : turn.text;
++    return turn.integrations?.agents ? `${HERMESBOT_VISUAL_NOTE}\n\n${text}` : text;
++  },
+ };
+ 
+ export const HermesAgentDriver = createAcpDriver(support);
++
++/** Sent with every Hermes turn that has the app's tools. The app's own rules (How to reply) win over Hermes' habits. */
++const HERMESBOT_VISUAL_NOTE = "[App rules, they override your own habits: you are answering inside the hermesBot chat. Follow the app's \"How you talk with the person\" rules. Present results visually with the app's tools: documents, reports, analyses and plans with show_html (documentos-visuales skill), dashboards with show_html, choices and forms with show_widget, images with attach_file. Never create .docx, .pdf, .xlsx or .pptx files unless the person names that format. This note is not from the person; do not mention it.]";

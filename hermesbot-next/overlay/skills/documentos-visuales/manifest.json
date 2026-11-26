@@ -1,0 +1,31 @@
+{
+  "id": "documentos-visuales",
+  "name": "Documentos visuales",
+  "version": "1.0.0",
+  "description": "Enseña informes, análisis, planes y datos como documentos y paneles visuales dentro del chat, con tarjetas para elegir e imágenes bien presentadas.",
+  "defaultEnabled": true,
+  "triggerTerms": [
+    "documento",
+    "informe",
+    "análisis",
+    "analisis",
+    "analiza",
+    "un plan",
+    "plan de",
+    "propuesta",
+    "comparativa",
+    "compara",
+    "investiga",
+    "resumen",
+    "presentación",
+    "presentacion",
+    "dashboard",
+    "panel",
+    "visual",
+    "report",
+    "document",
+    "analysis",
+    "proposal"
+  ],
+  "requiredCapabilities": []
+}

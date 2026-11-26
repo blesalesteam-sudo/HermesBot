@@ -31,5 +31,20 @@ iniciarla una vez dentro del servicio. Nunca se copian claves ni `auth.json` a m
 3. Comprueba: `runuser -u hermes -- env HOME=/opt/data HERMES_HOME=/opt/data hermes auth status`
 4. En la app, crea o edita el bot con el modelo "Hermes default (config)": usa lo elegido en el paso 2.
 
+## Respuestas visuales en el chat
+
+Para que el bot enseñe las cosas como en Grok Bot (documentos con índice y cifras, dashboards,
+tarjetas para elegir, formularios e imágenes adjuntas) en vez de crear archivos Word:
+
+- `patches/0001-chat-visual.patch`: añade a las reglas de respuesta cuándo usar cada formato
+  (Word, PDF, Excel o PowerPoint solo si se piden) y manda a Hermes un recordatorio corto en cada
+  mensaje, porque las instrucciones de la app solo le llegan en el primero.
+- `overlay/skills/documentos-visuales/`: habilidad con el kit de piezas (`kit.css`) y un
+  documento de ejemplo (`ejemplo.html`). Se activa sola cuando el mensaje habla de un informe,
+  análisis, plan, comparativa, resumen o dashboard.
+
+Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis competidores" o
+"¿qué opción me recomiendas, A o B?" y comprueba que llega una página o una tarjeta, no un archivo.
+
 El nombre "OpenMausBot", "MausBot" y su mascota son marca de sus autores: este producto
 usa nombre e imagen propios. Los avisos de licencia originales se conservan en `/app`.
