@@ -40,8 +40,9 @@ tarjetas para elegir, formularios e imágenes adjuntas) en vez de crear archivos
   (Word, PDF, Excel o PowerPoint solo si se piden) y manda a Hermes un recordatorio corto en cada
   mensaje, porque las instrucciones de la app solo le llegan en el primero.
 - `overlay/skills/documentos-visuales/`: habilidad con el kit de piezas (`kit.css`) y un
-  documento de ejemplo (`ejemplo.html`). Se activa sola cuando el mensaje habla de un informe,
-  análisis, plan, comparativa, resumen o dashboard.
+  documento de ejemplo (`ejemplo.html`). Va en todos los mensajes (su palabra clave es `*`,
+  que el parche convierte en "siempre") y el bot decide con criterio cuándo usar texto,
+  tarjeta, formulario, documento, panel o imagen.
 
 Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis competidores" o
 "¿qué opción me recomiendas, A o B?" y comprueba que llega una página o una tarjeta, no un archivo.

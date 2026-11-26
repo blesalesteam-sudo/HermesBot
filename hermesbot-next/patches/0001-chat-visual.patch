@@ -1,4 +1,4 @@
-hermesBot: respuestas visuales en el chat (páginas, tarjetas, imágenes) y recordatorio en cada turno de Hermes.
+hermesBot: respuestas visuales en el chat (páginas, tarjetas, imágenes), habilidades siempre activas con "*" y recordatorio en cada turno de Hermes.
 
 --- a/server/reply-habits.ts	2026-11-26 21:52:37
 +++ b/server/reply-habits.ts	2026-11-26 21:55:53
@@ -51,8 +51,43 @@ hermesBot: respuestas visuales en el chat (páginas, tarjetas, imágenes) y reco
    });
  
    it("says the same about publishing everywhere: only what others will open, public to anyone with the link, never private details", () => {
+--- a/server/skill-library.ts	2026-11-26 22:06:11
++++ b/server/skill-library.ts	2026-11-26 22:06:18
+@@ -123,7 +123,8 @@
+   return skills.filter(({ manifest }) =>
+     manifest.defaultEnabled &&
+     manifest.requiredCapabilities.every((capability) => available.has(capability)) &&
+-    manifest.triggerTerms.some((term) => haystack.includes(term.toLowerCase())),
++    // hermesBot: a trigger term "*" means the skill rides along on every message, and the bot decides when it applies.
++    manifest.triggerTerms.some((term) => term === "*" || haystack.includes(term.toLowerCase())),
+   );
+ }
+ 
+--- a/server/skill-library.test.ts	2026-11-26 22:08:53
++++ b/server/skill-library.test.ts	2026-11-26 22:08:53
+@@ -73,7 +73,8 @@
+ });
+ 
+ describe("bundled verification skill", () => {
+-  const skills = loadBundledSkills(join(process.cwd(), "skills"));
++  // hermesBot: skills marked "*" ride along on every message, so they are left out of these selection checks.
++  const skills = loadBundledSkills(join(process.cwd(), "skills")).filter((skill) => !skill.manifest.triggerTerms.includes("*"));
+   const instructions = skills.find((skill) => skill.manifest.id === "create-verification-skill")?.instructions ?? "";
+ 
+   it("ships one reviewed authoring adapter", () => {
+@@ -177,3 +178,10 @@
+     expect(guide.split("\n").length).toBeLessThanOrEqual(60);
+   });
+ });
++
++describe("hermesBot always-on skills", () => {
++  it("selects a skill whose trigger term is \"*\" for any message", () => {
++    const skill = { manifest: { id: "always", name: "Always", version: "1.0.0", description: "x", defaultEnabled: true, triggerTerms: ["*"], requiredCapabilities: [] }, instructions: "---", directory: "/x" };
++    expect(selectBundledSkills("hola", [], [skill]).map((s) => s.manifest.id)).toEqual(["always"]);
++  });
++});
 --- a/server/drivers/acp/hermes.ts	2026-11-26 21:52:37
-+++ b/server/drivers/acp/hermes.ts	2026-11-26 21:53:17
++++ b/server/drivers/acp/hermes.ts	2026-11-26 22:07:19
 @@ -474,7 +474,16 @@
        `model "${native}"`,
      );
@@ -70,4 +105,4 @@ hermesBot: respuestas visuales en el chat (páginas, tarjetas, imágenes) y reco
  export const HermesAgentDriver = createAcpDriver(support);
 +
 +/** Sent with every Hermes turn that has the app's tools. The app's own rules (How to reply) win over Hermes' habits. */
-+const HERMESBOT_VISUAL_NOTE = "[App rules, they override your own habits: you are answering inside the hermesBot chat. Follow the app's \"How you talk with the person\" rules. Present results visually with the app's tools: documents, reports, analyses and plans with show_html (documentos-visuales skill), dashboards with show_html, choices and forms with show_widget, images with attach_file. Never create .docx, .pdf, .xlsx or .pptx files unless the person names that format. This note is not from the person; do not mention it.]";
++const HERMESBOT_VISUAL_NOTE = "[App rules, they override your own habits: you are answering inside the hermesBot chat. Follow the app's \"How you talk with the person\" rules and use the documentos-visuales skill to judge the best form for each answer: plain text for short replies, show_widget for choices and forms, show_html for documents and dashboards, attach_file for images. Never create .docx, .pdf, .xlsx or .pptx files unless the person names that format. This note is not from the person; do not mention it.]";
