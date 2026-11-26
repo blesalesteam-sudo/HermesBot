@@ -13,6 +13,11 @@ usuario, ven el mismo chat en vivo y hablan con el mismo "cerebro": una instalac
 - Cada mensaje lleva su autor, y Hermes sabe siempre quién le habla.
 - Tarjetas de **Permitir / Denegar** cuando el bot quiere hacer algo delicado.
 - Adjuntar fotos y archivos, dictar por voz, rutinas programadas, buscador y modo claro u oscuro.
+- Corregir tu último mensaje o pedir otra respuesta: Hermes olvida la versión anterior.
+- Avisos en el móvil o el ordenador aunque la app esté cerrada (Ajustes > Avisos y app).
+- **WhatsApp** con código QR y **Telegram**, desde Ajustes > Aplicaciones.
+- **Widgets**: un bot dentro de otra web (el CRM, canvas-ia) pegando una línea de código. Se crean en Ajustes > Widgets, con su llave y la lista de webs permitidas.
+- **Capturador**: el bot escucha grupos de Telegram y guarda en Notion tareas, decisiones, enlaces y fechas cuando se le pide «captura» (Ajustes > Capturador).
 
 ## Cómo está montado
 

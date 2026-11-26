@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User, WhatsAppState, Widget
+  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User, WhatsAppState, Widget, CapturerState
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -292,6 +292,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
   let telegram = { connected: false, users: '' }
   let whatsapp: WhatsAppState = { connected: false, mode: 'bot', users: '' }
   let waTimer = 0
+  let capturer: CapturerState = { on: false, groups: '', notion: '', items: ['tareas', 'decisiones', 'enlaces', 'fechas'], telegram: true, notionReady: true }
   let widgets: Widget[] = [{ id: 'w-crm', name: 'CRM', botId: 'setter', origins: ['https://crm.miempresa.com'], token: 'llave-de-ejemplo-crm', ts: Date.now() - 86400000 }]
   const caps: Capabilities = {
     toolsets: [
@@ -508,6 +509,14 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           window.clearTimeout(waTimer)
           whatsapp = { connected: cmd.unlink ? false : whatsapp.connected, mode: whatsapp.mode, users: whatsapp.users, pairing: null }
           emit({ t: 'whatsapp', state: whatsapp })
+          break
+        case 'capturer.get':
+          emit({ t: 'capturer', state: capturer })
+          break
+        case 'capturer.save':
+          capturer = { ...capturer, on: cmd.on, groups: cmd.groups, notion: cmd.notion, items: cmd.items }
+          emit({ t: 'capturer', state: capturer })
+          emit({ t: 'toast', text: cmd.on ? 'Capturador activado.' : 'Capturador apagado.' })
           break
         case 'widgets.get':
           emit({ t: 'widgets', widgets })

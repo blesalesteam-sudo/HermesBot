@@ -177,6 +177,19 @@ export interface WhatsAppState {
   pairing?: { status: 'preparing' | 'qr' | 'done' | 'error'; qr?: string; error?: string } | null
 }
 
+/** Capturador: Hermes escucha grupos de Telegram y guarda lo importante en Notion. */
+export interface CapturerState {
+  on: boolean
+  /** Números de los grupos de Telegram, separados por comas. */
+  groups: string
+  /** Página o base de datos de Notion donde se guarda. */
+  notion: string
+  items: string[]
+  /** Lo que hace falta tener conectado antes. */
+  telegram?: boolean
+  notionReady?: boolean
+}
+
 export type BotState = 'idle' | 'thinking' | 'working'
 
 export interface BotStatus {
@@ -236,6 +249,7 @@ export type ServerEvent =
   | { t: 'login'; flow: SignIn | null }
   | { t: 'apps'; apps: AppEntry[]; telegram?: TelegramState; whatsapp?: WhatsAppState }
   | { t: 'whatsapp'; state: WhatsAppState }
+  | { t: 'capturer'; state: CapturerState }
   | { t: 'app.auth'; flow: AppAuth | null }
   | { t: 'caps'; caps: Capabilities }
   /** Sustituye la conversación visible de un bot (al empezar una nueva o recuperar otra). */
@@ -292,6 +306,8 @@ export type ClientCommand =
   | { t: 'whatsapp.start'; mode: 'bot' | 'self-chat'; users: string }
   /** Cancela una vinculación a medias; con `unlink`, desvincula WhatsApp. */
   | { t: 'whatsapp.stop'; unlink?: boolean }
+  | { t: 'capturer.get' }
+  | { t: 'capturer.save'; on: boolean; groups: string; notion: string; items: string[] }
   | { t: 'caps.get' }
   | { t: 'cap.toggle'; id: string; on: boolean }
   | { t: 'widgets.get' }

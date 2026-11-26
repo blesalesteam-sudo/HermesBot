@@ -662,3 +662,15 @@ a.btn.btn-primary { color: var(--app); }
 .choice b { font-weight: 600; }
 .choice small { display: block; font-size: 12px; line-height: 17px; color: var(--ink-3); margin-top: 2px; }
 .field.wide { width: 100%; }
+
+/* ───────────── Capturador ───────────── */
+.check-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--hairline); display: grid; place-items: center; color: var(--app); }
+.check-dot.ok { background: var(--success); border-color: var(--success); }
+.capturer-fields { display: grid; gap: 14px; margin-top: 14px; }
+.capturer-fields + .form-actions, .rows + .form-actions { margin-top: 16px; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-check { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--hairline); border-radius: 999px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.chip-check.on { border-color: var(--ink); color: var(--ink); }
+.chip-check input { accent-color: var(--ink); margin: 0; }
+.field-hint b { font-weight: 600; color: var(--ink-2); }
+.field .chip-check input { width: auto; height: auto; padding: 0; border: 0; border-radius: 0; background: none; flex: none; }

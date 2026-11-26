@@ -4,7 +4,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type {
-  ApprovalChoice, AppEntry, Attachment, Bot, Capabilities, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
+  ApprovalChoice, AppEntry, Attachment, Bot, Capabilities, CapturerState, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
   ServerEvent, SignIn, Snapshot, ToolCall, Upload, User, WhatsAppState, Widget
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
@@ -436,6 +436,10 @@ export class Room {
         return this.whatsapp(viewer, 'POST', { mode: cmd.mode, users: String(cmd.users ?? '').replace(/[^\d,]/g, '') })
       case 'whatsapp.stop':
         return this.whatsapp(viewer, 'DELETE', undefined, !!cmd.unlink)
+      case 'capturer.get':
+        return this.capturer(viewer)
+      case 'capturer.save':
+        return this.capturer(viewer, { on: !!cmd.on, groups: String(cmd.groups ?? ''), notion: String(cmd.notion ?? ''), items: Array.isArray(cmd.items) ? cmd.items.map(String) : [] })
       case 'caps.get':
         return this.sendCaps(viewer)
       case 'cap.toggle':
@@ -967,6 +971,35 @@ export class Room {
         this.toAdmins({ t: 'toast', text: 'WhatsApp vinculado. Hermes se reinicia un momento para activarlo.' })
       }
     }, 2000)
+  }
+
+  // ───────────── Capturador de grupos a Notion ─────────────
+
+  private async capturer(viewer: Viewer, save?: Omit<CapturerState, 'telegram' | 'notionReady'>) {
+    if (!this.isAdmin(viewer)) { return }
+
+    try {
+      const res = await fetch(`${config.hermesAdmin}/admin/capturer`, {
+        method: save ? 'POST' : 'GET',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.hermesToken}` },
+        body: save ? JSON.stringify(save) : undefined
+      })
+
+      if (!res.ok) { throw new Error(res.status === 400 ? 'revisa los números de los grupos y el destino de Notion' : `respuesta ${res.status}`) }
+
+      const state = await res.json() as CapturerState
+      const notion = this.gw && this.hermes === 'connected'
+        ? await this.gw.request<any>('mcp.servers.list', {}).then(r => (r.servers ?? []).some((s: any) => s.name === 'notion')).catch(() => false)
+        : false
+
+      this.toAdmins({ t: 'capturer', state: { ...state, notionReady: notion } })
+
+      if (save) {
+        viewer.send({ t: 'toast', text: save.on ? 'Capturador activado. Hermes se reinicia un momento.' : 'Capturador apagado. Hermes se reinicia un momento.' })
+      }
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude ${save ? 'guardar' : 'leer'} el capturador (${(error as Error).message}).`, error: true })
+    }
   }
 
   // ───────────── Ajustes: capacidades (herramientas y habilidades) ─────────────
