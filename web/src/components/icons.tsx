@@ -99,3 +99,12 @@ export const IconDown = (p: SVGProps<SVGSVGElement>) => (
 export const IconGear = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-1.8-3.2-2.2.8a7.6 7.6 0 0 0-2.6-1.5L14.2 3h-4.4l-.4 2.2a7.6 7.6 0 0 0-2.6 1.5l-2.2-.8-1.8 3.2 1.8 1.4a7.6 7.6 0 0 0 0 3l-1.8 1.4 1.8 3.2 2.2-.8a7.6 7.6 0 0 0 2.6 1.5l.4 2.2h4.4l.4-2.2a7.6 7.6 0 0 0 2.6-1.5l2.2.8 1.8-3.2-1.8-1.4z" /></svg>
 )
+export const IconNewChat = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 4H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-5" /><path d="m17.5 3.5 3 3L13 14l-3.5.5L10 11z" /></svg>
+)
+export const IconHistory = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M4 12a8 8 0 1 0 2.6-5.9" /><path d="M4 4v4h4" /><path d="M12 8v4l3 2" /></svg>
+)
+export const IconDownload = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg>
+)

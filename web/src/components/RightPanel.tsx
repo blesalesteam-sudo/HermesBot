@@ -122,8 +122,14 @@ export function RightPanel({ state, bot, send, onClose, onPrefill }: Props) {
           <div className="rp-label">Archivos</div>
           {files.length ? (
             <div className="lib-grid">
-              {files.map(f => f.kind === 'image' && f.preview ? (
-                <a key={f.id} className="lib-image" href={f.preview} target="_blank" rel="noreferrer" title={f.name}><img src={f.preview} alt={f.name} /></a>
+              {files.map(f => f.kind === 'image' && (f.url || f.preview) ? (
+                <a key={f.id} className="lib-image" href={f.url ?? f.preview} target="_blank" rel="noreferrer" title={f.name}><img src={f.url ?? f.preview} alt={f.name} loading="lazy" /></a>
+              ) : f.url ? (
+                <a key={f.id} className="lib-file" href={f.url} target="_blank" rel="noreferrer" download={f.name} title={`Descargar ${f.name}`}>
+                  <IconFile width={20} height={20} />
+                  <span>{f.name}</span>
+                  <small>{fileSize(f.size)} · {shortWhen(f.ts)}</small>
+                </a>
               ) : (
                 <div key={f.id} className="lib-file" title={f.name}>
                   <IconFile width={20} height={20} />
@@ -132,7 +138,7 @@ export function RightPanel({ state, bot, send, onClose, onPrefill }: Props) {
                 </div>
               ))}
             </div>
-          ) : <p className="rp-empty small">Las fotos y archivos que compartáis en este chat aparecerán aquí.</p>}
+          ) : <p className="rp-empty small">Las fotos y archivos que compartáis, y los que cree el bot, aparecerán aquí.</p>}
 
           <div className="rp-label">Enlaces</div>
           {links.length ? (

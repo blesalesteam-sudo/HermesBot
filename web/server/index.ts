@@ -1,5 +1,6 @@
 // Servidor de hermesBot: sirve la web, comprueba el acceso de los dos socios y mantiene
 // la conexión en vivo (WebSocket) entre sus navegadores y la sala compartida.
+import { timingSafeEqual } from 'node:crypto'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
@@ -9,7 +10,9 @@ import { WebSocketServer } from 'ws'
 
 import type { ClientCommand } from '../shared/protocol.ts'
 import { accountFromRequest, checkLogin, clearCookie, createUser, hasUsers, sessionCookie, tooManyAttempts } from './auth.ts'
+import { backupPath, makeBackup, restoreBackup, startAutoBackup } from './backup.ts'
 import { config } from './config.ts'
+import { serveBotFile } from './files.ts'
 import { Room } from './room.ts'
 
 const DIST = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
@@ -100,6 +103,53 @@ const server = createServer(async (req, res) => {
       return acc ? json(res, 200, { id: acc.id, name: acc.name }) : json(res, 401, { error: 'no_session', setup: !hasUsers() })
     }
 
+    // Archivos creados por el bot: solo para quien tiene la sesión abierta.
+    if (path.startsWith('/files/') && req.method === 'GET') {
+      if (!accountFromRequest(req)) {
+        res.writeHead(401)
+
+        return void res.end()
+      }
+
+      return serveBotFile(res, path.slice('/files/'.length))
+    }
+
+    // Copias de seguridad (solo administradores): descargar una nueva o una guardada, y restaurar.
+    if (path === '/api/backup' || path.startsWith('/api/backup/') || path === '/api/restore') {
+      const acc = accountFromRequest(req)
+
+      if (!acc?.admin) { return json(res, 403, { error: 'Solo un administrador puede gestionar las copias.' }) }
+      if (!sameOrigin(req)) { return json(res, 403, { error: 'origin' }) }
+
+      if (path === '/api/restore') {
+        if (req.method !== 'POST') { return json(res, 405, { error: 'method' }) }
+
+        const error = await restoreBackup(req)
+
+        if (error) { return json(res, 400, { error }) }
+
+        json(res, 200, { ok: true })
+        console.log(`[copias] ${acc.name} restauró una copia de seguridad`)
+
+        return void setTimeout(() => room.reload(), 300)
+      }
+
+      const stored = path.startsWith('/api/backup/') ? backupPath(decodeURIComponent(path.slice('/api/backup/'.length))) : null
+      const file = stored ?? (path === '/api/backup' ? (await makeBackup()).file : null)
+
+      if (!file) { return json(res, 404, { error: 'not_found' }) }
+      if (path === '/api/backup') { room.sendBackups() }
+
+      res.writeHead(200, {
+        'content-type': 'application/gzip',
+        'content-length': statSync(file).size,
+        'content-disposition': `attachment; filename="${file.split('/').pop()}"`,
+        'cache-control': 'no-store'
+      })
+
+      return void createReadStream(file).pipe(res)
+    }
+
     if (path === '/api/login' && req.method === 'POST') {
       if (!sameOrigin(req)) { return json(res, 403, { error: 'origin' }) }
       if (tooManyAttempts(clientIp(req))) { return json(res, 429, { error: 'too_many' }) }
@@ -114,8 +164,16 @@ const server = createServer(async (req, res) => {
     if (path === '/api/setup' && req.method === 'POST') {
       if (!sameOrigin(req)) { return json(res, 403, { error: 'origin' }) }
       if (hasUsers()) { return json(res, 409, { error: 'Ya hay una cuenta creada. Entra con tu usuario.' }) }
+      if (tooManyAttempts(clientIp(req))) { return json(res, 429, { error: 'Demasiados intentos. Espera un minuto.' }) }
 
       const body = await readBody(req)
+      const given = Buffer.from(String(body.code ?? '').trim().toLowerCase())
+      const expected = Buffer.from(config.setupCode.toLowerCase())
+
+      if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+        return json(res, 403, { error: 'El código de estreno no es correcto.' })
+      }
+
       const made = createUser({ username: String(body.username ?? ''), name: String(body.name ?? ''), password: String(body.password ?? ''), admin: true })
 
       return made.user ? json(res, 200, { ok: true }, { 'set-cookie': sessionCookie(made.user) }) : json(res, 400, { error: made.error })
@@ -190,8 +248,16 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 const ready = () => {
-  console.log(`[web] hermesBot escuchando en el puerto ${config.port}. ${hasUsers() ? 'Cuentas creadas.' : 'Sin cuentas todavía: la primera persona que entre crea la del administrador.'}`)
+  console.log(`[web] hermesBot escuchando en el puerto ${config.port}. ${hasUsers() ? 'Cuentas creadas.' : 'Sin cuentas todavía.'}`)
+
+  if (!hasUsers()) {
+    console.log(config.setupCodeFromEnv
+      ? '[web] Para crear la primera cuenta hace falta el código de estreno (la variable SETUP_CODE).'
+      : `[web] CÓDIGO DE ESTRENO para crear la primera cuenta: ${config.setupCode}`)
+  }
+
   room.start()
+  startAutoBackup()
 }
 
 // Railway usa red interna IPv6; si la máquina no la tiene, escuchamos en IPv4.

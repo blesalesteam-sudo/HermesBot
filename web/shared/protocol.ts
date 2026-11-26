@@ -39,6 +39,25 @@ export interface Attachment {
   kind: 'image' | 'file'
   size: number
   preview?: string
+  /** Dirección para abrirlo o descargarlo (archivos que crea el bot). */
+  url?: string
+}
+
+/** Una conversación anterior guardada en el historial de un bot. */
+export interface ChatSummary {
+  id: string
+  botId: string
+  title: string
+  /** Cuándo se archivó. */
+  ts: number
+  count: number
+}
+
+/** Una copia de seguridad guardada en el servidor. */
+export interface BackupInfo {
+  name: string
+  ts: number
+  size: number
 }
 
 /** Archivo que sube el navegador junto a un mensaje (contenido como data URL). */
@@ -125,6 +144,7 @@ export interface Snapshot {
   hermes: HermesState
   hermesDetail?: string
   routines?: Routine[]
+  history?: ChatSummary[]
 }
 
 export type ServerEvent =
@@ -143,6 +163,12 @@ export type ServerEvent =
   | { t: 'bots'; bots: Bot[] }
   | { t: 'toast'; text: string; error?: boolean }
   | { t: 'model'; info: ModelInfo }
+  /** Sustituye la conversación visible de un bot (al empezar una nueva o recuperar otra). */
+  | { t: 'msgs'; botId: string; messages: ChatMessage[] }
+  | { t: 'history'; history: ChatSummary[] }
+  /** Una conversación del historial, para leerla. */
+  | { t: 'chat'; chat: ChatSummary & { messages: ChatMessage[] } }
+  | { t: 'backups'; list: BackupInfo[]; auto: boolean }
 
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 
@@ -162,3 +188,10 @@ export type ClientCommand =
   | { t: 'model.get' }
   | { t: 'model.key'; slug: string; key: string }
   | { t: 'model.set'; slug: string; model: string }
+  | { t: 'chat.new'; botId: string }
+  | { t: 'chat.open'; id: string }
+  | { t: 'chat.restore'; id: string }
+  | { t: 'chat.rename'; id: string; title: string }
+  | { t: 'chat.delete'; id: string }
+  | { t: 'backup.list' }
+  | { t: 'backup.auto'; on: boolean }

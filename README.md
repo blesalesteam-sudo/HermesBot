@@ -29,14 +29,22 @@ Son dos piezas que se despliegan en [Railway](https://railway.com) desde este mi
 2. Crea el servicio **hermes-core**:
    - En *Settings*, pon **Root Directory** en `hermes-core`.
    - En *Volumes*, añade un disco montado en `/opt/data`.
-   - En *Variables*, pon `HERMES_INTERNAL_TOKEN`, el modelo (`HERMES_MODEL_PROVIDER`, `HERMES_MODEL`) y la clave del proveedor de IA.
+   - En *Variables*, pon solo `HERMES_INTERNAL_TOKEN`. El modelo de IA y su clave se eligen después dentro de la aplicación, en **Ajustes → Modelo de IA**.
    - En *Settings → Networking*, comprueba que el nombre interno es `hermes-core`. No le pongas dirección pública.
 3. Crea el servicio **hermesbot-web** desde el mismo repositorio:
    - **Root Directory** en `web`.
    - Un disco montado en `/data`.
    - Las variables de la sección "hermesbot-web" de [`.env.example`](.env.example). `HERMES_INTERNAL_TOKEN` tiene que ser la misma que en hermes-core.
    - En *Settings → Networking*, pulsa **Generate Domain**. Esa es la dirección que abrirán los socios.
-4. Abre la dirección. La primera vez te pide crear la cuenta de administrador; hazlo nada más desplegar, porque quien llega primero se queda esa cuenta. Después añade al resto del equipo desde **Ajustes → Usuarios**.
+4. Abre la dirección. La primera vez te pide crear la cuenta de administrador y el **código de estreno**: es lo que pusiste en la variable `SETUP_CODE` de hermesbot-web (si no pusiste ninguno, aparece en los registros de ese servicio). Así nadie puede adelantarse a crear esa cuenta.
+5. Dentro de la aplicación, en **Ajustes**: conecta el modelo de IA pegando su clave, añade al resto del equipo en *Usuarios* y revisa los *Bots*.
+
+## Copias de seguridad
+
+En **Ajustes → Copias** un administrador puede descargar una copia completa (cuentas, bots,
+conversaciones, archivos y todo lo que Hermes ha aprendido) y restaurarla subiendo ese archivo.
+Además, cada día se guarda una copia sola en el disco de hermesbot-web y se conservan las 7 últimas.
+El archivo contiene vuestras claves: guárdalo en un sitio seguro.
 
 Si el chat dice "Conectando con Hermes…" durante más de un minuto, revisa que la clave interna
 coincide en los dos servicios y que `HERMES_CORE_URL` es `ws://hermes-core.railway.internal:8080/gateway`.

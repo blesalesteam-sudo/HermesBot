@@ -4,12 +4,14 @@
 import { randomUUID } from 'node:crypto'
 
 import type {
-  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine, ServerEvent,
-  Snapshot, ToolCall, Upload, User
+  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
+  ServerEvent, Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
+import { listBackups } from './backup.ts'
 import { config } from './config.ts'
-import { persist, saved, type StoredUser } from './store.ts'
+import { fetchBotFile, findBotFiles } from './files.ts'
+import { persist, saved, type ArchivedChat, type StoredUser } from './store.ts'
 import { GatewayClient } from './vendor/hermes-shared/node/gateway-client.ts'
 
 type Send = (ev: ServerEvent) => void
@@ -54,6 +56,7 @@ function toolLabel(name: string): string {
   return `Usó ${name.replace(/_/g, ' ')}`
 }
 
+const MAX_ARCHIVED = 300
 const MAX_UPLOADS = 6
 const MAX_UPLOAD_CHARS = 11_500_000 // unos 8 MB una vez codificado
 
@@ -109,6 +112,7 @@ export class Room {
   private lastSegment = new Map<string, number>()
   private gw: GatewayClient | null = null
   private routines: Routine[] = []
+  private retry: NodeJS.Timeout | undefined
   private bots: Bot[] = saved.bots ?? config.bots
 
   private get users(): User[] {
@@ -116,6 +120,19 @@ export class Room {
   }
 
   constructor() {
+    this.init()
+  }
+
+  private init() {
+    this.bots = saved.bots ?? config.bots
+    this.status = {}
+    this.sessionToBot.clear()
+    this.attaching.clear()
+    this.current.clear()
+    this.lastSegment.clear()
+    this.requests.clear()
+    this.prompts.clear()
+
     for (const bot of this.bots) {
       saved.messages[bot.id] ??= []
       this.status[bot.id] = { state: 'idle', lastActive: saved.lastActive[bot.id] }
@@ -123,6 +140,24 @@ export class Room {
 
     for (const [botId, sid] of Object.entries(saved.sessions)) {
       this.sessionToBot.set(sid, botId)
+    }
+  }
+
+  /** Tras restaurar una copia: se vuelve a leer todo y cada navegador entra de nuevo. */
+  reload() {
+    this.init()
+
+    for (const v of [...this.viewers]) { v.close() }
+
+    if (this.hermes === 'connected') { void this.onReady() }
+  }
+
+  /** Manda la lista de copias guardadas a los administradores conectados (o solo a uno). */
+  sendBackups(viewer?: Viewer) {
+    const ev: ServerEvent = { t: 'backups', list: listBackups(), auto: saved.autoBackup !== false }
+
+    for (const v of viewer ? [viewer] : this.viewers) {
+      if (this.isAdmin(v)) { v.send(ev) }
     }
   }
 
@@ -163,7 +198,8 @@ export class Room {
       online: this.online(),
       hermes: this.hermes,
       hermesDetail: this.hermesDetail,
-      routines: this.routines
+      routines: this.routines,
+      history: this.history()
     }
   }
 
@@ -244,9 +280,137 @@ export class Room {
         return this.saveModelKey(viewer, String(cmd.slug), String(cmd.key ?? ''))
       case 'model.set':
         return this.setModel(viewer, String(cmd.slug), String(cmd.model))
+      case 'chat.new':
+        return this.newChat(viewer, String(cmd.botId))
+      case 'chat.open': {
+        const chat = saved.archive.find(c => c.id === cmd.id)
+
+        return chat && viewer.send({ t: 'chat', chat: { ...this.summary(chat), messages: chat.messages } })
+      }
+      case 'chat.restore':
+        return this.restoreChat(viewer, String(cmd.id))
+      case 'chat.rename': {
+        const chat = saved.archive.find(c => c.id === cmd.id)
+        const title = String(cmd.title ?? '').trim().slice(0, 80)
+
+        if (chat && title) {
+          chat.title = title
+          this.historyChanged()
+        }
+
+        return
+      }
+      case 'chat.delete':
+        saved.archive = saved.archive.filter(c => c.id !== cmd.id)
+
+        return this.historyChanged()
+      case 'backup.list':
+        return this.sendBackups(viewer)
+      case 'backup.auto':
+        if (this.isAdmin(viewer)) {
+          saved.autoBackup = !!cmd.on
+          persist()
+          this.sendBackups()
+        }
+
+        return
       default:
         return
     }
+  }
+
+  // ───────────── Conversaciones: empezar una nueva e historial ─────────────
+
+  private summary(c: ArchivedChat): ChatSummary {
+    return { id: c.id, botId: c.botId, title: c.title, ts: c.ts, count: c.messages.filter(m => m.role !== 'notice').length }
+  }
+
+  private history(): ChatSummary[] {
+    return saved.archive.map(c => this.summary(c)).sort((a, b) => b.ts - a.ts)
+  }
+
+  private historyChanged() {
+    persist()
+    this.broadcast({ t: 'history', history: this.history() })
+  }
+
+  /** Guarda la conversación visible de un bot en el historial y deja el chat en blanco. */
+  private shelve(botId: string) {
+    const messages = saved.messages[botId] ?? []
+    const sid = saved.sessions[botId]
+
+    if (messages.some(m => m.role !== 'notice')) {
+      const first = messages.find(m => m.role === 'user' && m.text.trim())?.text.trim().replace(/\s+/g, ' ') ?? ''
+
+      saved.archive.push({
+        id: randomUUID(),
+        botId,
+        title: first ? (first.length > 60 ? `${first.slice(0, 58)}…` : first) : 'Conversación sin título',
+        ts: Date.now(),
+        sid,
+        messages
+      })
+
+      if (saved.archive.length > MAX_ARCHIVED) { saved.archive = saved.archive.slice(-MAX_ARCHIVED) }
+    }
+
+    if (sid) {
+      this.sessionToBot.delete(sid)
+
+      for (const [id, p] of this.prompts) {
+        if (p.session_id === sid) { this.dropRequest(id) }
+      }
+    }
+
+    delete saved.sessions[botId]
+    this.attaching.delete(botId)
+    this.current.delete(botId)
+    this.lastSegment.delete(botId)
+    saved.messages[botId] = []
+  }
+
+  private busy(viewer: Viewer, botId: string): boolean {
+    if (this.status[botId]?.state === 'idle') { return false }
+
+    viewer.send({ t: 'toast', text: 'El bot está trabajando. Espera a que termine o páralo antes.', error: true })
+
+    return true
+  }
+
+  private newChat(viewer: Viewer, botId: string) {
+    const bot = this.bot(botId)
+
+    if (!bot || this.busy(viewer, botId)) { return }
+
+    if (!(saved.messages[botId] ?? []).some(m => m.role !== 'notice')) {
+      return viewer.send({ t: 'toast', text: 'Esta conversación ya está vacía.' })
+    }
+
+    this.shelve(botId)
+    this.broadcast({ t: 'msgs', botId, messages: [] })
+    this.notice(botId, `${viewer.user.name} empezó una conversación nueva. La anterior está en el historial.`)
+    this.historyChanged()
+  }
+
+  private restoreChat(viewer: Viewer, id: string) {
+    const chat = saved.archive.find(c => c.id === id)
+
+    if (!chat || !this.bot(chat.botId) || this.busy(viewer, chat.botId)) { return }
+
+    this.shelve(chat.botId)
+    saved.archive = saved.archive.filter(c => c.id !== id)
+    saved.messages[chat.botId] = chat.messages
+
+    if (chat.sid) {
+      saved.sessions[chat.botId] = chat.sid
+      this.sessionToBot.set(chat.sid, chat.botId)
+      // Nos volvemos a enganchar a ese hilo de Hermes para que recuerde lo hablado.
+      void this.ensureSession(this.bot(chat.botId)!).catch(() => undefined)
+    }
+
+    this.broadcast({ t: 'msgs', botId: chat.botId, messages: chat.messages })
+    this.notice(chat.botId, `${viewer.user.name} recuperó esta conversación del historial.`)
+    this.historyChanged()
   }
 
   // ───────────── Ajustes: modelo de IA ─────────────
@@ -327,8 +491,7 @@ export class Room {
 
     try {
       // 1) Queda como modelo por defecto del equipo (conversaciones nuevas y reinicios).
-      const base = config.hermesUrl.replace(/^ws/, 'http').replace(/\/+$/, '').replace(/\/gateway$/, '')
-      const saved_ = await fetch(`${base}/admin/model`, {
+      const saved_ = await fetch(`${config.hermesAdmin}/admin/model`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${config.hermesToken}` },
         body: JSON.stringify({ model, provider: slug })
@@ -489,6 +652,8 @@ export class Room {
     delete saved.sessions[id]
     delete saved.messages[id]
     delete saved.lastActive[id]
+    saved.archive = saved.archive.filter(c => c.botId !== id)
+    this.broadcast({ t: 'history', history: this.history() })
     delete this.status[id]
     this.attaching.delete(id)
     persist()
@@ -507,6 +672,12 @@ export class Room {
       this.setHermes('offline', 'Faltan HERMES_CORE_URL o HERMES_INTERNAL_TOKEN en las variables del servicio.')
 
       return
+    }
+
+    if (this.gw) {
+      // Reintento: se descarta la conexión anterior, que se quedó sin poder arrancar.
+      (this.gw as any).removeAllListeners?.()
+      this.gw.kill('reintento')
     }
 
     const gw = new GatewayClient({
@@ -809,7 +980,10 @@ export class Room {
 
     if (!msg) {
       if (finalText?.trim()) {
-        this.putMessage(botId, { id: randomUUID(), role: 'assistant', text: finalText, ts: Date.now(), error })
+        const whole: ChatMessage = { id: randomUUID(), role: 'assistant', text: finalText, ts: Date.now(), error }
+
+        this.putMessage(botId, whole)
+        void this.collectFiles(botId, whole)
       }
 
       return
@@ -834,6 +1008,23 @@ export class Room {
     }
 
     this.putMessage(botId, msg)
+    void this.collectFiles(botId, msg)
+  }
+
+  /** Si la respuesta menciona archivos creados por el bot, se traen y se enseñan como adjuntos. */
+  private async collectFiles(botId: string, msg: ChatMessage) {
+    const { paths, clean } = findBotFiles(msg.text)
+
+    if (!paths.length) { return }
+
+    const found = (await Promise.all(paths.map(fetchBotFile))).filter((a): a is Attachment => a !== null)
+
+    // Mientras tanto pudieron empezar otra conversación: solo se toca si el mensaje sigue ahí.
+    if (!found.length || !(saved.messages[botId] ?? []).includes(msg)) { return }
+
+    msg.attachments = [...(msg.attachments ?? []), ...found]
+    msg.text = clean || (found.length === 1 ? 'Aquí lo tienes.' : 'Aquí los tienes.')
+    this.putMessage(botId, msg)
   }
 
   private onHermesEvent(ev: HermesEvent) {
@@ -850,6 +1041,9 @@ export class Room {
         return
       case 'gateway.start_timeout':
         this.setHermes('offline', String(p.stderr_tail || 'Hermes no responde.').slice(0, 300))
+        // Si Hermes tarda en arrancar (por ejemplo, tras restaurar una copia), se sigue intentando.
+        clearTimeout(this.retry)
+        this.retry = setTimeout(() => { if (this.hermes === 'offline') { this.start() } }, 15_000)
 
         return
     }

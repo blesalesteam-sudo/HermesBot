@@ -49,8 +49,16 @@ function ToolPill({ tools }: { tools: ToolCall[] }) {
 function Attachments({ items, mine }: { items: Attachment[]; mine: boolean }) {
   return (
     <div className={`attachments${mine ? ' mine' : ''}`}>
-      {items.map(a => a.kind === 'image' && a.preview ? (
-        <a key={a.id} className="att-image" href={a.preview} target="_blank" rel="noreferrer" title={a.name}><img src={a.preview} alt={a.name} /></a>
+      {items.map(a => a.kind === 'image' && (a.url || a.preview) ? (
+        <a key={a.id} className="att-image" href={a.url ?? a.preview} target="_blank" rel="noreferrer" title={a.name}><img src={a.url ?? a.preview} alt={a.name} loading="lazy" /></a>
+      ) : a.url ? (
+        <a key={a.id} className="att-file link" href={a.url} target="_blank" rel="noreferrer" download={a.name} title={`Descargar ${a.name}`}>
+          <span className="att-icon"><IconFile width={18} height={18} /></span>
+          <span className="att-text">
+            <span className="att-name">{a.name}</span>
+            <span className="att-size">{fileSize(a.size)} · Descargar</span>
+          </span>
+        </a>
       ) : (
         <div key={a.id} className="att-file">
           <span className="att-icon"><IconFile width={18} height={18} /></span>
@@ -130,6 +138,7 @@ export const Message = memo(function Message({ msg, me, users, first, last }: Pr
     <div className={`row row-bot${first ? ' first' : ''}${last ? ' last' : ''}`}>
       <div className="row-body">
         {!!msg.tools?.length && <ToolPill tools={msg.tools} />}
+        {!!msg.attachments?.length && <Attachments items={msg.attachments} mine={false} />}
         {!empty && (
           <div
             className={`bubble bubble-bot${msg.error ? ' error' : ''}${msg.streaming ? ' streaming' : ''}`}

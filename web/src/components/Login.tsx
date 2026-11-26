@@ -15,6 +15,7 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn, setup }: Props) {
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -26,7 +27,7 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn, setup }: Props) {
       const res = await fetch(setup ? '/api/setup' : '/api/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username, password, name })
+        body: JSON.stringify({ username, password, name, code })
       })
 
       if (!res.ok) {
@@ -71,8 +72,10 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn, setup }: Props) {
             {setup && <input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" autoFocus aria-label="Tu nombre" maxLength={40} />}
             <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Usuario" autoComplete="username" autoFocus={!setup} aria-label="Usuario" />
             <input value={password} onChange={e => setPassword(e.target.value)} placeholder={setup ? 'Contraseña (mínimo 6 caracteres)' : 'Contraseña'} type="password" autoComplete={setup ? 'new-password' : 'current-password'} aria-label="Contraseña" />
+            {setup && <input value={code} onChange={e => setCode(e.target.value)} placeholder="Código de estreno" autoComplete="off" aria-label="Código de estreno" />}
+            {setup && <p className="login-hint">El código de estreno es el que pusiste en Railway como SETUP_CODE. Si no pusiste ninguno, aparece en los registros del servicio web. Así nadie más puede adelantarse a crear esta cuenta.</p>}
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="btn btn-primary wide" disabled={busy || !username || !password || (setup && !name.trim())}>{busy ? 'Entrando…' : setup ? 'Crear cuenta y entrar' : 'Entrar'}</button>
+            <button className="btn btn-primary wide" disabled={busy || !username || !password || (setup && (!name.trim() || !code.trim()))}>{busy ? 'Entrando…' : setup ? 'Crear cuenta y entrar' : 'Entrar'}</button>
           </form>
         )}
       </div>

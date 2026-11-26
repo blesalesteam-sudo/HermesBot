@@ -10,8 +10,12 @@
 // el gateway a internet.
 
 import { execFile } from 'node:child_process'
-import { timingSafeEqual } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { createReadStream, createWriteStream, realpathSync, rmSync, statSync } from 'node:fs'
 import http from 'node:http'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 
 import { WebSocket, WebSocketServer } from 'ws'
@@ -67,59 +71,133 @@ async function attachGrant() {
   throw lastError
 }
 
-const server = http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, service: 'hermes-core-bridge' }))
+const HERMES_ENV = { ...process.env, NO_COLOR: '1' }
+const MAX_FILE = 40 * 1024 * 1024
+// Nunca se entregan a la web los archivos donde Hermes guarda claves o su estado interno.
+const PRIVATE_FILE = /^(\.|auth\.json$|config\.yaml$|gateway)|\.(db|db-wal|db-shm|lock|pid|sock|pem|key)$/i
+
+function reply(res, code, data) {
+  res.writeHead(code, { 'content-type': 'application/json' })
+  res.end(JSON.stringify(data))
+}
+
+const lastLine = error => String(error?.stderr || error?.message || error).trim().split('\n').pop().slice(0, 200)
+
+/** Órdenes internas que solo puede dar la web de hermesBot (con el token interno). */
+async function admin(req, res, url) {
+  // Modelo por defecto del equipo: lo guarda Hermes en su propia configuración, para que
+  // las conversaciones nuevas (y los reinicios) usen el modelo elegido en Ajustes.
+  if (req.method === 'POST' && url.pathname === '/admin/model') {
+    let body = ''
+
+    for await (const chunk of req) {
+      body += chunk
+
+      if (body.length > 4096) { return reply(res, 413, { ok: false }) }
+    }
+
+    const { model, provider } = JSON.parse(body)
+    const safe = /^[A-Za-z0-9][A-Za-z0-9._:\/@+-]{0,199}$/
+
+    if (!safe.test(String(model)) || !safe.test(String(provider))) {
+      return reply(res, 400, { ok: false, error: 'modelo o proveedor no válido' })
+    }
+
+    for (const [key, value] of [['model.provider', provider], ['model.default', model]]) {
+      await run('hermes', ['config', 'set', key, String(value)], { timeout: 60_000, env: HERMES_ENV })
+    }
+
+    log('modelo por defecto:', provider, model)
+
+    return reply(res, 200, { ok: true })
+  }
+
+  // Un archivo que el bot ha creado (imagen, documento…), para enseñarlo en el chat.
+  if (req.method === 'GET' && url.pathname === '/admin/file') {
+    let file
+
+    try {
+      file = realpathSync(String(url.searchParams.get('path') || '').replace(/^~(?=\/)/, process.env.HOME || ''))
+    } catch {
+      return reply(res, 404, { ok: false, error: 'no existe' })
+    }
+
+    const info = statSync(file)
+
+    if (!info.isFile() || info.size > MAX_FILE || PRIVATE_FILE.test(basename(file)) || /\/(\.ssh|\.gnupg|pairing|proc|sys|dev)\//.test(file)) {
+      return reply(res, 403, { ok: false, error: 'no permitido' })
+    }
+
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': info.size })
+
+    return pipeline(createReadStream(file), res)
+  }
+
+  // Copia de seguridad completa de Hermes (memoria, habilidades, rutinas, conversaciones, claves).
+  if (req.method === 'GET' && url.pathname === '/admin/backup') {
+    const out = join(tmpdir(), `hermes-copia-${randomUUID()}.zip`)
+
+    try {
+      await run('hermes', ['backup', '-o', out, '-k', '0'], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024, env: HERMES_ENV })
+      res.writeHead(200, { 'content-type': 'application/zip', 'content-length': statSync(out).size })
+      await pipeline(createReadStream(out), res)
+      log('copia de seguridad entregada')
+    } finally {
+      rmSync(out, { force: true })
+    }
 
     return
   }
 
-  // Modelo por defecto del equipo: lo guarda Hermes en su propia configuración, para que
-  // las conversaciones nuevas (y los reinicios) usen el modelo elegido en Ajustes.
-  if (req.method === 'POST' && req.url === '/admin/model') {
-    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  // Restaurar una copia: se importa y el contenedor se reinicia para arrancar con ella.
+  if (req.method === 'POST' && url.pathname === '/admin/restore') {
+    const zip = join(tmpdir(), `hermes-restaurar-${randomUUID()}.zip`)
 
-    if (!tokenOk(bearer)) {
-      res.writeHead(401)
-      res.end()
+    let refused = ''
 
-      return
+    try {
+      await pipeline(req, createWriteStream(zip))
+      // Hermes solo deja importar con el gateway parado; al terminar, el contenedor se reinicia y vuelve a arrancarlo.
+      await run('hermes', ['gateway', 'stop'], { timeout: 120_000, env: HERMES_ENV }).catch(() => undefined)
+
+      const { stdout } = await run('hermes', ['import', '--force', zip], { timeout: 600_000, maxBuffer: 8 * 1024 * 1024, env: HERMES_ENV })
+
+      refused = /Import refused[^\n]*/.exec(stdout)?.[0] ?? ''
+    } catch (error) {
+      refused = lastLine(error)
+    } finally {
+      rmSync(zip, { force: true })
     }
 
-    let body = ''
-
-    req.on('data', chunk => {
-      body += chunk
-
-      if (body.length > 4096) { req.destroy() }
-    })
-    req.on('end', async () => {
-      const reply = (code, data) => {
-        res.writeHead(code, { 'content-type': 'application/json' })
-        res.end(JSON.stringify(data))
-      }
-
-      try {
-        const { model, provider } = JSON.parse(body)
-        const safe = /^[A-Za-z0-9][A-Za-z0-9._:\/@+-]{0,199}$/
-
-        if (!safe.test(String(model)) || !safe.test(String(provider))) {
-          return reply(400, { ok: false, error: 'modelo o proveedor no válido' })
-        }
-
-        for (const [key, value] of [['model.provider', provider], ['model.default', model]]) {
-          await run('hermes', ['config', 'set', key, String(value)], { timeout: 60_000, env: { ...process.env, NO_COLOR: '1' } })
-        }
-
-        log('modelo por defecto:', provider, model)
-        reply(200, { ok: true })
-      } catch (error) {
-        reply(500, { ok: false, error: String(error?.message || error).split('\n').pop().slice(0, 200) })
-      }
-    })
+    log(refused ? `la copia no se pudo restaurar: ${refused}` : 'copia restaurada', '· reinicio')
+    reply(res, refused ? 500 : 200, refused ? { ok: false, error: refused.slice(0, 200) } : { ok: true })
+    setTimeout(() => process.exit(1), 800)
 
     return
+  }
+
+  reply(res, 404, { ok: false })
+}
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url || '/', 'http://hermes-core')
+
+  if (url.pathname === '/health' || url.pathname === '/') {
+    return reply(res, 200, { ok: true, service: 'hermes-core-bridge' })
+  }
+
+  if (url.pathname.startsWith('/admin/')) {
+    if (!tokenOk(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''))) {
+      res.writeHead(401)
+
+      return void res.end()
+    }
+
+    return void admin(req, res, url).catch(error => {
+      log('orden interna fallida', url.pathname, lastLine(error))
+
+      if (res.headersSent) { res.destroy() } else { reply(res, 500, { ok: false, error: lastLine(error) }) }
+    })
   }
 
   res.writeHead(404)

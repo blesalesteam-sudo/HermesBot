@@ -502,3 +502,40 @@ kbd { font: 500 11px var(--font); padding: 2px 6px; border-radius: 6px; backgrou
   .form-grid { grid-template-columns: 1fr; }
   .conn-chip.demo { display: none; }
 }
+
+/* ── Historial de conversaciones ── */
+.modal.history { max-width: 640px; display: flex; flex-direction: column; gap: 12px; min-height: 320px; }
+.modal.history .modal-sub { margin: 0; font-size: 13px; line-height: 19px; }
+.history-row { width: 100%; border: 0; background: transparent; text-align: left; border-radius: 0; }
+.history-row + .history-row { border-top: 1px solid var(--edge); }
+.history-row:hover .set-row-text > span { text-decoration: underline; text-underline-offset: 3px; }
+.history-row .set-row-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-title { display: flex; align-items: center; gap: 12px; }
+.history-title h3 { margin: 0; font-size: 16px; font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.history-read { flex: 1; min-height: 160px; overflow-y: auto; border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; }
+.history-read .row-meta { display: none; }
+.modal.history .form-actions { align-items: center; }
+.modal.history .form-actions .mini-btn { margin-left: auto; }
+
+/* ── Lo que crea el bot ── */
+.row-bot .attachments { margin: 2px 0 6px; }
+a.att-file.link { color: inherit; text-decoration: none; }
+a.att-file.link:hover { border-color: var(--ink-3); }
+a.lib-file { text-decoration: none; }
+a.lib-file:hover { border-color: var(--ink-3); }
+
+/* ── Ajustes: avisos y copias ── */
+.switch { appearance: none; -webkit-appearance: none; flex: none; width: 38px; height: 22px; border-radius: 999px; border: 1px solid var(--hairline); background: transparent; position: relative; cursor: pointer; margin: 0; transition: background 0.15s, border-color 0.15s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-3); transition: transform 0.15s, background 0.15s; }
+.switch:checked { background: var(--ink); border-color: var(--ink); }
+.switch:checked::after { transform: translateX(16px); background: var(--app); }
+.switch:disabled { opacity: 0.45; cursor: default; }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.set-row { cursor: pointer; }
+.set-row-text small { white-space: normal; }
+.set-label { font-size: 12px; font-weight: 500; color: var(--ink-3); margin: 18px 0 8px; }
+a.btn { text-decoration: none; color: inherit; }
+.rows + .login-error { margin-top: 10px; }
+.login-hint { margin: -2px 2px 2px; font-size: 12px; line-height: 17px; color: var(--ink-3); text-align: left; }
+.chat-float-spacer > * { pointer-events: auto; }
+.chat-float-spacer.right { gap: 6px; align-items: center; }

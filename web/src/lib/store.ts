@@ -1,4 +1,4 @@
-import type { ChatMessage, ModelInfo, ServerEvent, Snapshot } from '../../shared/protocol'
+import type { BackupInfo, ChatMessage, ChatSummary, ModelInfo, ServerEvent, Snapshot } from '../../shared/protocol'
 
 export interface ClientState extends Snapshot {
   /** botId → ids de socios escribiendo ahora mismo. */
@@ -7,6 +7,9 @@ export interface ClientState extends Snapshot {
   toast?: { text: string; error?: boolean; n: number }
   /** Modelos de IA disponibles (solo se pide al abrir Ajustes). */
   model?: ModelInfo
+  /** Conversación del historial que se está leyendo. */
+  chat?: ChatSummary & { messages: ChatMessage[] }
+  backups?: { list: BackupInfo[]; auto: boolean }
 }
 
 export function initialState(snapshot: Snapshot): ClientState {
@@ -86,6 +89,18 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
 
     case 'model':
       return { ...state, model: ev.info }
+
+    case 'msgs':
+      return { ...state, messages: { ...state.messages, [ev.botId]: ev.messages } }
+
+    case 'history':
+      return { ...state, history: ev.history, chat: state.chat && ev.history.some(c => c.id === state.chat!.id) ? { ...state.chat, title: ev.history.find(c => c.id === state.chat!.id)!.title } : undefined }
+
+    case 'chat':
+      return { ...state, chat: ev.chat }
+
+    case 'backups':
+      return { ...state, backups: { list: ev.list, auto: ev.auto } }
 
     case 'routines':
       return { ...state, routines: ev.routines }

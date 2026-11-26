@@ -59,6 +59,11 @@ export const config = {
   sessionSecret: sessionSecret || randomBytes(32).toString('hex'),
   hermesUrl: env.HERMES_CORE_URL || '',
   hermesToken: env.HERMES_INTERNAL_TOKEN || '',
+  /** Dirección de las órdenes internas del puente de hermes-core (modelo, archivos, copias). */
+  hermesAdmin: (env.HERMES_CORE_URL || '').replace(/^ws/, 'http').replace(/\/+$/, '').replace(/\/gateway$/, ''),
+  /** Código de estreno: sin él nadie puede crear la primera cuenta. */
+  setupCode: (env.SETUP_CODE || '').trim() || randomBytes(4).toString('hex'),
+  setupCodeFromEnv: !!(env.SETUP_CODE || '').trim(),
   dataDir: env.DATA_DIR || './data',
   production: env.NODE_ENV === 'production'
 }

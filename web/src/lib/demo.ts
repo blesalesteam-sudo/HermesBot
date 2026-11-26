@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  ChatMessage, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
+  ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -15,6 +15,18 @@ const min = 60_000
 let seq = 0
 const uid = (p: string) => `${p}-${Date.now().toString(36)}-${(seq++).toString(36)}`
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// Imagen de ejemplo (dibujo propio) para enseñar cómo se ve lo que crea un bot.
+const DEMO_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360"><rect width="480" height="360" fill="#2f9e8f"/>' +
+  '<circle cx="372" cy="104" r="64" fill="#ffffff22"/><circle cx="96" cy="300" r="110" fill="#00000014"/>' +
+  '<rect x="48" y="60" width="96" height="10" rx="5" fill="#ffffffaa"/>' +
+  '<text x="48" y="150" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700" fill="#fff">30 % menos</text>' +
+  '<text x="48" y="198" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700" fill="#fff">citas perdidas</text>' +
+  '<text x="48" y="246" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#ffffffcc">Así lo consiguieron dos clínicas en un mes</text>' +
+  '<rect x="48" y="282" width="150" height="38" rx="19" fill="#fff"/>' +
+  '<text x="123" y="307" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" fill="#1c1c1c" text-anchor="middle">Leer el caso</text></svg>'
+)}`
 
 function seed(): Record<string, ChatMessage[]> {
   const now = Date.now()
@@ -60,7 +72,18 @@ function seed(): Record<string, ChatMessage[]> {
           'Es corto, recuerda el contexto y termina con una pregunta fácil de responder.'
       }
     ],
-    contenido: [],
+    contenido: [
+      { id: 'c1', role: 'user', authorId: 'socio-2', text: 'Hazme una imagen para el post del lunes sobre citas perdidas, y pásame el texto en un documento.', ts: now - 26 * 60 * min },
+      {
+        id: 'c2', role: 'assistant', ts: now - 26 * 60 * min + 50_000,
+        tools: [{ id: 't6', name: 'image_generate', label: 'Creó una imagen', status: 'done' }, { id: 't7', name: 'write_file', label: 'Escribió un archivo', status: 'done' }],
+        text: 'Aquí tenéis la imagen y el texto del post. Si queréis otro color o un titular distinto, decídmelo.',
+        attachments: [
+          { id: 'f-img', name: 'post-lunes.png', kind: 'image', size: 184_000, url: DEMO_IMAGE },
+          { id: 'f-doc', name: 'texto-post-lunes.docx', kind: 'file', size: 18_400, url: 'data:text/plain;charset=utf-8,Texto%20de%20ejemplo%20del%20post%20del%20lunes.' }
+        ]
+      }
+    ],
     hermes: []
   }
 }
@@ -235,6 +258,28 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     emit({ t: 'status', botId, status: { state: 'idle', lastActive: Date.now() } })
   }
 
+  type Old = ChatSummary & { messages: ChatMessage[] }
+  let archive: Old[] = [{
+    id: 'old-1', botId: 'chief-of-staff', title: 'Plan de lanzamiento de la web nueva', ts: Date.now() - 4 * 24 * 60 * min, count: 2,
+    messages: [
+      { id: 'o1', role: 'user', authorId: 'socio-1', text: 'Ayúdanos a ordenar el lanzamiento de la web nueva.', ts: Date.now() - 4 * 24 * 60 * min - 5 * min },
+      { id: 'o2', role: 'assistant', text: 'Claro. Propongo tres pasos:\n\n1. **Revisar textos** el lunes.\n2. **Probar el formulario** el martes.\n3. **Publicar** el jueves por la mañana.', ts: Date.now() - 4 * 24 * 60 * min - 4 * min }
+    ]
+  }]
+  const summaries = (): ChatSummary[] => archive.map(({ messages: _m, ...rest }) => rest).sort((a, b) => b.ts - a.ts)
+  const shelve = (botId: string) => {
+    const list = messages[botId] ?? []
+    const real = list.filter(m => m.role !== 'notice')
+
+    if (real.length) {
+      archive = [...archive, { id: uid('old'), botId, title: (real.find(m => m.role === 'user')?.text ?? 'Conversación sin título').slice(0, 60), ts: Date.now(), count: real.length, messages: list }]
+    }
+
+    messages[botId] = []
+  }
+  let autoBackup = true
+  const backups = () => ({ t: 'backups' as const, auto: autoBackup, list: [1, 2, 3].map(d => ({ name: `hermesbot-copia-${d}.tar.gz`, ts: Date.now() - d * 24 * 60 * min + 3 * 60 * min, size: 1_840_000 + d * 12_000 })) })
+
   const snapshot: Snapshot = {
     me,
     users: DEMO_USERS,
@@ -243,13 +288,14 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     status: {
       'chief-of-staff': { state: 'idle', lastActive: Date.now() - 39 * min },
       setter: { state: 'idle', lastActive: Date.now() - 180 * min },
-      contenido: { state: 'idle' },
+      contenido: { state: 'idle', lastActive: Date.now() - 26 * 60 * min },
       hermes: { state: 'idle' }
     },
     requests: [],
     online: [me.id],
     hermes: 'demo',
-    routines: [...routines]
+    routines: [...routines],
+    history: summaries()
   }
 
   queueMicrotask(() => emit({ t: 'hello', snapshot }))
@@ -324,6 +370,52 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           demoModel = { ...demoModel, provider: cmd.slug, model: cmd.model }
           emit({ t: 'model', info: demoModel })
           emit({ t: 'toast', text: `Ahora el equipo usa ${cmd.model}.` })
+          break
+        case 'chat.new':
+          if (!(messages[cmd.botId] ?? []).length) {
+            emit({ t: 'toast', text: 'Esta conversación ya está vacía.' })
+            break
+          }
+
+          shelve(cmd.botId)
+          emit({ t: 'msgs', botId: cmd.botId, messages: [] })
+          add(cmd.botId, { id: uid('n'), role: 'notice', text: `${me.name} empezó una conversación nueva. La anterior está en el historial.`, ts: Date.now() })
+          emit({ t: 'history', history: summaries() })
+          break
+        case 'chat.open': {
+          const chat = archive.find(c => c.id === cmd.id)
+
+          if (chat) { emit({ t: 'chat', chat }) }
+
+          break
+        }
+        case 'chat.restore': {
+          const chat = archive.find(c => c.id === cmd.id)
+
+          if (chat) {
+            shelve(chat.botId)
+            archive = archive.filter(c => c.id !== chat.id)
+            messages[chat.botId] = [...chat.messages]
+            emit({ t: 'msgs', botId: chat.botId, messages: [...chat.messages] })
+            emit({ t: 'history', history: summaries() })
+          }
+
+          break
+        }
+        case 'chat.rename':
+          archive = archive.map(c => (c.id === cmd.id ? { ...c, title: cmd.title } : c))
+          emit({ t: 'history', history: summaries() })
+          break
+        case 'chat.delete':
+          archive = archive.filter(c => c.id !== cmd.id)
+          emit({ t: 'history', history: summaries() })
+          break
+        case 'backup.list':
+          emit(backups())
+          break
+        case 'backup.auto':
+          autoBackup = cmd.on
+          emit(backups())
           break
         case 'routine': {
           const i = routines.findIndex(r => r.id === cmd.id)

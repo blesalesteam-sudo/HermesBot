@@ -2,11 +2,15 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { USER_COLORS } from '../../shared/defaults'
 import type { Bot, ClientCommand, ModelProvider, User } from '../../shared/protocol'
+import { fileSize, shortWhen } from '../lib/format'
+import { canInstall, install, isInstalled, notifyBlocked, notifyOn, notifySupported, onInstallChange, setNotify } from '../lib/notify'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
-import { IconBack, IconMoon, IconPlus, IconSun, IconTrash, IconX } from './icons'
+import { IconBack, IconDownload, IconMoon, IconPlus, IconSun, IconTrash, IconX } from './icons'
 
-type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apariencia'
+declare const __DEMO__: boolean
+
+type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'avisos' | 'copias' | 'apariencia'
 
 interface Props {
   state: ClientState
@@ -214,6 +218,127 @@ function ModelSection({ state, send }: { state: ClientState; send: Props['send']
   )
 }
 
+function AlertsSection() {
+  const [on, setOn] = useState(notifyOn)
+  const [, refresh] = useState(0)
+
+  useEffect(() => onInstallChange(() => refresh(n => n + 1)), [])
+
+  return (
+    <>
+      <h3>Avisos y aplicación</h3>
+      <p className="settings-sub">Se guarda en este dispositivo: cada persona decide en su móvil y en su ordenador.</p>
+      <div className="rows">
+        <label className="set-row">
+          <div className="set-row-text">
+            <span>Avisarme cuando pase algo</span>
+            <small>{!notifySupported() ? 'Este navegador no admite avisos. En iPhone, instala primero la aplicación.' : notifyBlocked() ? 'Los avisos están bloqueados para esta página en el navegador. Permítelos en el candado de la barra de direcciones.' : 'Cuando un bot responde, pide permiso o alguien del equipo escribe y no estás mirando hermesBot.'}</small>
+          </div>
+          <input type="checkbox" className="switch" checked={on} disabled={!notifySupported() || notifyBlocked()} onChange={async e => setOn(await setNotify(e.target.checked))} aria-label="Avisos del navegador" />
+        </label>
+        <div className="set-row">
+          <div className="set-row-text">
+            <span>Instalar hermesBot</span>
+            <small>{isInstalled() ? 'Ya la estás usando como aplicación instalada.' : canInstall() ? 'Se abre en su propia ventana, con su icono, como cualquier aplicación.' : 'En iPhone o iPad: botón Compartir y después «Añadir a pantalla de inicio». En el ordenador: el icono de instalar de la barra de direcciones (Chrome o Edge).'}</small>
+          </div>
+          {canInstall() && !isInstalled() && <button className="btn small" onClick={() => void install()}>Instalar</button>}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function BackupSection({ state, send }: { state: ClientState; send: Props['send'] }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const picker = useRef<HTMLInputElement>(null)
+  const info = state.backups
+
+  useEffect(() => { send({ t: 'backup.list' }) }, [send])
+
+  const restore = async () => {
+    if (!file) { return }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/restore', { method: 'POST', headers: { 'content-type': 'application/gzip' }, body: file })
+
+      if (!res.ok) {
+        setError(((await res.json().catch(() => ({}))) as { error?: string }).error || 'No pude restaurar la copia.')
+
+        return
+      }
+
+      location.reload()
+    } catch {
+      setError('Se cortó la conexión mientras se subía la copia.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <h3>Copias de seguridad</h3>
+      <p className="settings-sub">Una copia es un único archivo con todo: cuentas, bots, conversaciones, archivos y lo que Hermes ha aprendido (memoria, habilidades, rutinas y claves). Guárdalo en un sitio seguro, porque contiene vuestras claves.</p>
+      <div className="rows">
+        <div className="set-row">
+          <div className="set-row-text">
+            <span>Descargar una copia ahora</span>
+            <small>Tarda unos segundos en prepararse.</small>
+          </div>
+          {__DEMO__
+            ? <button className="btn small" disabled>Descargar</button>
+            : <a className="btn small" href="/api/backup" download><IconDownload width={14} height={14} /> Descargar</a>}
+        </div>
+        <label className="set-row">
+          <div className="set-row-text">
+            <span>Copia automática diaria</span>
+            <small>Cada día se guarda una copia en el servidor y se conservan las 7 últimas.</small>
+          </div>
+          <input type="checkbox" className="switch" checked={info?.auto ?? true} onChange={e => send({ t: 'backup.auto', on: e.target.checked })} aria-label="Copia automática diaria" />
+        </label>
+      </div>
+
+      <div className="set-label">Copias guardadas en el servidor</div>
+      {info?.list.length ? (
+        <div className="rows">
+          {info.list.map(b => (
+            <div key={b.name} className="set-row">
+              <div className="set-row-text">
+                <span>{new Date(b.ts).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' })}</span>
+                <small>{fileSize(b.size)} · {shortWhen(b.ts)}</small>
+              </div>
+              {!__DEMO__ && <a className="btn small" href={`/api/backup/${encodeURIComponent(b.name)}`} download>Descargar</a>}
+            </div>
+          ))}
+        </div>
+      ) : <p className="rp-empty small">{info ? 'Todavía no hay ninguna. La primera se hace sola a los pocos minutos de arrancar.' : 'Cargando…'}</p>}
+
+      <div className="set-label">Restaurar</div>
+      <div className="rows">
+        <div className="set-row">
+          <div className="set-row-text">
+            <span>{file ? file.name : 'Volver a una copia'}</span>
+            <small>{file ? 'Se sustituirá todo lo actual (cuentas, conversaciones y la memoria de Hermes) por lo que hay en la copia. Antes se guarda una copia de cómo está ahora.' : 'Sube un archivo de copia de hermesBot para dejarlo todo como estaba entonces.'}</small>
+          </div>
+          {file ? (
+            <>
+              <button className="btn small danger" disabled={busy || __DEMO__} onClick={() => void restore()}>{busy ? 'Restaurando…' : 'Restaurar'}</button>
+              <button className="btn small" disabled={busy} onClick={() => setFile(null)}>Cancelar</button>
+            </>
+          ) : <button className="btn small" onClick={() => picker.current?.click()}>Elegir archivo</button>}
+          <input ref={picker} type="file" accept=".gz,.tgz,application/gzip" hidden onChange={e => { setFile(e.target.files?.[0] ?? null); setError(''); e.target.value = '' }} />
+        </div>
+      </div>
+      {error && <p className="login-error" role="alert">{error}</p>}
+    </>
+  )
+}
+
 export function Settings({ state, send, theme, onTheme, onClose, initial = 'perfil' }: Props) {
   const [section, setSection] = useState<Section>(initial)
   const [editUser, setEditUser] = useState<string | 'new' | null>(null)
@@ -231,7 +356,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
   }, [onClose])
 
   const go = (s: Section) => { setSection(s); setEditUser(null); setEditBot(null); setConfirm(null) }
-  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Modelo de IA'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
+  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Modelo de IA'] as [Section, string]] : []), ['avisos', 'Avisos y app'], ...(admin ? [['copias', 'Copias'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
   const botBeingEdited = editBot && editBot !== 'new' ? state.bots.find(b => b.id === editBot) ?? null : null
 
@@ -328,6 +453,8 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
           ))}
 
           {section === 'modelo' && <ModelSection state={state} send={send} />}
+          {section === 'avisos' && <AlertsSection />}
+          {section === 'copias' && <BackupSection state={state} send={send} />}
 
           {section === 'apariencia' && (
             <>

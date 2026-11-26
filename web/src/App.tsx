@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { ClientCommand, ServerEvent } from '../shared/protocol'
 import { AppsModal } from './components/AppsModal'
 import { Chat } from './components/Chat'
+import { History } from './components/History'
 import { Avatar } from './components/Avatar'
-import { IconApps, IconGear, IconLogout, IconMoon, IconPanel, IconSun } from './components/icons'
+import { IconApps, IconGear, IconHistory, IconLogout, IconMoon, IconNewChat, IconPanel, IconSun } from './components/icons'
 import { Login } from './components/Login'
 import { Palette, type PaletteAction } from './components/Palette'
 import { RightPanel } from './components/RightPanel'
@@ -12,7 +13,8 @@ import { Settings } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
 import { type Connection, connectLive } from './lib/connection'
 import { connectDemo, DEMO_USERS } from './lib/demo'
-import { reduce } from './lib/store'
+import { notifyFor } from './lib/notify'
+import { type ClientState, reduce } from './lib/store'
 
 declare const __DEMO__: boolean
 
@@ -51,6 +53,7 @@ export function App() {
   const [mobileChat, setMobileChat] = useState(false)
   const [appsOpen, setAppsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [settings, setSettings] = useState<null | 'perfil' | 'usuarios' | 'bots'>(null)
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
   const [prefill, setPrefill] = useState<{ botId: string; text: string; n: number } | null>(null)
@@ -59,6 +62,9 @@ export function App() {
     try { return JSON.parse(store.get('hb-seen') ?? '{}') as Record<string, number> } catch { return {} }
   })
   const conn = useRef<Connection | null>(null)
+  const latest = useRef<ClientState | null>(null)
+
+  latest.current = state
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -73,7 +79,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const onEvent = (ev: ServerEvent) => dispatch(ev)
+    const onEvent = (ev: ServerEvent) => {
+      notifyFor(ev, latest.current)
+      dispatch(ev)
+    }
 
     if (__DEMO__ && demoUser) {
       conn.current = connectDemo(demoUser, onEvent)
@@ -198,9 +207,11 @@ export function App() {
   }
   const actions: PaletteAction[] = [
     ...state.bots.map(b => ({ id: `bot-${b.id}`, label: `Hablar con ${b.name}`, hint: b.role, icon: <Avatar name={b.name} color={b.color} size={22} />, run: () => select(b.id) })),
+    { id: 'new-chat', label: `Empezar una conversación nueva con ${bot.name}`, hint: 'La actual se guarda en el historial', icon: <IconNewChat width={17} height={17} />, run: () => send({ t: 'chat.new', botId: bot.id }) },
+    { id: 'history', label: 'Conversaciones anteriores', hint: bot.name, icon: <IconHistory width={17} height={17} />, run: () => setHistoryOpen(true) },
     { id: 'theme', label: theme === 'dark' ? 'Pasar a modo claro' : 'Pasar a modo oscuro', icon: theme === 'dark' ? <IconSun width={17} height={17} /> : <IconMoon width={17} height={17} />, run: toggleTheme },
     { id: 'panel', label: panelOpen ? 'Cerrar el panel de detalles' : 'Abrir el panel de detalles', hint: 'Actividad, rutinas y biblioteca', icon: <IconPanel width={17} height={17} />, run: togglePanel },
-    { id: 'settings', label: 'Ajustes', hint: 'Perfil, usuarios y bots', icon: <IconGear width={17} height={17} />, run: () => setSettings('perfil') },
+    { id: 'settings', label: 'Ajustes', hint: 'Perfil, usuarios, bots, modelo, avisos y copias', icon: <IconGear width={17} height={17} />, run: () => setSettings('perfil') },
     { id: 'apps', label: 'Conectar aplicaciones', hint: 'WhatsApp, Telegram, Notion…', icon: <IconApps width={17} height={17} />, run: () => setAppsOpen(true) },
     { id: 'logout', label: 'Cerrar sesión', icon: <IconLogout width={17} height={17} />, run: () => void logout() }
   ]
@@ -226,6 +237,7 @@ export function App() {
         send={send}
         onTogglePanel={togglePanel}
         onBack={() => setMobileChat(false)}
+        onOpenHistory={() => setHistoryOpen(true)}
         prefill={prefill?.botId === bot.id ? prefill : null}
       />
       {panelOpen && (
@@ -239,6 +251,7 @@ export function App() {
       )}
       {appsOpen && <AppsModal onClose={() => setAppsOpen(false)} onAsk={text => { setAppsOpen(false); ask(state.bots[0]!.id, text) }} />}
       {settings && <Settings state={state} send={send} theme={theme} onTheme={setTheme} onClose={() => setSettings(null)} initial={settings} />}
+      {historyOpen && <History state={state} bot={bot} send={send} onClose={() => setHistoryOpen(false)} />}
       {toast && <div className={`toast${toast.error ? ' error' : ''}`} role="status">{toast.text}</div>}
       {paletteOpen && <Palette actions={actions} onClose={() => setPaletteOpen(false)} />}
     </div>

@@ -5,7 +5,7 @@ import type { Bot, ClientCommand, Upload } from '../../shared/protocol'
 import { dayLabel, fileSize } from '../lib/format'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
-import { IconBack, IconClock, IconDown, IconFile, IconImage, IconMic, IconPlus, IconSend, IconStop, IconX } from './icons'
+import { IconBack, IconClock, IconDown, IconFile, IconHistory, IconImage, IconMic, IconNewChat, IconPlus, IconSend, IconStop, IconX } from './icons'
 import { Message } from './Message'
 import { RequestCard } from './RequestCard'
 
@@ -15,6 +15,7 @@ interface Props {
   send: (cmd: ClientCommand) => void
   onTogglePanel: () => void
   onBack: () => void
+  onOpenHistory: () => void
   /** Texto que otra parte de la app quiere dejar escrito en la caja (ideas, rutinas…). */
   prefill: { text: string; n: number } | null
 }
@@ -61,7 +62,7 @@ function speechRecognition(): (new () => Recognition) | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as (new () => Recognition) | null
 }
 
-export function Chat({ state, bot, send, onTogglePanel, onBack, prefill }: Props) {
+export function Chat({ state, bot, send, onTogglePanel, onBack, onOpenHistory, prefill }: Props) {
   const [draft, setDraft] = useState('')
   const [uploads, setUploads] = useState<(Upload & { id: string })[]>([])
   const [hint, setHint] = useState('')
@@ -240,6 +241,8 @@ export function Chat({ state, bot, send, onTogglePanel, onBack, prefill }: Props
           {state.hermes === 'demo' && <span className="conn-chip demo">Vista previa</span>}
           {state.hermes === 'connecting' && <span className="conn-chip" title={state.hermesDetail}>Conectando con Hermes…</span>}
           {state.hermes === 'offline' && <span className="conn-chip" title={state.hermesDetail}>Hermes no responde</span>}
+          <button className="round-btn" onClick={onOpenHistory} aria-label="Conversaciones anteriores" title="Conversaciones anteriores"><IconHistory width={17} height={17} /></button>
+          <button className="round-btn" onClick={() => send({ t: 'chat.new', botId: bot.id })} aria-label="Empezar una conversación nueva" title="Conversación nueva"><IconNewChat width={17} height={17} /></button>
         </span>
       </div>
 
