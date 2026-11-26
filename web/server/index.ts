@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 
 import type { ClientCommand } from '../shared/protocol.ts'
-import { accountFromRequest, checkLogin, clearCookie, sessionCookie, tooManyAttempts } from './auth.ts'
+import { accountFromRequest, checkLogin, clearCookie, createUser, hasUsers, sessionCookie, tooManyAttempts } from './auth.ts'
 import { config } from './config.ts'
 import { Room } from './room.ts'
 
@@ -33,7 +33,7 @@ function readBody(req: IncomingMessage): Promise<any> {
     req.on('data', chunk => {
       raw += chunk
 
-      if (raw.length > 10_000) { req.destroy() }
+      if (raw.length > 200_000) { req.destroy() }
     })
     req.on('end', () => {
       try { done(JSON.parse(raw)) } catch { done({}) }
@@ -97,7 +97,7 @@ const server = createServer(async (req, res) => {
     if (path === '/api/me') {
       const acc = accountFromRequest(req)
 
-      return acc ? json(res, 200, { id: acc.id, name: acc.name }) : json(res, 401, { error: 'no_session' })
+      return acc ? json(res, 200, { id: acc.id, name: acc.name }) : json(res, 401, { error: 'no_session', setup: !hasUsers() })
     }
 
     if (path === '/api/login' && req.method === 'POST') {
@@ -108,6 +108,17 @@ const server = createServer(async (req, res) => {
       const acc = checkLogin(String(body.username ?? ''), String(body.password ?? ''))
 
       return acc ? json(res, 200, { ok: true }, { 'set-cookie': sessionCookie(acc) }) : json(res, 401, { error: 'bad_login' })
+    }
+
+    // Estreno: mientras no exista ninguna cuenta, quien abre la web crea la del administrador.
+    if (path === '/api/setup' && req.method === 'POST') {
+      if (!sameOrigin(req)) { return json(res, 403, { error: 'origin' }) }
+      if (hasUsers()) { return json(res, 409, { error: 'Ya hay una cuenta creada. Entra con tu usuario.' }) }
+
+      const body = await readBody(req)
+      const made = createUser({ username: String(body.username ?? ''), name: String(body.name ?? ''), password: String(body.password ?? ''), admin: true })
+
+      return made.user ? json(res, 200, { ok: true }, { 'set-cookie': sessionCookie(made.user) }) : json(res, 400, { error: made.error })
     }
 
     if (path === '/api/logout' && req.method === 'POST') {
@@ -147,7 +158,7 @@ server.on('upgrade', (req, socket, head) => {
 
     const viewer = room.join(account, ev => {
       if (ws.readyState === ws.OPEN) { ws.send(JSON.stringify(ev)) }
-    })
+    }, () => ws.close(4401, 'no_session'))
     let alive = true
     const beat = setInterval(() => {
       if (!alive) { return void ws.terminate() }
@@ -178,12 +189,8 @@ server.on('upgrade', (req, socket, head) => {
   })
 })
 
-if (config.accounts.length === 0) {
-  console.warn('[config] No hay socios configurados (SOCIO1_USUARIO / SOCIO1_CLAVE…): nadie podrá entrar.')
-}
-
 const ready = () => {
-  console.log(`[web] hermesBot escuchando en el puerto ${config.port} con ${config.accounts.length} socio(s)`)
+  console.log(`[web] hermesBot escuchando en el puerto ${config.port}. ${hasUsers() ? 'Cuentas creadas.' : 'Sin cuentas todavía: la primera persona que entre crea la del administrador.'}`)
   room.start()
 }
 

@@ -4,10 +4,11 @@ import type { ClientCommand, ServerEvent } from '../shared/protocol'
 import { AppsModal } from './components/AppsModal'
 import { Chat } from './components/Chat'
 import { Avatar } from './components/Avatar'
-import { IconApps, IconLogout, IconMoon, IconPanel, IconSun } from './components/icons'
+import { IconApps, IconGear, IconLogout, IconMoon, IconPanel, IconSun } from './components/icons'
 import { Login } from './components/Login'
 import { Palette, type PaletteAction } from './components/Palette'
 import { RightPanel } from './components/RightPanel'
+import { Settings } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
 import { type Connection, connectLive } from './lib/connection'
 import { connectDemo, DEMO_USERS } from './lib/demo'
@@ -42,7 +43,7 @@ function initialTheme(): Theme {
 
 export function App() {
   const [theme, setTheme] = useState<Theme>(initialTheme)
-  const [auth, setAuth] = useState<'checking' | 'out' | 'in'>(__DEMO__ ? 'out' : 'checking')
+  const [auth, setAuth] = useState<'checking' | 'out' | 'setup' | 'in'>(__DEMO__ ? 'out' : 'checking')
   const [demoUser, setDemoUser] = useState<string | null>(null)
   const [state, dispatch] = useReducer(reduce, null)
   const [activeId, setActiveId] = useState<string>(() => store.get('hb-bot') ?? 'chief-of-staff')
@@ -50,6 +51,8 @@ export function App() {
   const [mobileChat, setMobileChat] = useState(false)
   const [appsOpen, setAppsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [settings, setSettings] = useState<null | 'perfil' | 'usuarios' | 'bots'>(null)
+  const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
   const [prefill, setPrefill] = useState<{ botId: string; text: string; n: number } | null>(null)
   // Hasta qué momento ha leído este socio cada chat (para los avisos de mensajes nuevos).
   const [seen, setSeen] = useState<Record<string, number>>(() => {
@@ -64,7 +67,9 @@ export function App() {
 
   useEffect(() => {
     if (__DEMO__) { return }
-    fetch('/api/me').then(r => setAuth(r.ok ? 'in' : 'out')).catch(() => setAuth('out'))
+    fetch('/api/me')
+      .then(async r => setAuth(r.ok ? 'in' : (await r.json().catch(() => ({}))).setup ? 'setup' : 'out'))
+      .catch(() => setAuth('out'))
   }, [])
 
   useEffect(() => {
@@ -133,6 +138,18 @@ export function App() {
     document.title = totalUnread ? `(${totalUnread}) hermesBot` : 'hermesBot'
   }, [totalUnread])
 
+  const lastToast = state?.toast
+
+  useEffect(() => {
+    if (!lastToast) { return }
+
+    setToast(lastToast)
+
+    const t = window.setTimeout(() => setToast(null), 3200)
+
+    return () => window.clearTimeout(t)
+  }, [lastToast])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -162,8 +179,8 @@ export function App() {
     return <Login demoUsers={DEMO_USERS} onDemoPick={setDemoUser} />
   }
 
-  if (!__DEMO__ && auth === 'out') {
-    return <Login onLoggedIn={() => setAuth('in')} />
+  if (!__DEMO__ && (auth === 'out' || auth === 'setup')) {
+    return <Login setup={auth === 'setup'} onLoggedIn={() => setAuth('in')} />
   }
 
   if (!state) {
@@ -183,6 +200,7 @@ export function App() {
     ...state.bots.map(b => ({ id: `bot-${b.id}`, label: `Hablar con ${b.name}`, hint: b.role, icon: <Avatar name={b.name} color={b.color} size={22} />, run: () => select(b.id) })),
     { id: 'theme', label: theme === 'dark' ? 'Pasar a modo claro' : 'Pasar a modo oscuro', icon: theme === 'dark' ? <IconSun width={17} height={17} /> : <IconMoon width={17} height={17} />, run: toggleTheme },
     { id: 'panel', label: panelOpen ? 'Cerrar el panel de detalles' : 'Abrir el panel de detalles', hint: 'Actividad, rutinas y biblioteca', icon: <IconPanel width={17} height={17} />, run: togglePanel },
+    { id: 'settings', label: 'Ajustes', hint: 'Perfil, usuarios y bots', icon: <IconGear width={17} height={17} />, run: () => setSettings('perfil') },
     { id: 'apps', label: 'Conectar aplicaciones', hint: 'WhatsApp, Telegram, Notion…', icon: <IconApps width={17} height={17} />, run: () => setAppsOpen(true) },
     { id: 'logout', label: 'Cerrar sesión', icon: <IconLogout width={17} height={17} />, run: () => void logout() }
   ]
@@ -199,6 +217,7 @@ export function App() {
         onLogout={() => void logout()}
         onOpenApps={() => setAppsOpen(true)}
         onOpenPalette={() => setPaletteOpen(true)}
+        onOpenSettings={() => setSettings('perfil')}
       />
       <Chat
         key={`${bot.id}-${mobileChat ? 'm' : 'd'}`}
@@ -219,6 +238,8 @@ export function App() {
         />
       )}
       {appsOpen && <AppsModal onClose={() => setAppsOpen(false)} onAsk={text => { setAppsOpen(false); ask(state.bots[0]!.id, text) }} />}
+      {settings && <Settings state={state} send={send} theme={theme} onTheme={setTheme} onClose={() => setSettings(null)} initial={settings} />}
+      {toast && <div className={`toast${toast.error ? ' error' : ''}`} role="status">{toast.text}</div>}
       {paletteOpen && <Palette actions={actions} onClose={() => setPaletteOpen(false)} />}
     </div>
   )

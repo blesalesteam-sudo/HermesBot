@@ -6,8 +6,9 @@ usuario, ven el mismo chat en vivo y hablan con el mismo "cerebro": una instalac
 
 ## Qué hace
 
-- Acceso privado para dos socios, cada uno con su nombre y su foto.
-- Varios bots (Hermes, Chief of Staff, Setter, Contenido y Operaciones) que comparten cerebro.
+- Acceso privado con usuario y contraseña. Los usuarios se crean y editan dentro de la app, en **Ajustes** (nombre, foto, contraseña y quién es administrador).
+- Los bots también se crean y editan en Ajustes: nombre, color y cómo debe comportarse cada uno.
+- Varios bots de fábrica (Hermes, Chief of Staff, Setter, Contenido y Operaciones) que comparten cerebro.
 - Chat compartido en directo: ves cuándo escribe tu socio y qué está haciendo el bot.
 - Cada mensaje lleva su autor, y Hermes sabe siempre quién le habla.
 - Tarjetas de **Permitir / Denegar** cuando el bot quiere hacer algo delicado.
@@ -35,7 +36,7 @@ Son dos piezas que se despliegan en [Railway](https://railway.com) desde este mi
    - Un disco montado en `/data`.
    - Las variables de la sección "hermesbot-web" de [`.env.example`](.env.example). `HERMES_INTERNAL_TOKEN` tiene que ser la misma que en hermes-core.
    - En *Settings → Networking*, pulsa **Generate Domain**. Esa es la dirección que abrirán los socios.
-4. Abre la dirección, entra con el usuario y la contraseña de cada socio y escribe al bot.
+4. Abre la dirección. La primera vez te pide crear la cuenta de administrador; hazlo nada más desplegar, porque quien llega primero se queda esa cuenta. Después añade al resto del equipo desde **Ajustes → Usuarios**.
 
 Si el chat dice "Conectando con Hermes…" durante más de un minuto, revisa que la clave interna
 coincide en los dos servicios y que `HERMES_CORE_URL` es `ws://hermes-core.railway.internal:8080/gateway`.

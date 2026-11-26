@@ -3,6 +3,8 @@ import type { ChatMessage, ServerEvent, Snapshot } from '../../shared/protocol'
 export interface ClientState extends Snapshot {
   /** botId → ids de socios escribiendo ahora mismo. */
   typing: Record<string, string[]>
+  /** Aviso breve tras guardar algo en Ajustes. */
+  toast?: { text: string; error?: boolean; n: number }
 }
 
 export function initialState(snapshot: Snapshot): ClientState {
@@ -70,6 +72,15 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
 
     case 'req.done':
       return { ...state, requests: state.requests.filter(r => r.id !== ev.id) }
+
+    case 'users':
+      return { ...state, users: ev.users, me: ev.users.find(u => u.id === state.me.id) ?? state.me }
+
+    case 'bots':
+      return { ...state, bots: ev.bots }
+
+    case 'toast':
+      return { ...state, toast: { text: ev.text, error: ev.error, n: Date.now() } }
 
     case 'routines':
       return { ...state, routines: ev.routines }

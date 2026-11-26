@@ -7,8 +7,9 @@ import type {
   ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ClientCommand, HermesState, PendingRequest, Routine, ServerEvent,
   Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
-import { type Account, config } from './config.ts'
-import { persist, saved } from './store.ts'
+import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
+import { config } from './config.ts'
+import { persist, saved, type StoredUser } from './store.ts'
 import { GatewayClient } from './vendor/hermes-shared/node/gateway-client.ts'
 
 type Send = (ev: ServerEvent) => void
@@ -16,6 +17,7 @@ type Send = (ev: ServerEvent) => void
 interface Viewer {
   user: User
   send: Send
+  close: () => void
 }
 
 interface HermesEvent {
@@ -92,7 +94,6 @@ export function humanSchedule(raw: string): string {
   return s
 }
 
-const publicUser = (a: Account): User => ({ id: a.id, name: a.name, avatar: a.avatar, color: a.color })
 
 export class Room {
   private viewers = new Set<Viewer>()
@@ -108,8 +109,11 @@ export class Room {
   private lastSegment = new Map<string, number>()
   private gw: GatewayClient | null = null
   private routines: Routine[] = []
-  private readonly users: User[] = config.accounts.map(publicUser)
-  private readonly bots: Bot[] = config.bots
+  private bots: Bot[] = saved.bots ?? config.bots
+
+  private get users(): User[] {
+    return publicUsers()
+  }
 
   constructor() {
     for (const bot of this.bots) {
@@ -124,8 +128,8 @@ export class Room {
 
   // ───────────── Navegadores ─────────────
 
-  join(account: Account, send: Send): Viewer {
-    const viewer: Viewer = { user: publicUser(account), send }
+  join(account: StoredUser, send: Send, close: () => void): Viewer {
+    const viewer: Viewer = { user: publicUser(account), send, close }
 
     this.viewers.add(viewer)
     send({ t: 'hello', snapshot: this.snapshot(viewer.user) })
@@ -152,7 +156,7 @@ export class Room {
     return {
       me,
       users: this.users,
-      bots: this.bots.map(({ persona: _persona, ...bot }) => bot),
+      bots: this.bots,
       messages: saved.messages,
       status: this.status,
       requests: [...this.requests.values()],
@@ -226,9 +230,154 @@ export class Room {
         return this.answer(cmd.reqId, viewer.user, { choice: cmd.choice })
       case 'clarify':
         return this.answer(cmd.reqId, viewer.user, { answer: cmd.answer ?? '' })
+      case 'user.save':
+        return this.saveUser(viewer, cmd)
+      case 'user.delete':
+        return this.removeUser(viewer, String(cmd.id))
+      case 'bot.save':
+        return this.saveBot(viewer, cmd)
+      case 'bot.delete':
+        return this.removeBot(viewer, String(cmd.id))
       default:
         return
     }
+  }
+
+  // ───────────── Ajustes: usuarios y bots ─────────────
+
+  private isAdmin(viewer: Viewer): boolean {
+    return !!findUser(viewer.user.id)?.admin
+  }
+
+  private usersChanged() {
+    for (const v of this.viewers) {
+      const fresh = findUser(v.user.id)
+
+      if (fresh) { v.user = publicUser(fresh) }
+    }
+
+    this.broadcast({ t: 'users', users: this.users })
+  }
+
+  private saveUser(viewer: Viewer, cmd: Extract<ClientCommand, { t: 'user.save' }>) {
+    const admin = this.isAdmin(viewer)
+    const self = cmd.id === viewer.user.id
+
+    if (!admin && !self) {
+      return viewer.send({ t: 'toast', text: 'Solo un administrador puede gestionar usuarios.', error: true })
+    }
+
+    const input = {
+      username: typeof cmd.username === 'string' ? cmd.username : undefined,
+      name: typeof cmd.name === 'string' ? cmd.name : undefined,
+      avatar: cmd.avatar === null || typeof cmd.avatar === 'string' ? cmd.avatar : undefined,
+      password: typeof cmd.password === 'string' && cmd.password ? cmd.password : undefined,
+      // Nadie se da permisos a sí mismo: el papel de administrador solo lo cambia un administrador.
+      admin: admin && typeof cmd.admin === 'boolean' ? cmd.admin : undefined
+    }
+    const result = cmd.id ? updateUser(String(cmd.id), input) : createUser(input)
+
+    if (result.error) {
+      return viewer.send({ t: 'toast', text: result.error, error: true })
+    }
+
+    if (cmd.id && input.password) {
+      // Con contraseña nueva, los demás dispositivos de esa cuenta tienen que volver a entrar.
+      for (const v of [...this.viewers]) {
+        if (v.user.id === cmd.id && v !== viewer) { v.close() }
+      }
+    }
+
+    this.usersChanged()
+    viewer.send({ t: 'toast', text: cmd.id ? 'Cambios guardados.' : `Cuenta de ${result.user!.name} creada.` })
+  }
+
+  private removeUser(viewer: Viewer, id: string) {
+    if (!this.isAdmin(viewer)) {
+      return viewer.send({ t: 'toast', text: 'Solo un administrador puede borrar usuarios.', error: true })
+    }
+
+    if (id === viewer.user.id) {
+      return viewer.send({ t: 'toast', text: 'No puedes borrar tu propia cuenta.', error: true })
+    }
+
+    const error = deleteUser(id)
+
+    if (error) {
+      return viewer.send({ t: 'toast', text: error, error: true })
+    }
+
+    for (const v of [...this.viewers]) {
+      if (v.user.id === id) { v.close() }
+    }
+
+    this.usersChanged()
+    viewer.send({ t: 'toast', text: 'Cuenta borrada.' })
+  }
+
+  private saveBot(viewer: Viewer, cmd: Extract<ClientCommand, { t: 'bot.save' }>) {
+    if (!this.isAdmin(viewer)) {
+      return viewer.send({ t: 'toast', text: 'Solo un administrador puede gestionar los bots.', error: true })
+    }
+
+    const name = String(cmd.name ?? '').trim().slice(0, 40)
+
+    if (!name) {
+      return viewer.send({ t: 'toast', text: 'El bot necesita un nombre.', error: true })
+    }
+
+    const data = {
+      name,
+      role: String(cmd.role ?? '').trim().slice(0, 80),
+      color: /^#[0-9a-fA-F]{6}$/.test(String(cmd.color)) ? String(cmd.color) : '#6d5bd0',
+      persona: String(cmd.persona ?? '').trim().slice(0, 2000) || undefined
+    }
+    const existing = cmd.id ? this.bot(String(cmd.id)) : undefined
+
+    if (cmd.id && !existing) {
+      return viewer.send({ t: 'toast', text: 'Ese bot ya no existe.', error: true })
+    }
+
+    if (existing) {
+      this.bots = this.bots.map(b => (b.id === existing.id ? { ...b, ...data } : b))
+    } else {
+      const id = `bot-${randomUUID().slice(0, 8)}`
+
+      this.bots = [...this.bots, { id, ...data }]
+      saved.messages[id] = []
+      this.status[id] = { state: 'idle' }
+    }
+
+    saved.bots = this.bots
+    persist()
+    this.broadcast({ t: 'bots', bots: this.bots })
+    viewer.send({ t: 'toast', text: existing ? 'Cambios guardados.' : `${name} ya está en el equipo.` })
+  }
+
+  private removeBot(viewer: Viewer, id: string) {
+    if (!this.isAdmin(viewer)) {
+      return viewer.send({ t: 'toast', text: 'Solo un administrador puede gestionar los bots.', error: true })
+    }
+
+    if (!this.bot(id) || this.bots.length === 1) {
+      return viewer.send({ t: 'toast', text: 'Tiene que quedar al menos un bot.', error: true })
+    }
+
+    this.bots = this.bots.filter(b => b.id !== id)
+    saved.bots = this.bots
+
+    // Se olvida su conversación en esta web; la memoria común de Hermes no se toca.
+    const sid = saved.sessions[id]
+
+    if (sid) { this.sessionToBot.delete(sid) }
+    delete saved.sessions[id]
+    delete saved.messages[id]
+    delete saved.lastActive[id]
+    delete this.status[id]
+    this.attaching.delete(id)
+    persist()
+    this.broadcast({ t: 'bots', bots: this.bots })
+    viewer.send({ t: 'toast', text: 'Bot borrado.' })
   }
 
   private bot(id: string): Bot | undefined {
@@ -423,7 +572,7 @@ export class Room {
 
       // Hermes recibe siempre quién habla (texto para el modelo), pero el mensaje guardado queda limpio.
       const persona = firstTurn && bot.persona
-        ? `[Contexto del equipo: ${bot.persona} En este chat te escriben dos socios, ${this.users.map(u => u.name).join(' y ')}; cada mensaje indica quién lo escribe.]\n\n`
+        ? `[Contexto del equipo: ${bot.persona} En este chat te escriben varias personas del equipo (${this.users.map(u => u.name).join(', ')}); cada mensaje indica quién lo escribe.]\n\n`
         : ''
       const body = [text || 'Mira lo que te adjunto.', ...refs].join('\n')
 

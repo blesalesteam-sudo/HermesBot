@@ -8,6 +8,10 @@ export interface User {
   /** Foto (URL). Si no hay, se pintan las iniciales sobre `color`. */
   avatar?: string
   color: string
+  /** Nombre con el que entra (para Ajustes). */
+  username?: string
+  /** Puede crear y editar usuarios y bots. */
+  admin?: boolean
 }
 
 export interface Bot {
@@ -118,6 +122,9 @@ export type ServerEvent =
   | { t: 'req.done'; id: string }
   | { t: 'hermes'; state: HermesState; detail?: string }
   | { t: 'routines'; routines: Routine[] }
+  | { t: 'users'; users: User[] }
+  | { t: 'bots'; bots: Bot[] }
+  | { t: 'toast'; text: string; error?: boolean }
 
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 
@@ -129,3 +136,8 @@ export type ClientCommand =
   | { t: 'clarify'; reqId: string; answer: string | null }
   | { t: 'secret'; reqId: string; value: string | null }
   | { t: 'stop'; botId: string }
+  // Ajustes. Sin `id` se crea; con `id` se edita. Solo un administrador toca a otros usuarios y a los bots.
+  | { t: 'user.save'; id?: string; username?: string; name?: string; avatar?: string | null; password?: string; admin?: boolean }
+  | { t: 'user.delete'; id: string }
+  | { t: 'bot.save'; id?: string; name: string; role: string; color: string; persona?: string }
+  | { t: 'bot.delete'; id: string }

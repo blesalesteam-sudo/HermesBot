@@ -7,8 +7,8 @@ import type {
 import type { Connection } from './connection'
 
 export const DEMO_USERS: User[] = [
-  { id: 'socio-1', name: 'Alex', color: '#8d69ce' },
-  { id: 'socio-2', name: 'Sam', color: '#0EA5C6' }
+  { id: 'socio-1', name: 'Alex', color: '#8d69ce', username: 'alex', admin: true },
+  { id: 'socio-2', name: 'Sam', color: '#0EA5C6', username: 'sam', admin: true }
 ]
 
 const min = 60_000
@@ -83,6 +83,8 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
   const messages = seed()
   const waiting = new Map<string, (answer: string) => void>()
   let toolset = 0
+  let users: User[] = DEMO_USERS.map(u => ({ ...u }))
+  let bots = DEFAULT_BOTS.map(b => ({ ...b }))
   const routines: Routine[] = [
     { id: 'r1', name: 'Prioridades del día', when: 'De lunes a viernes a las 9:00', what: 'Resumen de prioridades del día', enabled: true },
     { id: 'r2', name: 'Repaso de acuerdos', when: 'Cada viernes a las 17:00', what: 'Repaso de acuerdos de la semana', enabled: true },
@@ -262,6 +264,43 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
             attachments: cmd.uploads?.map(u => ({ id: uid('f'), name: u.name, kind: u.type.startsWith('image/') ? 'image' as const : 'file' as const, size: u.size, preview: u.preview }))
           })
           void reply(cmd.botId, cmd.text, cmd.uploads)
+          break
+        case 'user.save': {
+          const { t: _t, id, password: _password, avatar, ...rest } = cmd
+          const patch = { ...rest, ...(avatar !== undefined ? { avatar: avatar ?? undefined } : {}) }
+
+          users = id
+            ? users.map(u => (u.id === id ? { ...u, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) } : u))
+            : [...users, { id: uid('u'), name: cmd.name ?? 'Nuevo', username: cmd.username, color: '#D84F8B', avatar: avatar ?? undefined, admin: !!cmd.admin }]
+          emit({ t: 'users', users })
+          emit({ t: 'toast', text: id ? 'Cambios guardados.' : `Cuenta de ${cmd.name} creada.` })
+          break
+        }
+        case 'user.delete':
+          users = users.filter(u => u.id !== cmd.id)
+          emit({ t: 'users', users })
+          emit({ t: 'toast', text: 'Cuenta borrada.' })
+          break
+        case 'bot.save': {
+          const { t: _t, id, ...data } = cmd
+
+          if (id) {
+            bots = bots.map(b => (b.id === id ? { ...b, ...data } : b))
+          } else {
+            const fresh = { id: uid('bot'), ...data }
+
+            bots = [...bots, fresh]
+            messages[fresh.id] = []
+          }
+
+          emit({ t: 'bots', bots })
+          emit({ t: 'toast', text: id ? 'Cambios guardados.' : `${cmd.name} ya está en el equipo.` })
+          break
+        }
+        case 'bot.delete':
+          bots = bots.filter(b => b.id !== cmd.id)
+          emit({ t: 'bots', bots })
+          emit({ t: 'toast', text: 'Bot borrado.' })
           break
         case 'routine': {
           const i = routines.findIndex(r => r.id === cmd.id)

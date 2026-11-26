@@ -7,9 +7,12 @@ interface Props {
   demoUsers?: User[]
   onDemoPick?: (id: string) => void
   onLoggedIn?: () => void
+  /** Estreno: todavía no hay ninguna cuenta y se crea la del administrador. */
+  setup?: boolean
 }
 
-export function Login({ demoUsers, onDemoPick, onLoggedIn }: Props) {
+export function Login({ demoUsers, onDemoPick, onLoggedIn, setup }: Props) {
+  const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -20,14 +23,16 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn }: Props) {
     setError('')
 
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch(setup ? '/api/setup' : '/api/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, name })
       })
 
       if (!res.ok) {
-        setError(res.status === 429 ? 'Demasiados intentos. Espera un minuto.' : 'Usuario o contraseña incorrectos.')
+        const detail = setup ? ((await res.json().catch(() => ({}))) as { error?: string }).error : ''
+
+        setError(res.status === 429 ? 'Demasiados intentos. Espera un minuto.' : detail || 'Usuario o contraseña incorrectos.')
 
         return
       }
@@ -58,14 +63,16 @@ export function Login({ demoUsers, onDemoPick, onLoggedIn }: Props) {
                 </button>
               ))}
             </div>
-            <p className="login-foot">Datos de prueba. En la versión real cada socio entra con su usuario y contraseña.</p>
+            <p className="login-foot">Datos de prueba. En la versión real cada persona entra con su usuario y contraseña, y las cuentas se crean en Ajustes.</p>
           </>
         ) : (
           <form className="login-form" onSubmit={e => { e.preventDefault(); void submit() }}>
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Usuario" autoComplete="username" autoFocus aria-label="Usuario" />
-            <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Contraseña" type="password" autoComplete="current-password" aria-label="Contraseña" />
+            {setup && <p className="login-label">Estrena hermesBot: crea tu cuenta de administrador. Después podrás añadir al resto del equipo desde Ajustes.</p>}
+            {setup && <input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" autoFocus aria-label="Tu nombre" maxLength={40} />}
+            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Usuario" autoComplete="username" autoFocus={!setup} aria-label="Usuario" />
+            <input value={password} onChange={e => setPassword(e.target.value)} placeholder={setup ? 'Contraseña (mínimo 6 caracteres)' : 'Contraseña'} type="password" autoComplete={setup ? 'new-password' : 'current-password'} aria-label="Contraseña" />
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="btn btn-primary wide" disabled={busy || !username || !password}>{busy ? 'Entrando…' : 'Entrar'}</button>
+            <button className="btn btn-primary wide" disabled={busy || !username || !password || (setup && !name.trim())}>{busy ? 'Entrando…' : setup ? 'Crear cuenta y entrar' : 'Entrar'}</button>
           </form>
         )}
       </div>

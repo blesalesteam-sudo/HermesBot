@@ -4,7 +4,7 @@ import type { User } from '../../shared/protocol'
 import { shortWhen } from '../lib/format'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
-import { IconApps, IconLogout, IconMoon, IconSearch, IconSpark, IconSun } from './icons'
+import { IconApps, IconGear, IconLogout, IconMoon, IconSearch, IconSpark, IconSun } from './icons'
 
 interface Props {
   state: ClientState
@@ -16,6 +16,7 @@ interface Props {
   onLogout: () => void
   onOpenApps: () => void
   onOpenPalette: () => void
+  onOpenSettings: () => void
 }
 
 const clean = (text: string) => text.replace(/[*_>`#|]/g, '').replace(/\s+/g, ' ').trim()
@@ -47,7 +48,7 @@ function preview(state: ClientState, botId: string, users: User[]): string {
   return plain
 }
 
-export function Sidebar({ state, activeId, unread, onSelect, theme, onToggleTheme, onLogout, onOpenApps, onOpenPalette }: Props) {
+export function Sidebar({ state, activeId, unread, onSelect, theme, onToggleTheme, onLogout, onOpenApps, onOpenPalette, onOpenSettings }: Props) {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [menu, setMenu] = useState(false)
@@ -173,6 +174,7 @@ export function Sidebar({ state, activeId, unread, onSelect, theme, onToggleThem
           </button>
           {menu && (
             <div className="menu up" role="menu" onMouseLeave={() => setMenu(false)}>
+              <button role="menuitem" onClick={() => { onOpenSettings(); setMenu(false) }}><IconGear width={16} height={16} /> Ajustes</button>
               <button role="menuitem" onClick={() => { onToggleTheme(); setMenu(false) }}>
                 {theme === 'dark' ? <IconSun width={16} height={16} /> : <IconMoon width={16} height={16} />}
                 {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}

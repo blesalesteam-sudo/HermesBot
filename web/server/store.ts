@@ -4,10 +4,23 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { ChatMessage } from '../shared/protocol.ts'
+import type { Bot, ChatMessage, User } from '../shared/protocol.ts'
 import { config } from './config.ts'
 
+/** Cuenta guardada: los datos visibles y la huella de la contraseña (nunca la contraseña). */
+export interface StoredUser extends User {
+  username: string
+  admin: boolean
+  salt: string
+  hash: string
+  /** Sube al cambiar la contraseña, para cerrar las sesiones antiguas. */
+  ver: number
+}
+
 interface Saved {
+  users: StoredUser[]
+  /** Bots creados o editados desde Ajustes. Si no hay, se usan los de fábrica. */
+  bots?: Bot[]
   sessions: Record<string, string>
   messages: Record<string, ChatMessage[]>
   lastActive: Record<string, number>
@@ -20,9 +33,9 @@ function load(): Saved {
   try {
     const data = JSON.parse(readFileSync(file, 'utf8')) as Partial<Saved>
 
-    return { sessions: data.sessions ?? {}, messages: data.messages ?? {}, lastActive: data.lastActive ?? {} }
+    return { users: data.users ?? [], bots: data.bots, sessions: data.sessions ?? {}, messages: data.messages ?? {}, lastActive: data.lastActive ?? {} }
   } catch {
-    return { sessions: {}, messages: {}, lastActive: {} }
+    return { users: [], sessions: {}, messages: {}, lastActive: {} }
   }
 }
 

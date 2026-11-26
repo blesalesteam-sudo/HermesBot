@@ -96,3 +96,6 @@ export const IconSpark = (p: SVGProps<SVGSVGElement>) => (
 export const IconDown = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M12 5v14M5 12l7 7 7-7" /></svg>
 )
+export const IconGear = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-1.8-3.2-2.2.8a7.6 7.6 0 0 0-2.6-1.5L14.2 3h-4.4l-.4 2.2a7.6 7.6 0 0 0-2.6 1.5l-2.2-.8-1.8 3.2 1.8 1.4a7.6 7.6 0 0 0 0 3l-1.8 1.4 1.8 3.2 2.2-.8a7.6 7.6 0 0 0 2.6 1.5l.4 2.2h4.4l.4-2.2a7.6 7.6 0 0 0 2.6-1.5l2.2.8 1.8-3.2-1.8-1.4z" /></svg>
+)
