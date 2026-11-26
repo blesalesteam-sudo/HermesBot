@@ -6,11 +6,12 @@ import { fileSize, shortWhen } from '../lib/format'
 import { canInstall, install, isInstalled, notifyBlocked, notifyOn, notifySupported, onInstallChange, setNotify } from '../lib/notify'
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
+import { AppsSection, Badge, CapsSection, Tabs } from './SettingsApps'
 import { IconBack, IconDownload, IconMoon, IconPlus, IconSun, IconTrash, IconX } from './icons'
 
 declare const __DEMO__: boolean
 
-type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'avisos' | 'copias' | 'apariencia'
+export type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apps' | 'capacidades' | 'avisos' | 'copias' | 'apariencia'
 
 interface Props {
   state: ClientState
@@ -215,10 +216,10 @@ function ProviderRow({ p, flow, send }: { p: ModelProvider; flow?: SignIn | null
   return (
     <div className="provider">
       <div className="set-row">
-        <span className={`conn-dot${p.connected ? ' on' : ''}`} aria-hidden="true" />
+        <Badge name={providerName(p)} />
         <div className="set-row-text">
-          <span>{providerName(p)}</span>
-          <small>{p.connected ? `Conectada · ${p.models.length === 1 ? '1 modelo' : `${p.models.length} modelos`}` : help?.what ?? 'Se conecta pegando su clave.'}</small>
+          <span>{providerName(p)}{p.connected && <i className="tag ok">Conectada</i>}</span>
+          <small>{p.connected ? `${p.models.length === 1 ? '1 modelo disponible' : `${p.models.length} modelos disponibles`}` : help?.what ?? 'Se conecta pegando su clave.'}</small>
         </div>
         {confirm ? (
           <>
@@ -276,6 +277,7 @@ function ModelPicker({ providers, value, onChange, first, label }: { providers: 
 }
 
 function ModelSection({ state, send }: { state: ClientState; send: Props['send'] }) {
+  const [tab, setTab] = useState<'cuentas' | 'modelos'>('cuentas')
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
   const info = state.model
@@ -285,75 +287,96 @@ function ModelSection({ state, send }: { state: ClientState; send: Props['send']
   if (!info) {
     return (
       <>
-        <h3>Cuentas y modelos de IA</h3>
+        <h3>Inteligencia</h3>
         <p className="rp-empty small">{state.hermes === 'connected' || state.hermes === 'demo' ? 'Cargando…' : 'Hermes no está conectado ahora mismo.'}</p>
       </>
     )
   }
 
   const order = (p: ModelProvider) => (MAIN.indexOf(p.slug) === -1 ? 99 : MAIN.indexOf(p.slug))
-  const main = info.providers.filter(p => p.connected || MAIN.includes(p.slug)).sort((a, b) => Number(b.connected) - Number(a.connected) || order(a) - order(b))
+  const mine = info.providers.filter(p => p.connected)
+  const suggested = info.providers.filter(p => !p.connected && MAIN.includes(p.slug)).sort((a, b) => order(a) - order(b))
   const needle = q.trim().toLowerCase()
-  const rest = info.providers.filter(p => !main.includes(p) && (!needle || p.name.toLowerCase().includes(needle)))
-  const connected = info.providers.filter(p => p.connected && p.models.length)
+  const rest = info.providers.filter(p => !p.connected && !MAIN.includes(p.slug) && (!needle || p.name.toLowerCase().includes(needle)))
+  const usable = mine.filter(p => p.models.length)
   const team = info.provider && info.model ? `${info.provider}\n${info.model}` : ''
+  const teamName = providerName(info.providers.find(p => p.slug === info.provider) ?? { slug: '', name: info.provider, connected: false, keyBased: false, models: [] })
 
   return (
     <>
-      <h3>Cuentas y modelos de IA</h3>
-      <p className="settings-sub">El modelo es el motor con el que piensan los bots. Son tres pasos: conecta una cuenta, elige el modelo del equipo y, si quieres, dale uno distinto a algún bot.</p>
+      <h3>Inteligencia</h3>
+      <p className="settings-sub">El modelo es el motor con el que piensan los bots. Primero se conecta una cuenta y después se elige qué modelo usa cada bot.</p>
 
-      <div className="step-label"><i>1</i> Conecta una cuenta</div>
-      <div className="rows">
-        {main.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}
+      <div className="now-card">
+        <Badge name={teamName || '?'} size={40} />
+        <div>
+          <small>El equipo usa ahora</small>
+          <b>{info.model || 'Ningún modelo todavía'}</b>
+          <small>{info.model ? `Cuenta: ${teamName}` : 'Conecta una cuenta para empezar.'}</small>
+        </div>
       </div>
-      <button className="link-btn" onClick={() => setMore(m => !m)}>{more ? 'Ocultar el resto' : `Más proveedores (${info.providers.length - main.length})`}</button>
-      {more && (
+
+      <Tabs value={tab} onChange={setTab} items={[['cuentas', `Cuentas (${mine.length})`], ['modelos', 'Modelos por bot']]} />
+
+      {tab === 'cuentas' ? (
         <>
-          <label className="search modal-search">
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proveedor" aria-label="Buscar proveedor" />
-          </label>
+          {mine.length > 0 && (
+            <>
+              <div className="set-label first">Conectadas</div>
+              <div className="rows">{mine.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}</div>
+            </>
+          )}
+          <div className={`set-label${mine.length ? '' : ' first'}`}>Añadir una cuenta</div>
+          <div className="rows">{suggested.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}</div>
+          <button className="link-btn" onClick={() => setMore(m => !m)}>{more ? 'Ocultar el resto' : 'Ver más proveedores'}</button>
+          {more && (
+            <>
+              <label className="search modal-search">
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar proveedor" aria-label="Buscar proveedor" />
+              </label>
+              <div className="rows">
+                {rest.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}
+                {rest.length === 0 && <p className="rp-empty small">Ningún proveedor coincide.</p>}
+              </div>
+            </>
+          )}
+        </>
+      ) : usable.length === 0 ? (
+        <p className="rp-empty small">Conecta primero una cuenta en la pestaña Cuentas.</p>
+      ) : (
+        <>
+          <div className="set-label first">Modelo del equipo</div>
           <div className="rows">
-            {rest.map(p => <ProviderRow key={p.slug} p={p} flow={state.login} send={send} />)}
-            {rest.length === 0 && <p className="rp-empty small">Ningún proveedor coincide.</p>}
+            <div className="set-row">
+              <div className="set-row-text">
+                <span>Para todos los bots</span>
+                <small>Lo usan los bots que no tienen uno propio.</small>
+              </div>
+              <ModelPicker providers={usable} value={team} label="Modelo del equipo" onChange={(slug, model) => slug && send({ t: 'model.set', slug, model })} />
+            </div>
+          </div>
+
+          <div className="set-label">Modelo de cada bot</div>
+          <div className="rows">
+            {state.bots.map(b => (
+              <div key={b.id} className="set-row">
+                <Avatar name={b.name} color={b.color} size={30} />
+                <div className="set-row-text">
+                  <span>{b.name}</span>
+                  <small>{b.model ? `Cuenta: ${providerName(info.providers.find(p => p.slug === b.model!.slug) ?? { slug: b.model.slug, name: b.model.slug, connected: false, keyBased: false, models: [] })}` : 'Usa el del equipo'}</small>
+                </div>
+                <ModelPicker
+                  providers={usable}
+                  value={b.model ? `${b.model.slug}\n${b.model.model}` : ''}
+                  first="El del equipo"
+                  label={`Modelo de ${b.name}`}
+                  onChange={(slug, model) => send({ t: 'bot.model', id: b.id, slug: slug || undefined, model: model || undefined })}
+                />
+              </div>
+            ))}
           </div>
         </>
       )}
-
-      <div className="step-label"><i>2</i> Modelo del equipo</div>
-      {connected.length ? (
-        <div className="rows">
-          <div className="set-row">
-            <div className="set-row-text">
-              <span>Lo usan todos los bots</span>
-              <small>Salvo los que tengan uno propio en el paso 3.</small>
-            </div>
-            <ModelPicker providers={connected} value={team} label="Modelo del equipo" onChange={(slug, model) => slug && send({ t: 'model.set', slug, model })} />
-          </div>
-        </div>
-      ) : <p className="rp-empty small">Conecta primero una cuenta en el paso 1.</p>}
-
-      <div className="step-label"><i>3</i> Un modelo distinto para algún bot <em>(opcional)</em></div>
-      {connected.length ? (
-        <div className="rows">
-          {state.bots.map(b => (
-            <div key={b.id} className="set-row">
-              <Avatar name={b.name} color={b.color} size={30} />
-              <div className="set-row-text">
-                <span>{b.name}</span>
-                <small>{b.model ? `Cuenta: ${providerName(info.providers.find(p => p.slug === b.model!.slug) ?? { slug: b.model.slug, name: b.model.slug, connected: false, keyBased: false, models: [] })}` : 'Usa el modelo del equipo'}</small>
-              </div>
-              <ModelPicker
-                providers={connected}
-                value={b.model ? `${b.model.slug}\n${b.model.model}` : ''}
-                first="El del equipo"
-                label={`Modelo de ${b.name}`}
-                onChange={(slug, model) => send({ t: 'bot.model', id: b.id, slug: slug || undefined, model: model || undefined })}
-              />
-            </div>
-          ))}
-        </div>
-      ) : <p className="rp-empty small">Cuando haya una cuenta conectada podrás elegir aquí.</p>}
     </>
   )
 }
@@ -496,7 +519,12 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
   }, [onClose])
 
   const go = (s: Section) => { setSection(s); setEditUser(null); setEditBot(null); setConfirm(null) }
-  const nav: [Section, string][] = [['perfil', 'Mi perfil'], ['usuarios', 'Usuarios'], ['bots', 'Bots'], ...(admin ? [['modelo', 'Cuentas y modelos'] as [Section, string]] : []), ['avisos', 'Avisos y app'], ...(admin ? [['copias', 'Copias'] as [Section, string]] : []), ['apariencia', 'Apariencia']]
+  const nav: [string, [Section, string][]][] = [
+    ['Tú', [['perfil', 'Mi perfil'], ['avisos', 'Avisos y app'], ['apariencia', 'Apariencia']]],
+    ['Equipo', [['usuarios', 'Usuarios'], ['bots', 'Bots']]],
+    ['Conexiones', [...(admin ? [['modelo', 'Inteligencia'] as [Section, string]] : []), ['apps', 'Aplicaciones'], ['capacidades', 'Capacidades']]],
+    ...(admin ? [['Sistema', [['copias', 'Copias']]] as [string, [Section, string][]]] : [])
+  ]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
   const botBeingEdited = editBot && editBot !== 'new' ? state.bots.find(b => b.id === editBot) ?? null : null
 
@@ -505,8 +533,13 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
       <div className="modal settings" role="dialog" aria-modal="true" aria-label="Ajustes" onClick={e => e.stopPropagation()}>
         <nav className="settings-nav" aria-label="Secciones de ajustes">
           <h2>Ajustes</h2>
-          {nav.map(([id, label]) => (
-            <button key={id} className={section === id ? 'on' : ''} onClick={() => go(id)} aria-current={section === id ? 'page' : undefined}>{label}</button>
+          {nav.map(([group, items]) => (
+            <div key={group} className="nav-group">
+              <span>{group}</span>
+              {items.map(([id, label]) => (
+                <button key={id} className={section === id ? 'on' : ''} onClick={() => go(id)} aria-current={section === id ? 'page' : undefined}>{label}</button>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="settings-body">
@@ -593,6 +626,8 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
           ))}
 
           {section === 'modelo' && <ModelSection state={state} send={send} />}
+          {section === 'apps' && <AppsSection state={state} send={send} />}
+          {section === 'capacidades' && <CapsSection state={state} send={send} />}
           {section === 'avisos' && <AlertsSection />}
           {section === 'copias' && <BackupSection state={state} send={send} />}
 

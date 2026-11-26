@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
+  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -281,6 +281,30 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
   let autoBackup = true
   const backups = () => ({ t: 'backups' as const, auto: autoBackup, list: [1, 2, 3].map(d => ({ name: `hermesbot-copia-${d}.tar.gz`, ts: Date.now() - d * 24 * 60 * min + 3 * 60 * min, size: 1_840_000 + d * 12_000 })) })
 
+  let apps: AppEntry[] = ([
+    ['notion', 'Notion', 'Páginas y bases de datos de vuestro espacio de Notion.', 'on', 14], ['airtable', 'Airtable', 'Bases, tablas y registros.'],
+    ['asana', 'Asana', 'Tareas, proyectos y objetivos.'], ['calendly', 'Calendly', 'Citas y disponibilidad.'], ['canva', 'Canva', 'Diseños y plantillas.'],
+    ['clickup', 'ClickUp', 'Tareas y documentos.'], ['dropbox', 'Dropbox', 'Archivos y carpetas.'], ['figma', 'Figma', 'Diseños y comentarios.'],
+    ['intercom', 'Intercom', 'Conversaciones con clientes.'], ['linear', 'Linear', 'Incidencias y proyectos.'], ['monday', 'Monday', 'Tableros y tareas.'],
+    ['paypal', 'PayPal', 'Pagos y facturas.'], ['stripe', 'Stripe', 'Pagos, clientes y facturas.'], ['todoist', 'Todoist', 'Listas de tareas.'],
+    ['webflow', 'Webflow', 'Sitios y contenido.'], ['wordpress-com', 'WordPress', 'Entradas y páginas.']
+  ] as [string, string, string, AppEntry['state']?, number?][]).map(([id, name, about, st, tools]) => ({ id, name, about, state: st ?? 'off', tools }))
+  let telegram = { connected: false, users: '' }
+  const caps: Capabilities = {
+    toolsets: [
+      ['web', 2, true], ['browser', 4, true], ['file', 4, true], ['terminal', 2, true], ['code_execution', 1, true], ['vision', 1, true], ['image_gen', 1, true],
+      ['tts', 1, true], ['memory', 1, true], ['session_search', 1, true], ['todo', 1, true], ['cronjob', 1, true], ['delegation', 1, true], ['skills', 3, true],
+      ['clarify', 1, true], ['connections', 1, true], ['video_gen', 3, false], ['x_search', 1, false], ['debugging', 8, false]
+    ].map(([id, count, on]) => ({ id: id as string, about: 'Herramientas para depurar.', count: count as number, on: on as boolean })),
+    skills: [
+      { group: 'productivity', items: ['document-to-action-items', 'google-workspace', 'meeting-action-items', 'pdf', 'weekly-review-planning'] },
+      { group: 'research', items: ['competitor-news-monitor', 'grounded-citations'] },
+      { group: 'creative', items: ['humanizer', 'architecture-diagram', 'popular-web-designs'] },
+      { group: 'email', items: ['email-inbox-triage'] }
+    ]
+  }
+  const setApp = (id: string, patch: Partial<AppEntry>) => { apps = apps.map(a => (a.id === id ? { ...a, ...patch } : a)); emit({ t: 'apps', apps, telegram }) }
+
   const snapshot: Snapshot = {
     me,
     users: DEMO_USERS,
@@ -436,6 +460,43 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
         case 'chat.delete':
           archive = archive.filter(c => c.id !== cmd.id)
           emit({ t: 'history', history: summaries() })
+          break
+        case 'apps.get':
+          emit({ t: 'apps', apps, telegram })
+          break
+        case 'app.connect':
+          if (cmd.id === 'linear' || cmd.id === 'notion' || cmd.id === 'asana') {
+            setApp(cmd.id, { state: 'auth' })
+            emit({ t: 'app.auth', flow: { id: cmd.id, session: 'demo', url: 'https://example.com/' } })
+          } else {
+            setApp(cmd.id, { state: 'on', tools: 9 })
+            emit({ t: 'toast', text: 'Aplicación conectada.' })
+          }
+
+          break
+        case 'app.finish':
+          emit({ t: 'app.auth', flow: null })
+          setApp(cmd.id, { state: 'on', tools: 12 })
+          emit({ t: 'toast', text: 'Aplicación conectada.' })
+          break
+        case 'app.cancel':
+          emit({ t: 'app.auth', flow: null })
+          break
+        case 'app.remove':
+          setApp(cmd.id, { state: 'off', tools: undefined })
+          emit({ t: 'toast', text: 'Aplicación desconectada.' })
+          break
+        case 'telegram.save':
+          telegram = { connected: cmd.token !== null, users: cmd.token === null ? '' : cmd.users ?? '' }
+          emit({ t: 'apps', apps, telegram })
+          emit({ t: 'toast', text: cmd.token === null ? 'Telegram desconectado.' : 'Telegram guardado.' })
+          break
+        case 'caps.get':
+          emit({ t: 'caps', caps: { ...caps, toolsets: [...caps.toolsets] } })
+          break
+        case 'cap.toggle':
+          caps.toolsets = caps.toolsets.map(t => (t.id === cmd.id ? { ...t, on: cmd.on } : t))
+          emit({ t: 'caps', caps: { ...caps } })
           break
         case 'backup.list':
           emit(backups())

@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type {
-  ApprovalChoice, Attachment, Bot, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
+  ApprovalChoice, AppEntry, Attachment, Bot, Capabilities, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
   ServerEvent, SignIn, Snapshot, ToolCall, Upload, User
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
@@ -291,6 +291,26 @@ export class Room {
         return this.cancelLogin(viewer)
       case 'bot.model':
         return this.setBotModel(viewer, String(cmd.id), cmd.slug ? String(cmd.slug) : '', cmd.model ? String(cmd.model) : '')
+      case 'apps.get':
+        return this.sendApps(viewer)
+      case 'app.connect':
+        return this.connectApp(viewer, String(cmd.id))
+      case 'app.finish':
+        return this.finishApp(viewer, String(cmd.id), String(cmd.session), String(cmd.pasted ?? ''))
+      case 'app.cancel':
+        if (this.isAdmin(viewer) && this.gw) {
+          await this.gw.request('mcp.servers.oauth.cancel', { name: String(cmd.id), session_id: String(cmd.session) }).catch(() => undefined)
+        }
+
+        return viewer.send({ t: 'app.auth', flow: null })
+      case 'app.remove':
+        return this.removeApp(viewer, String(cmd.id))
+      case 'telegram.save':
+        return this.saveTelegram(viewer, cmd.token === null ? null : String(cmd.token ?? ''), String(cmd.users ?? ''))
+      case 'caps.get':
+        return this.sendCaps(viewer)
+      case 'cap.toggle':
+        return this.toggleCap(viewer, String(cmd.id), !!cmd.on)
       case 'chat.new':
         return this.newChat(viewer, String(cmd.botId))
       case 'chat.open': {
@@ -603,6 +623,215 @@ export class Room {
     clearInterval(this.loginPoll)
     await this.loginCall('DELETE').catch(() => undefined)
     this.toAdmins({ t: 'login', flow: null })
+  }
+
+  // ───────────── Ajustes: aplicaciones conectadas ─────────────
+
+  private ready(viewer: Viewer): boolean {
+    if (this.gw && this.hermes === 'connected') { return true }
+
+    viewer.send({ t: 'toast', text: 'Hermes no está conectado ahora mismo.', error: true })
+
+    return false
+  }
+
+  private async appList(): Promise<AppEntry[]> {
+    const gw = this.gw!
+    const [catalog, mine, status] = await Promise.all([
+      gw.request<any>('mcp.catalog', {}),
+      gw.request<any>('mcp.servers.list', {}),
+      gw.request<any>('mcp.servers.status', {}).catch(() => ({ servers: [] }))
+    ])
+    const installed = new Map<string, any>((mine.servers ?? []).map((s: any) => [String(s.name), s]))
+    const live = new Map<string, any>((status.servers ?? []).map((s: any) => [String(s.name), s]))
+    const state = (name: string): AppEntry['state'] => {
+      const s = installed.get(name)
+
+      if (!s) { return 'off' }
+
+      return s.auth === 'oauth' && !s.oauth_tokens_present ? 'auth' : 'on'
+    }
+    const pretty = (name: string) => name.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const apps: AppEntry[] = (catalog.servers ?? []).map((c: any) => ({
+      id: String(c.name),
+      name: pretty(String(c.name)),
+      about: String(c.description ?? ''),
+      state: state(String(c.name)),
+      tools: live.get(String(c.name))?.tools || undefined
+    }))
+
+    // Las que alguien añadió a mano fuera del catálogo también se enseñan.
+    for (const [name] of installed) {
+      if (!apps.some(a => a.id === name)) {
+        apps.push({ id: name, name: pretty(name), about: 'Herramienta añadida a mano.', state: state(name), tools: live.get(name)?.tools || undefined })
+      }
+    }
+
+    return apps
+  }
+
+  private async sendApps(viewer: Viewer) {
+    if (!this.ready(viewer)) { return }
+
+    try {
+      const telegram = this.isAdmin(viewer)
+        ? await fetch(`${config.hermesAdmin}/admin/telegram`, { headers: { authorization: `Bearer ${config.hermesToken}` } }).then(r => (r.ok ? r.json() : undefined)).catch(() => undefined)
+        : undefined
+
+      viewer.send({ t: 'apps', apps: await this.appList(), telegram: telegram ? { connected: !!telegram.connected, users: String(telegram.users ?? '') } : undefined })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude leer las aplicaciones (${(error as Error).message}).`, error: true })
+    }
+  }
+
+  private async connectApp(viewer: Viewer, id: string) {
+    if (!this.isAdmin(viewer) || !this.ready(viewer) || !/^[\w-]{1,60}$/.test(id)) { return }
+
+    const gw = this.gw!
+
+    try {
+      const mine = await gw.request<any>('mcp.servers.list', {})
+      let server = (mine.servers ?? []).find((s: any) => s.name === id)
+
+      if (!server) {
+        server = (await gw.request<any>('mcp.servers.add', { name: id, preset: id })).server
+      }
+
+      if (server?.auth === 'oauth' && !server.oauth_tokens_present) {
+        // Hermes solo acepta que la autorización vuelva a la propia máquina, así que la persona
+        // copia la dirección final de su navegador y la pega en la aplicación.
+        const flow = await gw.request<any>('mcp.servers.oauth.start', { name: id, client_redirect_uri: 'http://127.0.0.1:8976/callback' })
+
+        viewer.send({ t: 'app.auth', flow: { id, session: String(flow.session_id), url: String(flow.auth_url) } })
+      } else {
+        const test = await gw.request<any>('mcp.servers.test', { name: id }).catch(() => null)
+
+        viewer.send(test?.ok === false
+          ? { t: 'toast', text: `Añadida, pero no responde todavía (${String(test.error ?? '').slice(0, 120)}).`, error: true }
+          : { t: 'toast', text: 'Aplicación conectada.' })
+      }
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude conectarla (${(error as Error).message.slice(0, 160)}).`, error: true })
+    }
+
+    await this.sendApps(viewer)
+  }
+
+  private async finishApp(viewer: Viewer, id: string, session: string, pasted: string) {
+    if (!this.isAdmin(viewer) || !this.ready(viewer)) { return }
+
+    const gw = this.gw!
+    let query: URLSearchParams
+
+    try {
+      query = new URL(pasted.trim()).searchParams
+    } catch {
+      return viewer.send({ t: 'toast', text: 'Eso no parece una dirección. Copia entera la de la barra del navegador.', error: true })
+    }
+
+    if (!query.get('code') && !query.get('error')) {
+      return viewer.send({ t: 'toast', text: 'A esa dirección le falta el código. Copia la de la página a la que llegaste tras autorizar.', error: true })
+    }
+
+    try {
+      await gw.request('mcp.servers.oauth.callback', {
+        name: id, session_id: session, code: query.get('code'), state: query.get('state'), error: query.get('error'), iss: query.get('iss')
+      })
+
+      for (let i = 0; i < 15; i++) {
+        const poll = await gw.request<any>('mcp.servers.oauth.poll', { name: id, session_id: session })
+
+        if (poll.status === 'approved') {
+          viewer.send({ t: 'app.auth', flow: null })
+          viewer.send({ t: 'toast', text: 'Aplicación conectada.' })
+
+          return void await this.sendApps(viewer)
+        }
+
+        if (poll.status === 'error') { throw new Error(String(poll.error_message || 'no se autorizó')) }
+
+        await new Promise(r => setTimeout(r, 1500))
+      }
+
+      throw new Error('tarda demasiado en confirmarse')
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No se pudo terminar la conexión (${(error as Error).message.slice(0, 160)}).`, error: true })
+    }
+  }
+
+  private async removeApp(viewer: Viewer, id: string) {
+    if (!this.isAdmin(viewer) || !this.ready(viewer)) { return }
+
+    try {
+      await this.gw!.request('mcp.servers.remove', { name: id })
+      viewer.send({ t: 'toast', text: 'Aplicación desconectada.' })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude desconectarla (${(error as Error).message.slice(0, 160)}).`, error: true })
+    }
+
+    await this.sendApps(viewer)
+  }
+
+  private async saveTelegram(viewer: Viewer, token: string | null, users: string) {
+    if (!this.isAdmin(viewer)) { return }
+
+    try {
+      const res = await fetch(`${config.hermesAdmin}/admin/telegram`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.hermesToken}` },
+        body: JSON.stringify({ token: token === null ? null : token.trim(), users: users.replace(/\s/g, '') })
+      })
+
+      if (!res.ok) { throw new Error(res.status === 400 ? 'revisa la clave del bot y los números de usuario' : `respuesta ${res.status}`) }
+
+      viewer.send({ t: 'toast', text: token === null ? 'Telegram desconectado. Hermes se reinicia un momento.' : 'Telegram guardado. Hermes se reinicia un momento para activarlo.' })
+      viewer.send({ t: 'apps', apps: await this.appList().catch(() => []), telegram: { connected: token !== null, users: token === null ? '' : users.replace(/\s/g, '') } })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude guardar Telegram (${(error as Error).message}).`, error: true })
+    }
+  }
+
+  // ───────────── Ajustes: capacidades (herramientas y habilidades) ─────────────
+
+  private async sendCaps(viewer: Viewer) {
+    if (!this.ready(viewer)) { return }
+
+    try {
+      const [sets, skills] = await Promise.all([
+        this.gw!.request<any>('toolsets.list', {}),
+        this.gw!.request<any>('skills.manage', { action: 'list' }).catch(() => ({ skills: {} }))
+      ])
+      const caps: Capabilities = {
+        // Fuera los paquetes internos de cada canal (hermes-…) y los vacíos: no son una decisión del equipo.
+        toolsets: (sets.toolsets ?? [])
+          .filter((t: any) => !String(t.name).startsWith('hermes-') && t.tool_count > 0 && !String(t.description ?? '').startsWith('Plugin toolset'))
+          .map((t: any) => ({ id: String(t.name), about: String(t.description ?? ''), count: Number(t.tool_count) || 0, on: !!t.enabled })),
+        skills: Object.entries(skills.skills ?? {}).map(([group, items]) => ({ group, items: (items as string[]).map(String) }))
+      }
+
+      viewer.send({ t: 'caps', caps })
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude leer las capacidades (${(error as Error).message}).`, error: true })
+    }
+  }
+
+  private async toggleCap(viewer: Viewer, id: string, on: boolean) {
+    if (!this.isAdmin(viewer) || !this.ready(viewer) || !/^[\w-]{1,60}$/.test(id)) { return }
+
+    try {
+      await this.gw!.request('tools.configure', { action: on ? 'enable' : 'disable', names: [id] })
+
+      // Las conversaciones abiertas también lo notan desde ya.
+      for (const [botId, sid] of Object.entries(saved.sessions)) {
+        if (this.bot(botId) && this.status[botId]?.state === 'idle') {
+          await this.gw!.request('tools.configure', { action: on ? 'enable' : 'disable', names: [id], session_id: sid }).catch(() => undefined)
+        }
+      }
+    } catch (error) {
+      viewer.send({ t: 'toast', text: `No pude cambiarlo (${(error as Error).message.slice(0, 160)}).`, error: true })
+    }
+
+    await this.sendCaps(viewer)
   }
 
   // ───────────── Ajustes: modelo propio de cada bot ─────────────

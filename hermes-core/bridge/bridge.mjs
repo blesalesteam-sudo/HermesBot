@@ -11,7 +11,7 @@
 
 import { execFile, spawn } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import { createReadStream, createWriteStream, realpathSync, rmSync, statSync } from 'node:fs'
+import { createReadStream, createWriteStream, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -164,6 +164,47 @@ async function admin(req, res, url) {
     }
 
     return reply(res, 200, loginView())
+  }
+
+  // Telegram: el bot del equipo en Telegram. Se guarda en la configuración de Hermes y se reinicia para aplicarlo.
+  if (url.pathname === '/admin/telegram') {
+    const envFile = join(process.env.HERMES_HOME || '/opt/data', '.env')
+    const current = key => {
+      try { return new RegExp(`^${key}=(.*)$`, 'm').exec(readFileSync(envFile, 'utf8'))?.[1]?.trim() ?? '' } catch { return '' }
+    }
+
+    if (req.method === 'GET') {
+      return reply(res, 200, { connected: !!current('TELEGRAM_BOT_TOKEN'), users: current('TELEGRAM_ALLOWED_USERS') })
+    }
+
+    if (req.method === 'POST') {
+      let body = ''
+
+      for await (const chunk of req) {
+        body += chunk
+
+        if (body.length > 4096) { return reply(res, 413, { ok: false }) }
+      }
+
+      const { token, users } = JSON.parse(body)
+
+      if (token === null) {
+        await run('hermes', ['config', 'unset', 'TELEGRAM_BOT_TOKEN'], { timeout: 60_000, env: HERMES_ENV }).catch(() => undefined)
+      } else {
+        if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(String(token)) || !/^\d{3,}(,\d{3,})*$/.test(String(users))) {
+          return reply(res, 400, { ok: false, error: 'datos de Telegram no válidos' })
+        }
+
+        await run('hermes', ['config', 'set', 'TELEGRAM_BOT_TOKEN', String(token)], { timeout: 60_000, env: HERMES_ENV })
+        await run('hermes', ['config', 'set', 'TELEGRAM_ALLOWED_USERS', String(users)], { timeout: 60_000, env: HERMES_ENV })
+      }
+
+      log('Telegram', token === null ? 'desconectado' : 'configurado', '· reinicio')
+      reply(res, 200, { ok: true })
+      setTimeout(() => process.exit(1), 800)
+
+      return
+    }
   }
 
   // Un archivo que el bot ha creado (imagen, documento…), para enseñarlo en el chat.

@@ -123,6 +123,36 @@ export interface ModelInfo {
   providers: ModelProvider[]
 }
 
+/** Una aplicación externa que Hermes sabe usar (Notion, Stripe, Linear…). */
+export interface AppEntry {
+  id: string
+  name: string
+  about: string
+  /** off: sin añadir · auth: añadida pero falta autorizarla · on: lista para usar. */
+  state: 'off' | 'auth' | 'on'
+  /** Cuántas acciones le da al bot (cuando se sabe). */
+  tools?: number
+}
+
+/** Autorización de una aplicación que está a medias. */
+export interface AppAuth {
+  id: string
+  session: string
+  url: string
+}
+
+export interface Capabilities {
+  /** Grupos de herramientas del bot que se pueden encender o apagar. */
+  toolsets: { id: string; about: string; count: number; on: boolean }[]
+  /** Habilidades instaladas, por categoría. */
+  skills: { group: string; items: string[] }[]
+}
+
+export interface TelegramState {
+  connected: boolean
+  users: string
+}
+
 export type BotState = 'idle' | 'thinking' | 'working'
 
 export interface BotStatus {
@@ -178,6 +208,9 @@ export type ServerEvent =
   | { t: 'toast'; text: string; error?: boolean }
   | { t: 'model'; info: ModelInfo }
   | { t: 'login'; flow: SignIn | null }
+  | { t: 'apps'; apps: AppEntry[]; telegram?: TelegramState }
+  | { t: 'app.auth'; flow: AppAuth | null }
+  | { t: 'caps'; caps: Capabilities }
   /** Sustituye la conversación visible de un bot (al empezar una nueva o recuperar otra). */
   | { t: 'msgs'; botId: string; messages: ChatMessage[] }
   | { t: 'history'; history: ChatSummary[] }
@@ -213,5 +246,15 @@ export type ClientCommand =
   | { t: 'chat.restore'; id: string }
   | { t: 'chat.rename'; id: string; title: string }
   | { t: 'chat.delete'; id: string }
+  | { t: 'apps.get' }
+  | { t: 'app.connect'; id: string }
+  /** `pasted` es la dirección a la que el navegador fue tras autorizar. */
+  | { t: 'app.finish'; id: string; session: string; pasted: string }
+  | { t: 'app.cancel'; id: string; session: string }
+  | { t: 'app.remove'; id: string }
+  /** `token: null` desconecta Telegram. */
+  | { t: 'telegram.save'; token: string | null; users?: string }
+  | { t: 'caps.get' }
+  | { t: 'cap.toggle'; id: string; on: boolean }
   | { t: 'backup.list' }
   | { t: 'backup.auto'; on: boolean }

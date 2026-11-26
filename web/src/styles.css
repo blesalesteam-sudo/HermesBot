@@ -572,3 +572,52 @@ a.btn { text-decoration: none; color: inherit; }
 a.btn.btn-primary { color: var(--app); }
 .code-chip { white-space: nowrap; flex: none; }
 .code-chip { width: auto; min-width: max-content; height: auto; overflow: visible; }
+
+/* ── Ajustes ordenados: grupos, pestañas, distintivos, aplicaciones y capacidades ── */
+.modal.settings { max-width: 900px; height: min(680px, 92vh); grid-template-columns: 200px minmax(0, 1fr); }
+.settings-nav { overflow-y: auto; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.nav-group:first-of-type { margin-top: 4px; }
+.nav-group > span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); padding: 0 10px 4px; }
+.badge { flex: none; border-radius: 10px; display: grid; place-items: center; font-weight: 600; color: var(--tint); background: color-mix(in srgb, var(--tint) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tint) 28%, transparent); }
+.tabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--edge); border-radius: 999px; background: var(--composer); }
+.tabs button { border: 0; background: transparent; height: 28px; padding: 0 14px; border-radius: 999px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.tabs button.on { background: var(--ink); color: var(--app); font-weight: 500; }
+.set-label.first { margin-top: 16px; }
+.tag.ok { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.now-card { display: flex; align-items: center; gap: 14px; border: 1px solid var(--edge); border-radius: 12px; background: var(--composer); padding: 14px; margin-bottom: 16px; }
+.now-card > div { display: flex; flex-direction: column; min-width: 0; }
+.now-card small { font-size: 12px; color: var(--ink-3); }
+.now-card b { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.apps-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.apps-search { flex: 1; min-width: 180px; margin: 0; height: 36px; background: var(--app); }
+.app-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.app-tile { border: 1px solid var(--edge); border-radius: 12px; background: var(--composer); padding: 10px 12px; min-width: 0; }
+.app-tile.wide { grid-column: 1 / -1; }
+.app-tile-head { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.app-tile .set-row-text small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-auth { padding: 12px 0 4px; }
+.signin-steps li > .grow, .signin-steps li > form { flex: 1; min-width: 0; padding: 0; }
+.signin-steps input { width: 100%; height: 34px; border: 1px solid var(--hairline); background: var(--app); color: var(--ink); border-radius: 10px; padding: 0 10px; outline: none; font-size: 14px; }
+.signin-steps input:focus { border-color: var(--accent); }
+.signin-steps b { font-weight: 600; color: var(--ink); }
+.rows.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+.rows.two .set-row { border-top: 1px solid var(--edge); }
+.rows.two .set-row:nth-child(-n+2) { border-top: 0; }
+.rows.spaced { margin-top: 10px; }
+.settings-sub.tight { margin: -2px 0 10px; }
+.skill-groups { display: flex; flex-direction: column; gap: 10px; }
+.skill-group { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13px; }
+.skill-group > span { color: var(--ink-2); padding-top: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-style: normal; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--edge); background: var(--composer); }
+@media (max-width: 720px) {
+  .app-grid, .rows.two { grid-template-columns: minmax(0, 1fr); }
+  .rows.two .set-row:nth-child(2) { border-top: 1px solid var(--edge); }
+  .skill-group { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .nav-group > span { display: none; }
+  .nav-group { margin-top: 0; flex-direction: row; }
+  .modal.settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .settings-nav { overflow-y: visible; }
+}
+.app-grid { grid-auto-flow: dense; }
