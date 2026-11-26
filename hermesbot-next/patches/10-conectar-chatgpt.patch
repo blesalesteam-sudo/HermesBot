@@ -139,3 +139,16 @@
                  name={kind === "chatgpt" ? t("cloudSignIn.codex") : undefined}
                  setUp={kind === "chatgpt" && instance?.snapshot.state !== "available"}
                  waiting={(testing !== null && instance?.instanceId === waitsFor) || settling(instance)}
+--- a/server/default-model-selection.ts
++++ b/server/default-model-selection.ts
+@@ -22,7 +22,9 @@
+ /** The shared ranking (shared/ai-ranking.ts), with an AI that answered its test ahead of one that didn't or wasn't tested.
+  * OpenCode's free backup comes in only once every other AI didn't answer. */
+ const best = (instances: readonly SelectableInstance[], context: DefaultSelectionContext) => {
+-  const ranked = rankAis(instances);
++  // OpenBot: Hermes, the server's own agent, always comes first when it can run.
++  const all = rankAis(instances);
++  const ranked = [...all.filter((instance) => instance.driverKind === "hermesAgent"), ...all.filter((instance) => instance.driverKind !== "hermesAgent")];
+   const usable = (list: readonly SelectableInstance[]) => list.find((instance) => context.answered?.(instance) === true)
+     ?? list.find((instance) => context.answered?.(instance) !== false);
+   return usable(ranked.filter((instance) => !freeFallback(instance))) ?? usable(ranked) ?? ranked[0];
