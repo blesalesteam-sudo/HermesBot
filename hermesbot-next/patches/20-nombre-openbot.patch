@@ -28,14 +28,17 @@
    brand: Brand;
 --- a/index.html
 +++ b/index.html
-@@ -6,11 +6,11 @@
+@@ -6,11 +6,12 @@
      <meta name="theme-color" content="#121212" />
      <meta name="mobile-web-app-capable" content="yes" />
      <meta name="apple-mobile-web-app-capable" content="yes" />
 -    <meta name="apple-mobile-web-app-title" content="OpenMausBot" />
+-    <link rel="icon" type="image/svg+xml" href="/app-icon.svg" />
+-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 +    <meta name="apple-mobile-web-app-title" content="OpenBot" />
-     <link rel="icon" type="image/svg+xml" href="/app-icon.svg" />
-     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
++    <link rel="icon" type="image/svg+xml" href="/openbot-icon.svg" />
++    <link rel="alternate icon" sizes="32x32" href="/favicon.ico" />
++    <link rel="apple-touch-icon" sizes="180x180" href="/openbot-touch-icon.png" />
      <link rel="manifest" href="/manifest.webmanifest" />
 -    <title>MausBot</title>
 +    <title>OpenBot</title>
@@ -44,7 +47,7 @@
      <div id="root"></div>
 --- a/public/manifest.webmanifest
 +++ b/public/manifest.webmanifest
-@@ -1,7 +1,7 @@
+@@ -1,14 +1,16 @@
  {
    "id": "/",
 -  "name": "OpenMausBot",
@@ -54,3 +57,15 @@
    "start_url": "/",
    "scope": "/",
    "display": "standalone",
+-  "background_color": "#121212",
++  "background_color": "#121317",
+   "theme_color": "#121212",
+   "icons": [
+-    { "src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+-    { "src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
++    { "src": "/openbot-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
++    { "src": "/openbot-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
++    { "src": "/openbot-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
++    { "src": "/openbot-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+   ]
+ }

@@ -22,6 +22,24 @@ replaceExact("server/brand.ts", 'export const PRODUCT_NAME = "MausBot";', `expor
 replaceExact("src/lib/brand.ts", 'export const PRODUCT_NAME = "MausBot";', `export const PRODUCT_NAME = "${NAME}";`);
 replaceExact("packages/phone-protocol/src/default-bot.ts", 'export const DEFAULT_BOT_NAME = "MausBot";', `export const DEFAULT_BOT_NAME = "${BOT_NAME}";`);
 
+// Nombres escritos a mano en el código (no en los textos traducibles) que la persona ve.
+// No se tocan los que hablan de servicios reales de los autores (MausBot Relay, la app MausBot del móvil).
+const VISIBLE = [
+  ["src/components/HelperIntro.tsx", 'bot?.name ?? "MausBot"', `bot?.name ?? "${BOT_NAME}"`],
+  ["src/components/SimpleHelperIntro.tsx", 'bot?.name ?? "MausBot"', `bot?.name ?? "${BOT_NAME}"`],
+  ["src/components/MausBotCustomize.tsx", 'placeholder="MausBot"', `placeholder="${BOT_NAME}"`],
+  ["src/components/MausBotCustomize.tsx", 'name || "MausBot"', `name || "${BOT_NAME}"`],
+  ["src/components/settings/settings-places.ts", '"MausBot in a browser"', `"${NAME} in a browser"`],
+  ["src/components/settings/settings-places.ts", 'replaceAll("{app}", "MausBot")', `replaceAll("{app}", "${NAME}")`],
+  ["src/lib/skins.ts", "The MausBot look.", `The ${NAME} look.`],
+  ["server/phone-push.ts", '|| "MausBot";', `|| "${NAME}";`],
+  ["server/phone-activity.ts", '|| "MausBot";', `|| "${NAME}";`],
+  ["server/sign-in-mail.ts", "`Your MausBot sign-in code for ${target}` : \"Your MausBot sign-in code\"", `\`Your ${NAME} sign-in code for \${target}\` : "Your ${NAME} sign-in code"`],
+  ["server/sign-in-mail.ts", '${target ?? "MausBot"}', `\${target ?? "${NAME}"}`],
+  ["server/user-errors.ts", "{name}'s own MausBot: it always", `{name}'s own ${BOT_NAME}: it always`],
+];
+for (const [file, from, to] of VISIBLE) replaceExact(file, from, to);
+
 // Textos de la interfaz, en todos los idiomas.
 const KEEP = /OpenMausBot|MausBot Cloud|Milind|Omkar/;
 let changed = 0;
