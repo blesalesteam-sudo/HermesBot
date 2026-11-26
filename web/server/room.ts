@@ -1,11 +1,11 @@
 // La "sala" compartida: guarda lo que ven los dos socios, lo reparte en vivo a todos los
 // navegadores conectados y habla con Hermes a través del cliente oficial del gateway
 // (protocolo hermes-gateway-v1, JSON-RPC por WebSocket).
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type {
   ApprovalChoice, AppEntry, Attachment, Bot, Capabilities, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
-  ServerEvent, SignIn, Snapshot, ToolCall, Upload, User
+  ServerEvent, SignIn, Snapshot, ToolCall, Upload, User, Widget
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
 import { listBackups } from './backup.ts'
@@ -20,7 +20,13 @@ interface Viewer {
   user: User
   send: Send
   close: () => void
+  /** Conexión de un widget: solo puede ver y usar este bot. */
+  only?: string
 }
+
+// Lo único que puede hacer y ver quien entra desde un widget incrustado.
+const WIDGET_COMMANDS = new Set(['typing', 'send', 'stop', 'retry', 'edit', 'approve', 'clarify'])
+const WIDGET_EVENTS = new Set(['msg', 'msg.gone', 'delta', 'status', 'typing', 'msgs', 'req', 'req.done', 'hermes', 'users'])
 
 interface HermesEvent {
   type: string
@@ -186,11 +192,52 @@ export class Room {
     this.broadcast({ t: 'online', users: this.online() })
   }
 
-  private online(): string[] {
-    return [...new Set([...this.viewers].map(v => v.user.id))]
+  /** Entrada desde un widget incrustado: se comprueba la llave y solo se le abre su bot. */
+  joinWidget(token: string, name: string, send: Send, close: () => void): Viewer | null {
+    const widget = this.widgetByToken(token)
+    const bot = widget && this.bot(widget.botId)
+
+    if (!widget || !bot) { return null }
+
+    const clean = name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40)
+    const user: User = { id: `widget:${widget.id}:${clean.toLowerCase() || 'visita'}`, name: clean || widget.name, color: bot.color }
+    const viewer: Viewer = { user, send, close, only: bot.id }
+
+    this.viewers.add(viewer)
+    send({ t: 'hello', snapshot: this.snapshot(user, bot.id) })
+
+    return viewer
   }
 
-  private snapshot(me: User): Snapshot {
+  widgetByToken(token: string): Widget | null {
+    const given = Buffer.from(token)
+
+    return (saved.widgets ?? []).find(w => {
+      const own = Buffer.from(w.token)
+
+      return own.length === given.length && timingSafeEqual(own, given)
+    }) ?? null
+  }
+
+  private online(): string[] {
+    return [...new Set([...this.viewers].filter(v => !v.only).map(v => v.user.id))]
+  }
+
+  private snapshot(me: User, only?: string): Snapshot {
+    if (only) {
+      return {
+        me,
+        users: this.users.map(u => ({ id: u.id, name: u.name, color: u.color, avatar: u.avatar })),
+        bots: this.bots.filter(b => b.id === only).map(b => ({ id: b.id, name: b.name, role: b.role, color: b.color })),
+        messages: { [only]: saved.messages[only] ?? [] },
+        status: { [only]: this.status[only] ?? { state: 'idle' } },
+        requests: [...this.requests.values()].filter(r => r.botId === only),
+        online: [],
+        hermes: this.hermes,
+        embedded: true
+      }
+    }
+
     return {
       me,
       users: this.users,
@@ -208,6 +255,8 @@ export class Room {
 
   private broadcast(ev: ServerEvent, except?: Viewer) {
     for (const v of this.viewers) {
+      if (v.only && !this.widgetMaySee(v.only, ev)) { continue }
+
       if (v !== except) {
         try { v.send(ev) } catch { /* navegador ya desconectado */ }
       }
@@ -253,7 +302,21 @@ export class Room {
     }
   }
 
+  private widgetMaySee(botId: string, ev: ServerEvent): boolean {
+    if (!WIDGET_EVENTS.has(ev.t)) { return false }
+    if (ev.t === 'req') { return ev.req.botId === botId }
+    if (ev.t === 'hermes' || ev.t === 'users' || ev.t === 'req.done') { return true }
+
+    return 'botId' in ev && ev.botId === botId
+  }
+
   async handle(viewer: Viewer, cmd: ClientCommand) {
+    if (viewer.only) {
+      const target = 'botId' in cmd ? cmd.botId : 'reqId' in cmd ? this.requests.get(String(cmd.reqId))?.botId : undefined
+
+      if (!WIDGET_COMMANDS.has(cmd.t) || target !== viewer.only) { return }
+    }
+
     switch (cmd.t) {
       case 'typing':
         if (this.bot(cmd.botId)) { this.setTyping(cmd.botId, viewer.user.id, !!cmd.on, viewer) }
@@ -318,6 +381,13 @@ export class Room {
         return this.removeApp(viewer, String(cmd.id))
       case 'telegram.save':
         return this.saveTelegram(viewer, cmd.token === null ? null : String(cmd.token ?? ''), String(cmd.users ?? ''))
+      case 'widgets.get':
+        return this.sendWidgets(viewer)
+      case 'widget.save':
+        return this.saveWidget(viewer, cmd)
+      case 'widget.rotate':
+      case 'widget.delete':
+        return this.changeWidget(viewer, String(cmd.id), cmd.t === 'widget.delete')
       case 'caps.get':
         return this.sendCaps(viewer)
       case 'cap.toggle':
@@ -1180,7 +1250,7 @@ export class Room {
 
     this.setTyping(botId, user.id, false)
     if (echo) {
-      this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, text, attachments: attachments.length ? attachments : undefined, ts: Date.now() })
+      this.putMessage(botId, { id: randomUUID(), role: 'user', authorId: user.id, authorName: findUser(user.id) ? undefined : user.name, text, attachments: attachments.length ? attachments : undefined, ts: Date.now() })
     } else {
       this.notice(botId, `${user.name} pidió otra respuesta.`)
     }
@@ -1305,6 +1375,74 @@ export class Room {
     }
 
     return this.sendPrompt(user, botId, text, [], !!edit)
+  }
+
+  // ───────────── Widgets (un bot incrustado en otra web) ─────────────
+
+  private sendWidgets(viewer?: Viewer) {
+    for (const v of viewer ? [viewer] : this.viewers) {
+      if (this.isAdmin(v)) { v.send({ t: 'widgets', widgets: saved.widgets ?? [] }) }
+    }
+  }
+
+  private saveWidget(viewer: Viewer, cmd: { id?: string; name: string; botId: string; origins: string }) {
+    if (!this.isAdmin(viewer)) { return }
+
+    const name = String(cmd.name ?? '').trim().slice(0, 40)
+    const origins: string[] = []
+
+    for (const raw of String(cmd.origins ?? '').split(/[\s,]+/).filter(Boolean).slice(0, 10)) {
+      try {
+        const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+
+        origins.push(url.origin)
+      } catch {
+        return viewer.send({ t: 'toast', text: `"${raw.slice(0, 60)}" no parece la dirección de una web.`, error: true })
+      }
+    }
+
+    if (!name || !this.bot(String(cmd.botId))) {
+      return viewer.send({ t: 'toast', text: 'Ponle un nombre y elige un bot.', error: true })
+    }
+
+    const list = saved.widgets ?? []
+    const existing = list.find(w => w.id === cmd.id)
+
+    if (existing) {
+      Object.assign(existing, { name, botId: String(cmd.botId), origins })
+    } else {
+      list.push({ id: randomUUID(), name, botId: String(cmd.botId), origins, token: randomBytes(24).toString('base64url'), ts: Date.now() })
+    }
+
+    saved.widgets = list
+    persist()
+    this.dropWidgetViewers(existing?.id)
+    this.sendWidgets()
+    viewer.send({ t: 'toast', text: existing ? 'Widget guardado.' : 'Widget creado. Copia su código y pégalo en tu web.' })
+  }
+
+  private changeWidget(viewer: Viewer, id: string, remove: boolean) {
+    const widget = (saved.widgets ?? []).find(w => w.id === id)
+
+    if (!this.isAdmin(viewer) || !widget) { return }
+
+    if (remove) {
+      saved.widgets = saved.widgets!.filter(w => w !== widget)
+    } else {
+      widget.token = randomBytes(24).toString('base64url')
+    }
+
+    persist()
+    this.dropWidgetViewers(id)
+    this.sendWidgets()
+    viewer.send({ t: 'toast', text: remove ? 'Widget eliminado. Ya no funciona donde estuviera pegado.' : 'Llave cambiada. Pega el código nuevo en tu web: el anterior ya no funciona.' })
+  }
+
+  /** Cierra las conexiones abiertas de un widget que se ha cambiado o borrado. */
+  private dropWidgetViewers(id?: string) {
+    for (const v of [...this.viewers]) {
+      if (id && v.only && v.user.id.startsWith(`widget:${id}:`)) { v.close() }
+    }
   }
 
   // ───────────── Rutinas (tareas programadas de Hermes) ─────────────

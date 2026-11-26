@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { Bot, ChatMessage, User } from '../shared/protocol.ts'
+import type { Bot, ChatMessage, User, Widget } from '../shared/protocol.ts'
 import { config } from './config.ts'
 
 /** Cuenta guardada: los datos visibles y la huella de la contraseña (nunca la contraseña). */
@@ -45,6 +45,8 @@ interface Saved {
   files: Record<string, StoredFile>
   /** Copia de seguridad diaria automática (activada salvo que se apague en Ajustes). */
   autoBackup?: boolean
+  /** Bots incrustados en otras webs. */
+  widgets?: Widget[]
 }
 
 const MAX_MESSAGES_PER_BOT = 600
@@ -57,7 +59,7 @@ function load(): Saved {
 
     return {
       users: data.users ?? [], bots: data.bots, sessions: data.sessions ?? {}, messages: data.messages ?? {},
-      lastActive: data.lastActive ?? {}, archive: data.archive ?? [], files: data.files ?? {}, autoBackup: data.autoBackup
+      lastActive: data.lastActive ?? {}, archive: data.archive ?? [], files: data.files ?? {}, autoBackup: data.autoBackup, widgets: data.widgets
     }
   } catch {
     return { users: [], sessions: {}, messages: {}, lastActive: {}, archive: [], files: {} }

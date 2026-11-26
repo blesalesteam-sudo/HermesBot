@@ -154,7 +154,7 @@ export const Message = memo(function Message({ msg, me, users, first, last, onRe
 
   if (msg.role === 'user') {
     const mine = msg.authorId === me.id
-    const author = users.find(u => u.id === msg.authorId)
+    const author = users.find(u => u.id === msg.authorId) ?? (msg.authorName ? { id: msg.authorId ?? '', name: msg.authorName, color: '#8a8a8a' } as User : undefined)
 
     if (editing && onEdit) {
       return (

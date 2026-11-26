@@ -61,7 +61,7 @@ function sameOrigin(req: IncomingMessage): boolean {
   }
 }
 
-function serveStatic(req: IncomingMessage, res: ServerResponse, path: string) {
+function serveStatic(req: IncomingMessage, res: ServerResponse, path: string, frame?: string) {
   let file = normalize(join(DIST, decodeURIComponent(path)))
 
   if (!file.startsWith(DIST) || !existsSync(file) || !statSync(file).isFile()) {
@@ -82,7 +82,8 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, path: string) {
     'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
     'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
     'x-content-type-options': 'nosniff',
-    'x-frame-options': 'DENY',
+    // La app nunca se muestra dentro de otra web; el widget sí, y solo en las webs permitidas.
+    ...(frame ? { 'content-security-policy': `frame-ancestors ${frame}` } : { 'x-frame-options': 'DENY' }),
     'referrer-policy': 'same-origin'
   })
 
@@ -191,6 +192,12 @@ const server = createServer(async (req, res) => {
       return void res.end()
     }
 
+    if (path === '/embed') {
+      const widget = room.widgetByToken(new URL(req.url || '/', 'http://x').searchParams.get('token') ?? '')
+
+      return serveStatic(req, res, '/index.html', widget?.origins.length ? widget.origins.join(' ') : '*')
+    }
+
     serveStatic(req, res, path === '/' ? '/index.html' : path)
   } catch (error) {
     console.error('[web] error', error)
@@ -207,16 +214,21 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   wss.handleUpgrade(req, socket, head, ws => {
-    const account = accountFromRequest(req)
+    const query = new URL(req.url || '/', 'http://x').searchParams
+    const widgetToken = query.get('widget')
+    const account = widgetToken ? null : accountFromRequest(req)
+    const send = (ev: Parameters<Parameters<typeof room.join>[1]>[0]) => {
+      if (ws.readyState === ws.OPEN) { ws.send(JSON.stringify(ev)) }
+    }
+    const close = () => ws.close(4401, 'no_session')
+    // Desde un widget se entra con su llave (sin cuenta) y solo a su bot.
+    const viewer = widgetToken ? room.joinWidget(widgetToken, query.get('name') ?? '', send, close) : account ? room.join(account, send, close) : null
 
-    if (!account) {
+    if (!viewer) {
       // El navegador vuelve a la pantalla de entrada cuando recibe este código.
-      return void ws.close(4401, 'no_session')
+      return void close()
     }
 
-    const viewer = room.join(account, ev => {
-      if (ws.readyState === ws.OPEN) { ws.send(JSON.stringify(ev)) }
-    }, () => ws.close(4401, 'no_session'))
     let alive = true
     const beat = setInterval(() => {
       if (!alive) { return void ws.terminate() }

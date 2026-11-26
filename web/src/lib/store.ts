@@ -1,4 +1,4 @@
-import type { AppAuth, AppEntry, BackupInfo, Capabilities, ChatMessage, ChatSummary, ModelInfo, ServerEvent, SignIn, Snapshot, TelegramState } from '../../shared/protocol'
+import type { AppAuth, AppEntry, BackupInfo, Capabilities, ChatMessage, ChatSummary, ModelInfo, ServerEvent, SignIn, Snapshot, TelegramState, Widget } from '../../shared/protocol'
 
 export interface ClientState extends Snapshot {
   /** botId → ids de socios escribiendo ahora mismo. */
@@ -16,6 +16,7 @@ export interface ClientState extends Snapshot {
   telegram?: TelegramState
   appAuth?: AppAuth | null
   caps?: Capabilities
+  widgets?: Widget[]
 }
 
 export function initialState(snapshot: Snapshot): ClientState {
@@ -116,6 +117,9 @@ export function reduce(state: ClientState | null, ev: ServerEvent): ClientState 
 
     case 'chat':
       return { ...state, chat: ev.chat }
+
+    case 'widgets':
+      return { ...state, widgets: ev.widgets }
 
     case 'backups':
       return { ...state, backups: { list: ev.list, auto: ev.auto } }

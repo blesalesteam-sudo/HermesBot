@@ -86,11 +86,25 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'notice'
   /** Socio que lo escribió (solo en mensajes de usuario). */
   authorId?: string
+  /** Nombre de quien escribe cuando no es una cuenta de la app (p. ej. desde un widget). */
+  authorName?: string
   text: string
   tools?: ToolCall[]
   attachments?: Attachment[]
   streaming?: boolean
   error?: boolean
+  ts: number
+}
+
+/** Un bot incrustado en otra web (el CRM, canvas-ia…) mediante un código para pegar. */
+export interface Widget {
+  id: string
+  name: string
+  botId: string
+  /** Llave que va dentro del código para pegar. Quien la tiene puede hablar con ese bot. */
+  token: string
+  /** Webs donde se permite mostrarlo (vacío: cualquiera). */
+  origins: string[]
   ts: number
 }
 
@@ -189,6 +203,8 @@ export interface Snapshot {
   hermesDetail?: string
   routines?: Routine[]
   history?: ChatSummary[]
+  /** La conexión viene de un widget incrustado: solo ve un bot. */
+  embedded?: boolean
 }
 
 export type ServerEvent =
@@ -217,6 +233,7 @@ export type ServerEvent =
   /** Una conversación del historial, para leerla. */
   | { t: 'chat'; chat: ChatSummary & { messages: ChatMessage[] } }
   | { t: 'backups'; list: BackupInfo[]; auto: boolean }
+  | { t: 'widgets'; widgets: Widget[] }
 
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 
@@ -261,5 +278,9 @@ export type ClientCommand =
   | { t: 'telegram.save'; token: string | null; users?: string }
   | { t: 'caps.get' }
   | { t: 'cap.toggle'; id: string; on: boolean }
+  | { t: 'widgets.get' }
+  | { t: 'widget.save'; id?: string; name: string; botId: string; origins: string }
+  | { t: 'widget.rotate'; id: string }
+  | { t: 'widget.delete'; id: string }
   | { t: 'backup.list' }
   | { t: 'backup.auto'; on: boolean }

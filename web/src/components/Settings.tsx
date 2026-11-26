@@ -7,11 +7,12 @@ import { canInstall, install, isInstalled, notifyBlocked, notifyOn, notifySuppor
 import type { ClientState } from '../lib/store'
 import { Avatar } from './Avatar'
 import { AppsSection, Badge, CapsSection, Tabs } from './SettingsApps'
+import { WidgetsSection } from './SettingsWidgets'
 import { IconBack, IconDownload, IconMoon, IconPlus, IconSun, IconTrash, IconX } from './icons'
 
 declare const __DEMO__: boolean
 
-export type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apps' | 'capacidades' | 'avisos' | 'copias' | 'estado' | 'apariencia'
+export type Section = 'perfil' | 'usuarios' | 'bots' | 'modelo' | 'apps' | 'widgets' | 'capacidades' | 'avisos' | 'copias' | 'estado' | 'apariencia'
 
 interface Props {
   state: ClientState
@@ -559,7 +560,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
   const nav: [string, [Section, string][]][] = [
     ['Tú', [['perfil', 'Mi perfil'], ['avisos', 'Avisos y app'], ['apariencia', 'Apariencia']]],
     ['Equipo', [['usuarios', 'Usuarios'], ['bots', 'Bots']]],
-    ['Conexiones', [...(admin ? [['modelo', 'Inteligencia'] as [Section, string]] : []), ['apps', 'Aplicaciones'], ['capacidades', 'Capacidades']]],
+    ['Conexiones', [...(admin ? [['modelo', 'Inteligencia'] as [Section, string]] : []), ['apps', 'Aplicaciones'], ...(admin ? [['widgets', 'Widgets'] as [Section, string]] : []), ['capacidades', 'Capacidades']]],
     ...(admin ? [['Sistema', [['estado', 'Estado'], ['copias', 'Copias']]] as [string, [Section, string][]]] : [])
   ]
   const userBeingEdited = editUser && editUser !== 'new' ? state.users.find(u => u.id === editUser) ?? null : null
@@ -664,6 +665,7 @@ export function Settings({ state, send, theme, onTheme, onClose, initial = 'perf
 
           {section === 'modelo' && <ModelSection state={state} send={send} />}
           {section === 'apps' && <AppsSection state={state} send={send} />}
+          {section === 'widgets' && admin && <WidgetsSection state={state} send={send} />}
           {section === 'capacidades' && <CapsSection state={state} send={send} />}
           {section === 'estado' && <StatusSection state={state} send={send} />}
           {section === 'avisos' && <AlertsSection />}

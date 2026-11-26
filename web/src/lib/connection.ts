@@ -6,7 +6,7 @@ export interface Connection {
 }
 
 /** Conexión real: un WebSocket con el servidor de hermesBot, con reconexión automática. */
-export function connectLive(onEvent: (ev: ServerEvent) => void, onState: (open: boolean) => void): Connection {
+export function connectLive(onEvent: (ev: ServerEvent) => void, onState: (open: boolean) => void, query = '', onDenied: () => void = () => location.reload()): Connection {
   let ws: WebSocket | null = null
   let closed = false
   let attempt = 0
@@ -14,7 +14,7 @@ export function connectLive(onEvent: (ev: ServerEvent) => void, onState: (open: 
 
   const open = () => {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    ws = new WebSocket(`${proto}//${location.host}/ws`)
+    ws = new WebSocket(`${proto}//${location.host}/ws${query}`)
     ws.onopen = () => {
       attempt = 0
       onState(true)
@@ -34,7 +34,8 @@ export function connectLive(onEvent: (ev: ServerEvent) => void, onState: (open: 
       onState(false)
 
       if (ev.code === 4401) {
-        location.reload()
+        closed = true
+        onDenied()
 
         return
       }

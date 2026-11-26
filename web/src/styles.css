@@ -636,3 +636,15 @@ a.btn.btn-primary { color: var(--app); }
   .edit-hint { display: none; }
   .edit-actions { justify-content: flex-end; }
 }
+
+/* ───────────── Widget incrustado en otra web ───────────── */
+.embed-app { display: block; }
+.embed-app .chat { height: 100dvh; }
+.embed .bot-pill { cursor: default; }
+.embed-off p { text-align: center; color: var(--ink-2); font-size: 14px; line-height: 1.5; padding: 24px; }
+.widget-form { display: grid; gap: 12px; padding: 12px 0 14px; }
+.field select { border: 1px solid var(--hairline); background: var(--composer); color: var(--ink); border-radius: 10px; padding: 0 10px; height: 38px; outline: none; min-width: 0; width: 100%; font: inherit; }
+.code-line { align-items: flex-start !important; }
+.code-box { flex: 1; min-width: 200px; border: 1px solid var(--hairline); background: var(--app); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: 12px/17px ui-monospace, SFMono-Regular, Menlo, monospace; resize: none; outline: none; word-break: break-all; }
+.signin .field-hint { max-width: 560px; }
+.btn svg { vertical-align: -2px; }

@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User
+  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User, Widget
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -290,6 +290,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     ['webflow', 'Webflow', 'Sitios y contenido.'], ['wordpress-com', 'WordPress', 'Entradas y páginas.']
   ] as [string, string, string, AppEntry['state']?, number?][]).map(([id, name, about, st, tools]) => ({ id, name, about, state: st ?? 'off', tools }))
   let telegram = { connected: false, users: '' }
+  let widgets: Widget[] = [{ id: 'w-crm', name: 'CRM', botId: 'setter', origins: ['https://crm.miempresa.com'], token: 'llave-de-ejemplo-crm', ts: Date.now() - 86400000 }]
   const caps: Capabilities = {
     toolsets: [
       ['web', 2, true], ['browser', 4, true], ['file', 4, true], ['terminal', 2, true], ['code_execution', 1, true], ['vision', 1, true], ['image_gen', 1, true],
@@ -484,6 +485,24 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
 
           break
         }
+        case 'widgets.get':
+          emit({ t: 'widgets', widgets })
+          break
+        case 'widget.save':
+          widgets = cmd.id
+            ? widgets.map(w => (w.id === cmd.id ? { ...w, name: cmd.name, botId: cmd.botId, origins: cmd.origins.split(/[\s,]+/).filter(Boolean) } : w))
+            : [...widgets, { id: uid('w'), name: cmd.name, botId: cmd.botId, origins: cmd.origins.split(/[\s,]+/).filter(Boolean), token: 'llave-de-ejemplo-' + uid('k'), ts: Date.now() }]
+          emit({ t: 'widgets', widgets })
+          emit({ t: 'toast', text: cmd.id ? 'Widget guardado.' : 'Widget creado. Copia su código y pégalo en tu web.' })
+          break
+        case 'widget.rotate':
+          widgets = widgets.map(w => (w.id === cmd.id ? { ...w, token: 'llave-de-ejemplo-' + uid('k') } : w))
+          emit({ t: 'widgets', widgets })
+          break
+        case 'widget.delete':
+          widgets = widgets.filter(w => w.id !== cmd.id)
+          emit({ t: 'widgets', widgets })
+          break
         case 'apps.get':
           emit({ t: 'apps', apps, telegram })
           break
