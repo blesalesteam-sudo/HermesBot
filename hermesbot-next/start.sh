@@ -18,7 +18,7 @@ mkdir -p /tmp/hermesbot "$OMB_DATA_DIR"
 if [ -z "$OMB_PUBLIC_URL" ] && [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
   export OMB_PUBLIC_URL="https://$RAILWAY_PUBLIC_DOMAIN"
 fi
-export OMB_SERVER_NAME="${OMB_SERVER_NAME:-hermesBot}"
+export OMB_SERVER_NAME="${OMB_SERVER_NAME:-OpenBot}"
 
 node /opt/hermesbot/edge.mjs &
 
