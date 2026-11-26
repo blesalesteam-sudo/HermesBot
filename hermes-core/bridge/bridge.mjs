@@ -11,7 +11,7 @@
 
 import { execFile, spawn } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import { createReadStream, createWriteStream, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -122,6 +122,131 @@ function startLogin(provider) {
 
 const loginView = () => (login ? { provider: login.provider, status: login.status, url: login.url, code: login.code, error: login.error } : { status: 'none' })
 
+// ───────────── WhatsApp ─────────────
+// Se vincula como "dispositivo vinculado": Hermes trae su propio conector, que da un código QR
+// para escanear con el móvil. Aquí se arranca ese conector en modo "solo vincular", se recoge el
+// QR para enseñarlo en Ajustes y, cuando el móvil lo acepta, se activa WhatsApp y se reinicia.
+const HOME_DIR = process.env.HERMES_HOME || '/opt/data'
+const ENV_FILE = join(HOME_DIR, '.env')
+const WA_SESSION = join(HOME_DIR, 'whatsapp', 'session')
+const HERMES_ROOT = process.env.HERMES_ROOT || '/opt/hermes'
+const envValue = key => {
+  try { return new RegExp(`^${key}=(.*)$`, 'm').exec(readFileSync(ENV_FILE, 'utf8'))?.[1]?.trim().replace(/^["']|["']$/g, '') ?? '' } catch { return '' }
+}
+const setConfig = (key, value) => run('hermes', ['config', 'set', key, String(value)], { timeout: 60_000, env: HERMES_ENV })
+const unsetConfig = key => run('hermes', ['config', 'unset', key], { timeout: 60_000, env: HERMES_ENV }).catch(() => undefined)
+let pairing = null
+
+function waPaired() {
+  try { return !!JSON.parse(readFileSync(join(WA_SESSION, 'creds.json'), 'utf8'))?.me?.id } catch { return false }
+}
+
+const waView = () => ({
+  connected: waPaired() && envValue('WHATSAPP_ENABLED').toLowerCase() === 'true',
+  mode: pairing?.mode || envValue('WHATSAPP_MODE') || 'bot',
+  users: pairing?.users || envValue('WHATSAPP_ALLOWED_USERS'),
+  pairing: pairing ? { status: pairing.status, qr: pairing.qr, error: pairing.error } : null
+})
+
+/** Carpeta del conector de WhatsApp (Hermes la copia a su disco si la instalación es de solo lectura). */
+async function waBridgeDir() {
+  const python = [join(HERMES_ROOT, '.venv/bin/python'), 'python3'].find(bin => !bin.includes('/') || existsSync(bin))
+  const { stdout } = await run(python, ['-c', 'from gateway.platforms.whatsapp_common import resolve_whatsapp_bridge_dir as r; print(r())'], { cwd: HERMES_ROOT, timeout: 120_000, env: HERMES_ENV })
+  const dir = stdout.trim().split('\n').pop()
+
+  if (!existsSync(join(dir, 'bridge.js'))) { throw new Error('esta versión de Hermes no trae el conector de WhatsApp') }
+
+  return dir
+}
+
+function startPairing(mode, users) {
+  pairing?.child?.kill()
+
+  const flow = { status: 'preparing', qr: '', error: '', child: null, mode, users }
+  const fail = message => {
+    if (flow.status === 'done' || flow.status === 'error') { return }
+
+    flow.status = 'error'
+    flow.error = String(message).slice(0, 200)
+    flow.child?.kill()
+    log('WhatsApp: no se pudo vincular ·', flow.error)
+  }
+
+  pairing = flow
+
+  void (async () => {
+    await setConfig('WHATSAPP_MODE', mode)
+    await setConfig('WHATSAPP_ALLOWED_USERS', users)
+
+    const dir = await waBridgeDir()
+
+    // La primera vez hay que descargar las piezas del conector (unos minutos). Quedan guardadas.
+    if (!existsSync(join(dir, 'node_modules', '@whiskeysockets', 'baileys'))) {
+      log('WhatsApp: preparando el conector (primera vez)')
+      await run('npm', ['install', '--no-fund', '--no-audit', '--progress=false'], { cwd: dir, timeout: 600_000, maxBuffer: 16 * 1024 * 1024 })
+    }
+
+    if (pairing !== flow) { return }
+
+    // Se empieza siempre de cero: una vinculación a medias no sirve para la siguiente.
+    rmSync(WA_SESSION, { recursive: true, force: true })
+    mkdirSync(WA_SESSION, { recursive: true, mode: 0o700 })
+
+    // El conector no recibe ninguna clave de Hermes: solo lo justo para arrancar.
+    const child = spawn('node', [join(dir, 'bridge.js'), '--pair-only', '--pair-json', '--session', WA_SESSION], {
+      cwd: dir, env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: process.env.LANG }, stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let buffer = ''
+    let connected = false
+    let drops = 0
+    let tail = ''
+
+    flow.child = child
+    child.stdout.on('data', chunk => {
+      buffer += chunk
+
+      for (let cut = buffer.indexOf('\n'); cut >= 0; cut = buffer.indexOf('\n')) {
+        const line = buffer.slice(0, cut).trim()
+
+        buffer = buffer.slice(cut + 1)
+
+        let ev
+
+        try { ev = JSON.parse(line) } catch { continue }
+
+        if (ev.event === 'qr' && typeof ev.qr === 'string' && flow.status !== 'error') {
+          flow.status = 'qr'
+          flow.qr = ev.qr
+        } else if (ev.event === 'connected') {
+          connected = true
+        } else if (ev.event === 'disconnected' && !flow.qr && ++drops >= 8) {
+          fail('No se pudo contactar con WhatsApp. Inténtalo de nuevo en unos minutos.')
+        } else if (ev.event === 'error') {
+          fail(ev.error === 'passkey_required'
+            ? 'Esta cuenta de WhatsApp pide una verificación extra que no se puede hacer desde aquí.'
+            : ev.error === 'logged_out' ? 'WhatsApp rechazó la vinculación. Inténtalo de nuevo.' : ev.error)
+        }
+      }
+    })
+    child.stderr.on('data', chunk => { tail = (tail + chunk).slice(-400) })
+    child.on('error', error => fail(error.message))
+    child.on('close', async code => {
+      if (flow.status === 'error' || pairing !== flow) { return }
+      if (code !== 0 || !connected || !waPaired()) { return fail(tail.trim().split('\n').pop() || 'no se completó la vinculación') }
+
+      await setConfig('WHATSAPP_ENABLED', 'true')
+      flow.status = 'done'
+      flow.qr = ''
+      log('WhatsApp vinculado · reinicio')
+      setTimeout(() => process.exit(1), 4000)
+    })
+    // El QR caduca: nadie espera más de cinco minutos con él en pantalla.
+    setTimeout(() => fail('Se acabó el tiempo. Vuelve a empezar para ver un código nuevo.'), 5 * 60_000).unref()
+  })().catch(error => fail(lastLine(error)))
+
+  return flow
+}
+
 /** Órdenes internas que solo puede dar la web de hermesBot (con el token interno). */
 async function admin(req, res, url) {
   // Modelo por defecto del equipo: lo guarda Hermes en su propia configuración, para que
@@ -205,6 +330,43 @@ async function admin(req, res, url) {
 
       return
     }
+  }
+
+  if (url.pathname === '/admin/whatsapp') {
+    if (req.method === 'POST') {
+      let body = ''
+
+      for await (const chunk of req) {
+        body += chunk
+
+        if (body.length > 4096) { return reply(res, 413, { ok: false }) }
+      }
+
+      const { mode, users } = JSON.parse(body)
+
+      if (!['bot', 'self-chat'].includes(mode) || !/^\d{7,15}(,\d{7,15}){0,19}$/.test(String(users))) {
+        return reply(res, 400, { ok: false, error: 'datos de WhatsApp no válidos' })
+      }
+
+      startPairing(mode, String(users))
+    } else if (req.method === 'DELETE') {
+      if (pairing && pairing.status !== 'done') {
+        // Cancelar una vinculación a medias.
+        pairing.child?.kill()
+        pairing = null
+      } else if (url.searchParams.get('unlink') === '1') {
+        pairing = null
+        await unsetConfig('WHATSAPP_ENABLED')
+        rmSync(WA_SESSION, { recursive: true, force: true })
+        log('WhatsApp desvinculado · reinicio')
+        reply(res, 200, { ...waView(), connected: false })
+        setTimeout(() => process.exit(1), 800)
+
+        return
+      }
+    }
+
+    return reply(res, 200, waView())
   }
 
   // Un archivo que el bot ha creado (imagen, documento…), para enseñarlo en el chat.

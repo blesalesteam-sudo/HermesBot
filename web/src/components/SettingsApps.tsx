@@ -1,3 +1,4 @@
+import qrcode from 'qrcode-generator'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { AppAuth, AppEntry, ClientCommand } from '../../shared/protocol'
@@ -127,6 +128,99 @@ function Telegram({ state, send }: { state: ClientState; send: Send }) {
   )
 }
 
+/** El código QR dibujado aquí mismo (no sale de la página ni se pide a ningún servicio). */
+function Qr({ text }: { text: string }) {
+  const svg = useMemo(() => {
+    const qr = qrcode(0, 'L')
+
+    qr.addData(text)
+    qr.make()
+
+    return qr.createSvgTag({ cellSize: 4, margin: 3, scalable: true })
+  }, [text])
+
+  return <div className="qr" role="img" aria-label="Código QR para vincular WhatsApp" dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
+function WhatsApp({ state, send }: { state: ClientState; send: Send }) {
+  const wa = state.whatsapp
+  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'bot' | 'self-chat'>(wa?.mode ?? 'bot')
+  const [users, setUsers] = useState(wa?.users ?? '')
+  const [confirm, setConfirm] = useState(false)
+  const pairing = wa?.pairing && wa.pairing.status !== 'done' ? wa.pairing : null
+  const on = !!wa?.connected || wa?.pairing?.status === 'done'
+  const clean = users.replace(/[\s+().-]/g, '')
+  const valid = /^\d{7,15}(,\d{7,15})*$/.test(clean)
+
+  return (
+    <div className="provider">
+      <div className="set-row">
+        <Badge name="WhatsApp" />
+        <div className="set-row-text">
+          <span>WhatsApp</span>
+          <small>{on ? 'Vinculado. Escribid al bot desde WhatsApp.' : 'Hablad con vuestros bots desde WhatsApp. Se vincula escaneando un código QR.'}</small>
+        </div>
+        {confirm ? (
+          <>
+            <button className="btn small danger" onClick={() => { send({ t: 'whatsapp.stop', unlink: true }); setConfirm(false) }}>Desvincular</button>
+            <button className="btn small" onClick={() => setConfirm(false)}>No</button>
+          </>
+        ) : pairing ? null : (
+          <>
+            <button className="btn small" onClick={() => setOpen(o => !o)}>{open ? 'Cerrar' : on ? 'Volver a vincular' : 'Vincular'}</button>
+            {on && <button className="mini-btn" onClick={() => setConfirm(true)} aria-label="Desvincular WhatsApp" title="Desvincular"><IconTrash width={15} height={15} /></button>}
+          </>
+        )}
+      </div>
+      {pairing ? (
+        <div className="signin">
+          {pairing.status === 'error' ? (
+            <>
+              <p className="login-error">{pairing.error || 'No se pudo vincular.'}</p>
+              <button className="btn small" onClick={() => send({ t: 'whatsapp.stop' })}>Cerrar</button>
+            </>
+          ) : (
+            <>
+              <div className="qr-row">
+                {pairing.status === 'qr' && pairing.qr
+                  ? <Qr text={pairing.qr} />
+                  : <div className="qr waiting"><span className="dots"><i /><i /><i /></span></div>}
+                <ol className="signin-steps">
+                  <li><span>Abre WhatsApp en el móvil {mode === 'bot' ? <>que tiene <b>el número del bot</b></> : null}.</span></li>
+                  <li><span>Entra en <b>Ajustes</b> y después en <b>Dispositivos vinculados</b>.</span></li>
+                  <li><span>Pulsa <b>Vincular un dispositivo</b> y apunta la cámara a este código.</span></li>
+                </ol>
+              </div>
+              <p className="field-hint">{pairing.status === 'preparing' ? 'Preparando el código… La primera vez puede tardar un par de minutos.' : 'El código se renueva solo cada pocos segundos. Al escanearlo, esta pantalla se actualiza sola.'}</p>
+              <button className="btn small" onClick={() => send({ t: 'whatsapp.stop' })}>Cancelar</button>
+            </>
+          )}
+        </div>
+      ) : open && (
+        <form className="signin" onSubmit={e => { e.preventDefault(); send({ t: 'whatsapp.start', mode, users: clean }); setOpen(false) }}>
+          <div className="choice-list" role="radiogroup" aria-label="Qué número usar">
+            <label className={`choice${mode === 'bot' ? ' on' : ''}`}>
+              <input type="radio" name="wa-mode" checked={mode === 'bot'} onChange={() => setMode('bot')} />
+              <span><b>Un número solo para el bot</b> (recomendado)<small>Escribís al bot como a cualquier contacto. Necesita un segundo número con WhatsApp; sirve WhatsApp Business en el mismo móvil.</small></span>
+            </label>
+            <label className={`choice${mode === 'self-chat' ? ' on' : ''}`}>
+              <input type="radio" name="wa-mode" checked={mode === 'self-chat'} onChange={() => setMode('self-chat')} />
+              <span><b>Mi propio número</b><small>Hablas con el bot en el chat «Mensaje para ti». Rápido de montar, pero solo lo usa una persona.</small></span>
+            </label>
+          </div>
+          <label className="field wide">
+            <span className="field-label">{mode === 'bot' ? 'Quién puede escribir al bot' : 'Tu número de WhatsApp'}</span>
+            <input value={users} onChange={e => setUsers(e.target.value)} placeholder={mode === 'bot' ? '34600111222, 34600333444' : '34600111222'} inputMode="tel" autoComplete="off" />
+            <span className="field-hint">Con el prefijo del país y sin el signo +{mode === 'bot' ? ', separados por comas' : ''}. Nadie más podrá usarlo.</span>
+          </label>
+          <button className="btn btn-primary" disabled={!valid}>Mostrar el código QR</button>
+        </form>
+      )}
+    </div>
+  )
+}
+
 export function AppsSection({ state, send }: { state: ClientState; send: Send }) {
   const [tab, setTab] = useState<'on' | 'all'>('all')
   const [q, setQ] = useState('')
@@ -149,16 +243,7 @@ export function AppsSection({ state, send }: { state: ClientState; send: Send })
       <div className="set-label first">Mensajería</div>
       <div className="rows">
         {admin && <Telegram state={state} send={send} />}
-        <div className="provider">
-          <div className="set-row">
-            <Badge name="WhatsApp" />
-            <div className="set-row-text">
-              <span>WhatsApp</span>
-              <small>Se vincula con un código QR. Todavía no está disponible desde aquí.</small>
-            </div>
-            <i className="tag">En preparación</i>
-          </div>
-        </div>
+        {admin && <WhatsApp key={state.whatsapp ? 'wa' : 'wa-wait'} state={state} send={send} />}
       </div>
 
       <div className="set-label">Herramientas de trabajo</div>

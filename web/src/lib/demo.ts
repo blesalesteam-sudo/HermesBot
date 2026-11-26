@@ -2,7 +2,7 @@
 // prueba, para poder enseñar y probar el diseño sin desplegar nada.
 import { DEFAULT_BOTS } from '../../shared/defaults'
 import type {
-  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User, Widget
+  AppEntry, Capabilities, ChatMessage, ChatSummary, ClientCommand, ModelInfo, PendingRequest, Routine, ServerEvent, Snapshot, ToolCall, Upload, User, WhatsAppState, Widget
 } from '../../shared/protocol'
 import type { Connection } from './connection'
 
@@ -290,6 +290,8 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
     ['webflow', 'Webflow', 'Sitios y contenido.'], ['wordpress-com', 'WordPress', 'Entradas y páginas.']
   ] as [string, string, string, AppEntry['state']?, number?][]).map(([id, name, about, st, tools]) => ({ id, name, about, state: st ?? 'off', tools }))
   let telegram = { connected: false, users: '' }
+  let whatsapp: WhatsAppState = { connected: false, mode: 'bot', users: '' }
+  let waTimer = 0
   let widgets: Widget[] = [{ id: 'w-crm', name: 'CRM', botId: 'setter', origins: ['https://crm.miempresa.com'], token: 'llave-de-ejemplo-crm', ts: Date.now() - 86400000 }]
   const caps: Capabilities = {
     toolsets: [
@@ -485,6 +487,28 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
 
           break
         }
+        case 'whatsapp.start': {
+          const step = (pairing: WhatsAppState['pairing'], connected = false) => {
+            whatsapp = { connected, mode: cmd.mode, users: cmd.users, pairing }
+            emit({ t: 'whatsapp', state: whatsapp })
+          }
+
+          window.clearTimeout(waTimer)
+          step({ status: 'preparing' })
+          waTimer = window.setTimeout(() => {
+            step({ status: 'qr', qr: `2@ejemplo-de-vista-previa-${uid('q')},no-es-un-codigo-real,${uid('k')},${uid('z')}` })
+            waTimer = window.setTimeout(() => {
+              step(null, true)
+              emit({ t: 'toast', text: 'En la vista previa el código es de ejemplo: aquí se da por vinculado.' })
+            }, 9000)
+          }, 1400)
+          break
+        }
+        case 'whatsapp.stop':
+          window.clearTimeout(waTimer)
+          whatsapp = { connected: cmd.unlink ? false : whatsapp.connected, mode: whatsapp.mode, users: whatsapp.users, pairing: null }
+          emit({ t: 'whatsapp', state: whatsapp })
+          break
         case 'widgets.get':
           emit({ t: 'widgets', widgets })
           break
@@ -504,7 +528,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           emit({ t: 'widgets', widgets })
           break
         case 'apps.get':
-          emit({ t: 'apps', apps, telegram })
+          emit({ t: 'apps', apps, telegram, whatsapp })
           break
         case 'app.connect':
           if (cmd.id === 'linear' || cmd.id === 'notion' || cmd.id === 'asana') {
@@ -530,7 +554,7 @@ export function connectDemo(meId: string, onEvent: (ev: ServerEvent) => void): C
           break
         case 'telegram.save':
           telegram = { connected: cmd.token !== null, users: cmd.token === null ? '' : cmd.users ?? '' }
-          emit({ t: 'apps', apps, telegram })
+          emit({ t: 'apps', apps, telegram, whatsapp })
           emit({ t: 'toast', text: cmd.token === null ? 'Telegram desconectado.' : 'Telegram guardado.' })
           break
         case 'caps.get':

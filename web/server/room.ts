@@ -5,7 +5,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type {
   ApprovalChoice, AppEntry, Attachment, Bot, Capabilities, BotStatus, ChatMessage, ChatSummary, ClientCommand, HermesState, ModelInfo, PendingRequest, Routine,
-  ServerEvent, SignIn, Snapshot, ToolCall, Upload, User, Widget
+  ServerEvent, SignIn, Snapshot, ToolCall, Upload, User, WhatsAppState, Widget
 } from '../shared/protocol.ts'
 import { createUser, deleteUser, findUser, publicUser, publicUsers, updateUser } from './auth.ts'
 import { listBackups } from './backup.ts'
@@ -125,6 +125,7 @@ export class Room {
   private routines: Routine[] = []
   private retry: NodeJS.Timeout | undefined
   private loginPoll: NodeJS.Timeout | undefined
+  private waPoll: NodeJS.Timeout | undefined
   private bots: Bot[] = saved.bots ?? config.bots
 
   private get users(): User[] {
@@ -431,6 +432,10 @@ export class Room {
       case 'widget.rotate':
       case 'widget.delete':
         return this.changeWidget(viewer, String(cmd.id), cmd.t === 'widget.delete')
+      case 'whatsapp.start':
+        return this.whatsapp(viewer, 'POST', { mode: cmd.mode, users: String(cmd.users ?? '').replace(/[^\d,]/g, '') })
+      case 'whatsapp.stop':
+        return this.whatsapp(viewer, 'DELETE', undefined, !!cmd.unlink)
       case 'caps.get':
         return this.sendCaps(viewer)
       case 'cap.toggle':
@@ -802,7 +807,9 @@ export class Room {
         ? await fetch(`${config.hermesAdmin}/admin/telegram`, { headers: { authorization: `Bearer ${config.hermesToken}` } }).then(r => (r.ok ? r.json() : undefined)).catch(() => undefined)
         : undefined
 
-      viewer.send({ t: 'apps', apps: await this.appList(), telegram: telegram ? { connected: !!telegram.connected, users: String(telegram.users ?? '') } : undefined })
+      const whatsapp = this.isAdmin(viewer) ? await this.whatsappCall('GET').catch(() => undefined) : undefined
+
+      viewer.send({ t: 'apps', apps: await this.appList(), telegram: telegram ? { connected: !!telegram.connected, users: String(telegram.users ?? '') } : undefined, whatsapp })
     } catch (error) {
       viewer.send({ t: 'toast', text: `No pude leer las aplicaciones (${(error as Error).message}).`, error: true })
     }
@@ -913,6 +920,53 @@ export class Room {
     } catch (error) {
       viewer.send({ t: 'toast', text: `No pude guardar Telegram (${(error as Error).message}).`, error: true })
     }
+  }
+
+  // ───────────── WhatsApp (se vincula con un código QR) ─────────────
+
+  private async whatsappCall(method: 'GET' | 'POST' | 'DELETE', body?: unknown, unlink = false): Promise<WhatsAppState> {
+    const res = await fetch(`${config.hermesAdmin}/admin/whatsapp${unlink ? '?unlink=1' : ''}`, {
+      method,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${config.hermesToken}` },
+      body: body ? JSON.stringify(body) : undefined
+    })
+
+    if (!res.ok) { throw new Error(res.status === 400 ? 'revisa los números de teléfono' : `respuesta ${res.status}`) }
+
+    return await res.json() as WhatsAppState
+  }
+
+  private async whatsapp(viewer: Viewer, method: 'POST' | 'DELETE', body?: unknown, unlink = false) {
+    if (!this.isAdmin(viewer)) { return }
+
+    clearInterval(this.waPoll)
+
+    try {
+      this.toAdmins({ t: 'whatsapp', state: await this.whatsappCall(method, body, unlink) })
+    } catch (error) {
+      return viewer.send({ t: 'toast', text: `No pude ${method === 'POST' ? 'empezar a vincular' : 'cambiar'} WhatsApp (${(error as Error).message}).`, error: true })
+    }
+
+    if (method === 'DELETE') {
+      return unlink && viewer.send({ t: 'toast', text: 'WhatsApp desvinculado. Hermes se reinicia un momento.' })
+    }
+
+    // Mientras dura la vinculación se va leyendo el QR (cambia cada pocos segundos) y el resultado.
+    this.waPoll = setInterval(async () => {
+      const state = await this.whatsappCall('GET').catch(() => null)
+
+      if (!state) { return }
+
+      this.toAdmins({ t: 'whatsapp', state })
+
+      if (state.pairing?.status === 'preparing' || state.pairing?.status === 'qr') { return }
+
+      clearInterval(this.waPoll)
+
+      if (state.pairing?.status === 'done') {
+        this.toAdmins({ t: 'toast', text: 'WhatsApp vinculado. Hermes se reinicia un momento para activarlo.' })
+      }
+    }, 2000)
   }
 
   // ───────────── Ajustes: capacidades (herramientas y habilidades) ─────────────

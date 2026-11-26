@@ -167,6 +167,16 @@ export interface TelegramState {
   users: string
 }
 
+/** WhatsApp vinculado con código QR. */
+export interface WhatsAppState {
+  connected: boolean
+  /** 'bot': un número solo para el bot. 'self-chat': el número propio (te escribes a ti mismo). */
+  mode: 'bot' | 'self-chat'
+  users: string
+  /** Vinculación en marcha: preparando, con el QR en pantalla, hecha o fallida. */
+  pairing?: { status: 'preparing' | 'qr' | 'done' | 'error'; qr?: string; error?: string } | null
+}
+
 export type BotState = 'idle' | 'thinking' | 'working'
 
 export interface BotStatus {
@@ -224,7 +234,8 @@ export type ServerEvent =
   | { t: 'toast'; text: string; error?: boolean }
   | { t: 'model'; info: ModelInfo }
   | { t: 'login'; flow: SignIn | null }
-  | { t: 'apps'; apps: AppEntry[]; telegram?: TelegramState }
+  | { t: 'apps'; apps: AppEntry[]; telegram?: TelegramState; whatsapp?: WhatsAppState }
+  | { t: 'whatsapp'; state: WhatsAppState }
   | { t: 'app.auth'; flow: AppAuth | null }
   | { t: 'caps'; caps: Capabilities }
   /** Sustituye la conversación visible de un bot (al empezar una nueva o recuperar otra). */
@@ -278,6 +289,9 @@ export type ClientCommand =
   | { t: 'app.remove'; id: string }
   /** `token: null` desconecta Telegram. */
   | { t: 'telegram.save'; token: string | null; users?: string }
+  | { t: 'whatsapp.start'; mode: 'bot' | 'self-chat'; users: string }
+  /** Cancela una vinculación a medias; con `unlink`, desvincula WhatsApp. */
+  | { t: 'whatsapp.stop'; unlink?: boolean }
   | { t: 'caps.get' }
   | { t: 'cap.toggle'; id: string; on: boolean }
   | { t: 'widgets.get' }
