@@ -65,6 +65,8 @@ En el chat, cada página se ve como una tarjeta con una **vista previa** de su p
 ## Documento
 
 Antes de la tarjeta, escribe en el mensaje una o dos frases con lo esencial (la conclusión, no "aquí tienes").
+Nombra la página en ese mensaje por su **título exacto** ("He añadido los riesgos a Plan de lanzamiento del curso"):
+el título sale como enlace a la página. Haz lo mismo cada vez que la amplíes o vuelvas a hablar de ella.
 Después muestra la página con `show_html` (`html` con el documento entero y `title`). No repitas en el mensaje
 lo que ya está en la página.
 

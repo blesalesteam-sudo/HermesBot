@@ -1,0 +1,116 @@
+diff -ruN a/src/components/JumpToLatestButton.tsx b/src/components/JumpToLatestButton.tsx
+--- a/src/components/JumpToLatestButton.tsx	2026-11-27 11:11:41
++++ b/src/components/JumpToLatestButton.tsx	2026-11-27 11:15:51
+@@ -11,7 +11,8 @@
+       type="button"
+       aria-label={label ?? t("chat.jumpToLatestAria")}
+       title={label ?? t("chat.jumpToLatest")}
+-      className={cn("animate-pop-in absolute left-1/2 z-10 flex size-9 -translate-x-1/2 items-center justify-center rounded-full border border-hairline/40 bg-raised text-ink shadow-lg hover:bg-raised-hover", className)}
++      data-jump-latest
++      className={cn("animate-pop-in absolute left-1/2 z-10 flex size-9 -translate-x-1/2 items-center justify-center rounded-full bg-composer text-ink ring-[0.5px] ring-ink/10 shadow-[0_2px_8px_-1px_rgb(0_0_0/0.12),0_1px_2px_rgb(0_0_0/0.05)] hover:bg-[color-mix(in_srgb,var(--color-composer),var(--color-ink)_4%)]", className)}
+       style={style}
+     >
+       {up ? <ArrowUp size={18} aria-hidden="true" /> : <ArrowDown size={18} aria-hidden="true" />}
+diff -ruN a/src/components/app/PageTools.tsx b/src/components/app/PageTools.tsx
+--- a/src/components/app/PageTools.tsx	2026-11-27 11:11:41
++++ b/src/components/app/PageTools.tsx	2026-11-27 11:15:51
+@@ -25,6 +25,9 @@
+ /** A page starts at this height in the chat and grows to its content up to the cap, then scrolls inside. */
+ export const PAGE_HEIGHT = { start: 520, cap: 560 } as const;
+ const FLASH_MS = 2_500;
++/** OpenBot: in the open page's header only the title, Share and Close show at rest; the other tools appear when the
++ * pointer is over the header, on a touch screen, or while one of them is on. */
++const AT_REST = "opacity-0 transition-opacity duration-150 group-hover/pagehead:opacity-100 focus-visible:opacity-100 has-[:focus-visible]:opacity-100 touch:opacity-100 aria-pressed:opacity-100 motion-reduce:transition-none";
+ const TOOL =
+   "flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40";
+ 
+@@ -219,7 +222,7 @@
+   return (
+     <div data-page-tools className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-2", className)}>
+       {lead}
+-      <div className={cn("flex items-center gap-0.5 text-[13px] text-ink-secondary", lead !== undefined && version.last === 0 && "hidden")}>
++      <div className={cn("flex items-center gap-0.5 text-[13px] text-ink-secondary", lead !== undefined && version.last === 0 && "hidden", lead !== undefined && version.latest && AT_REST)}>
+         <button type="button" className={TOOL} aria-label={t("chat.preview.older")} title={t("chat.preview.older")} disabled={version.rev <= version.first}
+           onClick={() => version.show(version.rev - 1)}><ChevronLeft size={15} /></button>
+         <span data-page-version className="min-w-6 text-center tabular-nums">{label}</span>
+@@ -230,7 +233,7 @@
+       </div>
+       <div className="ms-auto flex flex-wrap items-center gap-1">
+         <button type="button" aria-pressed={point.pointing} onClick={point.toggle} disabled={!ready} title={t("chat.preview.pointHint")}
+-          className={cn(ASK_CHIP, point.pointing ? ASK_CHIP_PICKED : ASK_CHIP_IDLE)}>
++          className={cn(ASK_CHIP, point.pointing ? ASK_CHIP_PICKED : ASK_CHIP_IDLE, lead !== undefined && AT_REST)}>
+           <Crosshair size={14} />{lead === undefined ? t("chat.preview.point") : <span className="sr-only">{t("chat.preview.point")}</span>}
+         </button>
+         {!room && <>
+@@ -240,16 +243,16 @@
+           {pin?.show && (
+             <button type="button" data-page-pin aria-pressed={pin.pinned} onClick={pin.toggle} disabled={pin.full}
+               title={pin.full ? t("chat.preview.pinFull", { max: MAX_WEB_PANELS }) : t(pin.pinned ? "chat.preview.unpinHint" : "chat.preview.pinHint")}
+-              className={cn(ASK_CHIP, pin.pinned ? ASK_CHIP_PICKED : ASK_CHIP_IDLE)}>
++              className={cn(ASK_CHIP, pin.pinned ? ASK_CHIP_PICKED : ASK_CHIP_IDLE, lead !== undefined && AT_REST)}>
+               {pin.pinned ? <PinOff size={14} /> : <Pin size={14} />}{lead === undefined ? t(pin.pinned ? "chat.preview.unpin" : "chat.preview.pin") : <span className="sr-only">{t(pin.pinned ? "chat.preview.unpin" : "chat.preview.pin")}</span>}
+             </button>
+           )}
+         </>}
+-        <button type="button" className={TOOL} disabled={save.busy} onClick={() => void save.run(version.rev)}
++        <button type="button" className={cn(TOOL, lead !== undefined && AT_REST)} disabled={save.busy} onClick={() => void save.run(version.rev)}
+           aria-label={t("chat.preview.save")} title={t("chat.preview.save")}>
+           {save.busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+         </button>
+-        <button type="button" className={cn(TOOL, lead !== undefined && !share.url && "hidden")} disabled={!share.url} onClick={() => share.url && void openExternalLink(share.url)}
++        <button type="button" className={cn(TOOL, lead !== undefined && !share.url && "hidden", lead !== undefined && AT_REST)} disabled={!share.url} onClick={() => share.url && void openExternalLink(share.url)}
+           aria-label={t("chat.preview.openTab")} title={share.url ? t("chat.preview.openTab") : t("chat.preview.openTabNeedsLink")}>
+           <ArrowUpRight size={15} />
+         </button>
+@@ -356,10 +359,11 @@
+   return createPortal(
+     <div {...(pane ? { role: "region", "data-page-pane": props.doc.messageId } : { role: "dialog", "aria-modal": true })}
+       aria-label={props.title} data-page-fullscreen={props.doc.messageId}
+-      // OpenBot: the open page takes the chat's header too, so its title sits where the bot's name was.
+-      className={cn(pane ? "absolute inset-x-0 top-0 z-40 bottom-[var(--page-pane-bottom,0px)]" : "fixed inset-0 z-50",
++      // OpenBot: the open page takes the chat's header too, so its title sits where the bot's name was, and runs down
++      // behind the message box, which floats over it (styles.css lifts the box above the page).
++      className={cn(pane ? "absolute inset-0 z-40" : "fixed inset-0 z-50",
+         "flex flex-col bg-panel")}>
+-      <div ref={closer} className="flex min-h-14 flex-col justify-center gap-2 bg-app px-4 py-2">
++      <div ref={closer} className="group/pagehead flex min-h-14 flex-col justify-center gap-2 bg-app px-4 py-2">
+         <PageToolbar {...props} lead={<div className="flex min-w-0 flex-1 justify-center"><div data-page-open-title className="flex max-w-full items-center gap-2 rounded-full bg-composer px-4 py-2 text-[14px] font-medium leading-5 text-ink shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-ink/[0.08]" title={props.title}><span aria-hidden="true" className="flex h-3 shrink-0 items-end gap-[1.5px]"><span className="h-[5px] w-[2.5px] rounded-full bg-[#ef6b5a]" /><span className="h-[7px] w-[2.5px] rounded-full bg-[#f2a33a]" /><span className="h-[9px] w-[2.5px] rounded-full bg-[#3fae6a]" /><span className="h-3 w-[2.5px] rounded-full bg-[#3f7fe8]" /></span><bdi dir="auto" className="min-w-0 truncate">{props.title}</bdi></div></div>} />
+         <PageNotes version={props.version} point={point} share={props.share} save={props.save} room={props.room} />
+       </div>
+diff -ruN a/src/styles.css b/src/styles.css
+--- a/src/styles.css	2026-11-27 11:11:41
++++ b/src/styles.css	2026-11-27 11:15:51
+@@ -4029,3 +4029,33 @@
+ }
+ /* OpenBot: the page card someone was just taken to stands out for a moment. */
+ [data-app][data-page-found] > div { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent), 0 1px 4px rgb(0 0 0 / 0.05); transition: box-shadow 200ms; }
++
++/* OpenBot: the message box and the chat header's pills are frosted glass: the conversation shows through them, blurred,
++   and fades out under the box instead of stopping at its top edge. */
++[data-composer-backdrop] {
++  background: linear-gradient(to bottom, transparent 0%, transparent 50%, var(--color-app) 66%);
++}
++/* With a page open the box floats over the page, as it does over the chat; the chat's own "jump to latest" stays away. */
++main:has([data-page-pane]) .chat-column-dock { z-index: 41; }
++main:has([data-page-pane]) [data-jump-latest] { display: none; }
++:root .chat-column-dock .composer-shell,
++:root[data-skin] .chat-column-dock .composer-shell {
++  background: color-mix(in srgb, var(--color-composer) 74%, transparent);
++  -webkit-backdrop-filter: blur(20px) saturate(180%);
++  backdrop-filter: blur(20px) saturate(180%);
++}
++[data-look="chat-header"] :is(button, div, a).bg-composer {
++  background: color-mix(in srgb, var(--color-composer) 72%, transparent);
++  -webkit-backdrop-filter: blur(16px) saturate(180%);
++  backdrop-filter: blur(16px) saturate(180%);
++}
++@media (prefers-reduced-transparency: reduce) {
++  [data-composer-backdrop] { background: var(--color-app); }
++  :root .chat-column-dock .composer-shell,
++  :root[data-skin] .chat-column-dock .composer-shell,
++  [data-look="chat-header"] :is(button, div, a).bg-composer {
++    background: var(--color-composer);
++    -webkit-backdrop-filter: none;
++    backdrop-filter: none;
++  }
++}

@@ -29,6 +29,9 @@ describe("a reply that names a page", () => {
     expect(linkPageMentions("Mira el Plan de lanzamiento. El Plan de lanzamiento sigue.", known))
       .toBe(`Mira el [Plan de lanzamiento](${PAGE_MENTION_HREF}p1). El Plan de lanzamiento sigue.`);
   });
+  it("links the title written in another case, keeping the reply's own spelling", () => {
+    expect(linkPageMentions("he ampliado el plan de lanzamiento", known)).toBe(`he ampliado el [plan de lanzamiento](${PAGE_MENTION_HREF}p1)`);
+  });
   it("leaves code, existing links and short titles alone", () => {
     expect(linkPageMentions("`Plan de lanzamiento`", known)).toBe("`Plan de lanzamiento`");
     expect(linkPageMentions("[Plan de lanzamiento](https://x.test)", known)).toBe("[Plan de lanzamiento](https://x.test)");

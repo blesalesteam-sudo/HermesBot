@@ -32,20 +32,25 @@ function shielded(text: string, index: number, length: number): boolean {
   return text.startsWith("](", index + length);
 }
 
-/** The first plain mention of each page's title becomes a markdown link to the page; a title too short to be a name
- * (under 8 characters) is left alone. */
+/** The first plain mention of each page's title, in any case, becomes a markdown link to the page; a title too short
+ * to be a name (under 8 characters) is left alone. */
 export function linkPageMentions(text: string, known: readonly ThreadPage[]): string {
   if (!known.length || !text) return text;
   let linked = text;
   for (const page of [...known].sort((a, b) => b.title.length - a.title.length)) {
     const title = page.title.trim();
     if (title.length < 8 || linked.includes(`${PAGE_MENTION_HREF}${page.id})`)) continue;
+    // The reply may write the title in another case ("plan de lanzamiento"): it is still the page's name.
+    const folded = linked.toLocaleLowerCase();
+    const sameLength = folded.length === linked.length;
+    const needle = sameLength ? title.toLocaleLowerCase() : title;
+    const haystack = sameLength && needle.length === title.length ? folded : linked;
     let from = 0;
     for (;;) {
-      const index = linked.indexOf(title, from);
+      const index = haystack.indexOf(haystack === folded ? needle : title, from);
       if (index < 0) break;
       if (!shielded(linked, index, title.length)) {
-        const label = title.replace(/([\[\]\\])/g, "\\$1");
+        const label = linked.slice(index, index + title.length).replace(/([\[\]\\])/g, "\\$1");
         linked = `${linked.slice(0, index)}[${label}](${PAGE_MENTION_HREF}${page.id})${linked.slice(index + title.length)}`;
         break;
       }
