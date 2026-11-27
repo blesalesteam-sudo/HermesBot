@@ -1,0 +1,105 @@
+OpenBot: la tarjeta distingue documento y panel (texto e icono) y la página abierta tiene una sola fila de cabecera.
+
+--- a/src/components/app/AppChrome.tsx	2026-11-27 01:37:58
++++ b/src/components/app/AppChrome.tsx	2026-11-27 01:37:58
+@@ -70,8 +70,10 @@
+   );
+ }
+ 
+-export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false }: {
++export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false, panel = false }: {
+   title: string;
++  /** OpenBot: a page with charts shows a chart on its icon, a document shows lines of text. */
++  panel?: boolean;
+   detail: string;
+   updated: boolean;
+   infoId: string;
+@@ -83,14 +85,22 @@
+   return (
+     <div data-page-footer className="flex min-h-18 items-center gap-3.5 px-4 py-3.5">
+       {/* OpenBot: a small sheet with a chart, so a page reads as a document at a glance. */}
+-      <span data-page-icon aria-hidden="true" className="flex h-[46px] w-[38px] shrink-0 flex-col justify-end gap-[3px] rounded-lg bg-app p-[7px] ring-1 ring-ink/[0.10]">
+-        <span className="h-[3px] w-[70%] rounded-full bg-ink/[0.14]" />
+-        <span className="mb-[3px] h-[3px] w-[45%] rounded-full bg-ink/[0.14]" />
+-        <span className="flex h-[14px] items-end gap-[3px]">
+-          <span className="h-[6px] w-[5px] rounded-[1px] bg-ink/[0.30]" />
+-          <span className="h-[10px] w-[5px] rounded-[1px] bg-ink/[0.50]" />
+-          <span className="h-[14px] w-[5px] rounded-[1px] bg-ink" />
+-        </span>
++      <span data-page-icon={panel ? "panel" : "document"} aria-hidden="true" className="flex h-[46px] w-[38px] shrink-0 flex-col justify-end gap-[3px] rounded-lg bg-app p-[7px] ring-1 ring-ink/[0.10]">
++        {panel ? <>
++          <span className="mb-[2px] h-[3px] w-[55%] rounded-full bg-ink/[0.14]" />
++          <span className="flex h-[20px] items-end gap-[3px]">
++            <span className="h-[8px] w-[5px] rounded-[1px] bg-ink/[0.30]" />
++            <span className="h-[13px] w-[5px] rounded-[1px] bg-ink/[0.50]" />
++            <span className="h-[20px] w-[5px] rounded-[1px] bg-ink" />
++            <span className="h-[11px] w-[5px] rounded-[1px] bg-ink/[0.40]" />
++          </span>
++        </> : <>
++          <span className="h-[4px] w-[60%] rounded-full bg-ink" />
++          <span className="mt-[2px] h-[3px] w-full rounded-full bg-ink/[0.16]" />
++          <span className="h-[3px] w-full rounded-full bg-ink/[0.16]" />
++          <span className="h-[3px] w-[85%] rounded-full bg-ink/[0.16]" />
++          <span className="h-[3px] w-[50%] rounded-full bg-ink/[0.16]" />
++        </>}
+       </span>
+       <div className="min-w-0 flex-1">
+         <div title={title} className="truncate text-[15px] font-medium leading-5 text-ink"><bdi dir="auto">{title}</bdi></div>
+--- a/src/components/app/AppMessage.tsx	2026-11-27 01:37:58
++++ b/src/components/app/AppMessage.tsx	2026-11-27 01:37:58
+@@ -331,7 +331,9 @@
+       <AppOpenButton label={t("app.openAgain")} onClick={reloadNow} />
+     </div>
+   );
+-  const kind = t("chat.preview.kind");
++  // OpenBot: a page with charts is a "Panel", any other a "Documento"; until it has loaded, just a page.
++  const panel = current ? /class="[^"]*\b(?:kpis|vbars|donut|spark|mini|chart)\b|<canvas|echarts/i.test(current.srcdoc) : undefined;
++  const kind = panel === undefined ? t("chat.preview.kind") : panel ? "Panel" : "Documento";
+ 
+   return (
+     <div
+@@ -352,6 +354,7 @@
+             {body}
+             <PageCardFooter
+               title={payload.title}
++              panel={panel === true}
+               detail={version.last > 0 ? `${kind} · ${t("chat.preview.version", { n: version.rev + 1 })}` : kind}
+               updated={version.flash}
+               infoId={infoId}
+--- a/src/components/app/PageTools.tsx	2026-11-27 01:37:58
++++ b/src/components/app/PageTools.tsx	2026-11-27 01:37:58
+@@ -213,12 +213,13 @@
+ }
+ 
+ /** The card's toolbar: ‹ v2 › and Updated on the left; Point, Share, Open in new tab and Full screen on the right. */
+-export function PageToolbar({ version, point, share, save, ready, fullScreen, room, pin, className }: PageToolsProps & { className?: string }) {
++export function PageToolbar({ version, point, share, save, ready, fullScreen, room, pin, className, lead }: PageToolsProps & { className?: string; /** OpenBot: the page's title, on the same row as the tools (the open page's header). */ lead?: ReactNode }) {
+   const label = version.latest ? t("chat.preview.version", { n: version.rev + 1 }) : t("chat.preview.versionOf", { n: version.rev + 1, count: version.last + 1 });
+   const busy = share.share.kind === "busy";
+   return (
+     <div data-page-tools className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-2", className)}>
+-      <div className="flex items-center gap-0.5 text-[13px] text-ink-secondary">
++      {lead}
++      <div className={cn("flex items-center gap-0.5 text-[13px] text-ink-secondary", lead !== undefined && version.last === 0 && "hidden")}>
+         <button type="button" className={TOOL} aria-label={t("chat.preview.older")} title={t("chat.preview.older")} disabled={version.rev <= version.first}
+           onClick={() => version.show(version.rev - 1)}><ChevronLeft size={15} /></button>
+         <span data-page-version className="min-w-6 text-center tabular-nums">{label}</span>
+@@ -240,7 +241,7 @@
+             <button type="button" data-page-pin aria-pressed={pin.pinned} onClick={pin.toggle} disabled={pin.full}
+               title={pin.full ? t("chat.preview.pinFull", { max: MAX_WEB_PANELS }) : t(pin.pinned ? "chat.preview.unpinHint" : "chat.preview.pinHint")}
+               className={cn(ASK_CHIP, pin.pinned ? ASK_CHIP_PICKED : ASK_CHIP_IDLE)}>
+-              {pin.pinned ? <PinOff size={14} /> : <Pin size={14} />}{t(pin.pinned ? "chat.preview.unpin" : "chat.preview.pin")}
++              {pin.pinned ? <PinOff size={14} /> : <Pin size={14} />}{lead === undefined ? t(pin.pinned ? "chat.preview.unpin" : "chat.preview.pin") : <span className="sr-only">{t(pin.pinned ? "chat.preview.unpin" : "chat.preview.pin")}</span>}
+             </button>
+           )}
+         </>}
+@@ -358,8 +359,7 @@
+       className={cn(pane ? "absolute inset-x-0 top-0 z-[1] bottom-[var(--page-pane-bottom,0px)] pt-[var(--glass-top,0px)]" : "fixed inset-0 z-50",
+         "flex flex-col bg-panel")}>
+       <div ref={closer} className="flex flex-col gap-2 border-b border-hairline/40 px-4 pb-3 pt-3">
+-        <div className="truncate text-[15px] font-semibold text-ink" title={props.title}><bdi dir="auto">{props.title}</bdi></div>
+-        <PageToolbar {...props} />
++        <PageToolbar {...props} lead={<div data-page-open-title className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink" title={props.title}><bdi dir="auto">{props.title}</bdi></div>} />
+         <PageNotes version={props.version} point={point} share={props.share} save={props.save} room={props.room} />
+       </div>
+       <div className={cn("relative min-h-0 flex-1 bg-app", point.pointing && "ring-2 ring-inset ring-accent/60")}>
