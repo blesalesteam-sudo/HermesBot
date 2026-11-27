@@ -1,0 +1,122 @@
+diff --git a/server/index.ts b/server/index.ts
+index 4de839b..688cbee 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -676,6 +676,8 @@ import { createHermesModelsRoutes, HERMES_INSTANCE_ID, moveBotsToHermesOnce, typ
+ const localAccounts = createLocalAccounts(DATA_DIR);
+ // OpenBot: each person's profile (name, photo, job, About you) and the invitation links (openbot-people.ts).
+ import { createOpenbotInvites, createOpenbotPeople, peoplePrompt, speakerNote } from "./openbot-people.ts";
++// OpenBot: avisos push al móvil y al ordenador aunque la app esté cerrada (openbot-webpush.ts, routes/openbot-push.ts).
++import { createOpenbotWebPush, type OpenbotWebPush, type PushNotice } from "./openbot-webpush.ts"; import { createOpenbotPushRoutes } from "./routes/openbot-push.ts";
+ const openbotPeople = createOpenbotPeople({ dataDir: DATA_DIR, accounts: localAccounts, owner: {
+   read: () => ({ name: cfg.profile?.name, aboutMe: cfg.profile?.aboutMe }),
+   save: (patch) => { saveConfig({ profile: { ...cfg.profile, ...patch } }); Object.assign(cfg, loadConfig()); },
+@@ -4722,7 +4724,7 @@ function broadcast(payload: Record<string, unknown>, options: { adminOnly?: bool
+   // Members get config as configured-or-not and every bot without its server alias.
+   const clientPayload = options.adminOnly ? null : kind === "config" ? configForAccess(payload as ReturnType<typeof configStatus>, false) : memberFramePayload(payload);
+   const clientFrame = clientPayload === null ? null : clientPayload === payload ? frame : `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...clientPayload, seq })}\n\n`;
+-  replayBuffer.push({ seq, kind, frame, clientFrame, payload, ...(options.person ? { person: options.person } : {}), ...(options.frames ? { frames: options.frames } : {}) }); if (kind === "notify") phonePush.offer({ notification: payload.notification, seq }, (key) => pushReaches(key, payload, seq, options)); if (kind === "notify" || kind === "bot" || kind === "runtime") phoneActivity.offer(payload, (key) => pushReaches(key, payload, seq, options));
++  replayBuffer.push({ seq, kind, frame, clientFrame, payload, ...(options.person ? { person: options.person } : {}), ...(options.frames ? { frames: options.frames } : {}) }); if (kind === "notify") phonePush.offer({ notification: payload.notification, seq }, (key) => pushReaches(key, payload, seq, options)); if (kind === "notify") openbotWebPush().offer(payload.notification as PushNotice, (key) => pushReaches(key, payload, seq, options)); if (kind === "notify" || kind === "bot" || kind === "runtime") phoneActivity.offer(payload, (key) => pushReaches(key, payload, seq, options));
+   const ownGroups: OwnGroupFrames = new Map();
+   for (const client of Array.from(sseClients)) {
+     if (!wants(client, kind, options.frames) || !teamOwners.reaches(client.ask, payload) || !streamFor(client, options.person)) continue;
+@@ -4744,6 +4746,13 @@ const streamFor = (client: Pick<SseClient, "person">, person: string | undefined
+ /** What a stream for `auth` is shown; a phone with no stream open is judged by the same view (pushReaches). */
+ function streamView(auth: RequestAuth, viewer: Viewer = viewerFor(auth)): StreamView { const visibleNow = visibleTo(viewer); return { admin: auth.scopes.includes("admin"), viewer, ask: teamOwners.viewer(auth), seen: viewer.kind === "all" && !visibleNow.filtersThreads ? { bots: new Set(), groups: new Set() } : { bots: new Set(store.bots.filter((bot) => visibleNow.bot(bot.id)).map((bot) => bot.id)), groups: new Set(store.groups.filter((group) => visibleNow.group(group.id)).map((group) => group.id)) }, ...(CLOUD_TEAM && auth.kind === "session" ? { person: auth.session } : {}) }; }
+ /** Whether the phone behind `key` would have been sent this frame had its stream been open: broadcast's own rule. */
++/** OpenBot: los avisos push de la web, creados la primera vez que hacen falta. */
++var openbotWebPushHost: OpenbotWebPush | undefined;
++function openbotWebPush(): OpenbotWebPush {
++  return openbotWebPushHost ??= createOpenbotWebPush({ dataDir: DATA_DIR,
++    threadPerson: (threadId) => { const asked = store.messagesFor(threadId).findLast((message) => message.role === "user"); return asked ? openbotPeople.resolve((asked.sender as { id?: string } | undefined)?.id).key : null; },
++    roomName: (notice) => { const group = (notice.groupId ? store.group(notice.groupId) : undefined) ?? store.groupByThread(notice.threadId); return group && !group.dm ? group.name : null; } });
++}
+ function pushReaches(key: string, payload: Record<string, unknown>, seq: number, options: { adminOnly?: boolean; person?: string }): boolean {
+   const session = key.startsWith("session:") ? sessions.record(key.slice("session:".length)) : null;
+   const auth: RequestAuth | null = key.startsWith("companion:") ? { kind: "loopback", scopes: ["admin", "client"], companionDevice: key.slice("companion:".length) } : session ? { kind: "session", session, via: "bearer", scopes: session.scopes } : null;
+@@ -12418,7 +12427,7 @@ const liveCalls = new LiveCallController({
+   },
+   log: (line) => console.log(line),
+ });
+-sessions.onSessionRevoked((sessionId) => liveCalls.sessionRevoked(sessionId)); sessions.onSessionRevoked((sessionId) => { phonePush.forget(`session:${sessionId}`); phoneActivity.forget(`session:${sessionId}`); }); ROUTES.push(createPhonePushRoutes({ push: phonePush, live: (auth) => auth.kind === "loopback" || sessions.isLive(auth.session.id) }), createPhoneActivityRoutes({ push: phonePush, activity: phoneActivity, live: (auth) => auth.kind === "loopback" || sessions.isLive(auth.session.id) }));
++sessions.onSessionRevoked((sessionId) => liveCalls.sessionRevoked(sessionId)); sessions.onSessionRevoked((sessionId) => openbotWebPush().forgetSession(sessionId)); ROUTES.push(createOpenbotPushRoutes({ push: openbotWebPush(), person: (auth) => openbotPeople.resolve(personKey(auth.session)).key, bot: (auth, botId) => { const bot = store.bot(botId); return bot && visibleTo(viewerFor(auth)).bot(botId) ? { name: bot.name, threadId: bot.threadId } : null; } })); sessions.onSessionRevoked((sessionId) => { phonePush.forget(`session:${sessionId}`); phoneActivity.forget(`session:${sessionId}`); }); ROUTES.push(createPhonePushRoutes({ push: phonePush, live: (auth) => auth.kind === "loopback" || sessions.isLive(auth.session.id) }), createPhoneActivityRoutes({ push: phonePush, activity: phoneActivity, live: (auth) => auth.kind === "loopback" || sessions.isLive(auth.session.id) }));
+ ROUTES.push(createDataRoutes({
+   bot: (id) => store.bot(id),
+   engine: dataEngine,
+diff --git a/src/components/NotificationSettingsRows.tsx b/src/components/NotificationSettingsRows.tsx
+index 89c1a38..78b81ec 100644
+--- a/src/components/NotificationSettingsRows.tsx
++++ b/src/components/NotificationSettingsRows.tsx
+@@ -12,12 +12,13 @@ import {
+ } from "@/lib/notification-preferences";
+ import { requestNotificationPermission } from "@/lib/notify";
+ import { SettingRow, Switch } from "./SettingsPrimitives";
++// OpenBot: avisos push en este aparato (aunque la app esté cerrada), con «Probar» y bots silenciados.
++import { OpenbotAvisos } from "./openbot/OpenbotAvisos";
+ 
+ export function NotificationRows({ simple = false }: { simple?: boolean }) {
+   return (
+     <>
+-      <DeviceNotificationsRow simple={simple} />
+-      <ReportNotificationsRow simple={simple} />
++      <OpenbotAvisos />
+       <NotificationSoundsRow simple={simple} />
+       <NotificationFeedRow simple={simple} />
+     </>
+diff --git a/src/lib/notify.ts b/src/lib/notify.ts
+index f51b3f1..0d3963e 100644
+--- a/src/lib/notify.ts
++++ b/src/lib/notify.ts
+@@ -1,5 +1,6 @@
+ import type { Notification } from "../../shared/notification";
+ import { plainPreviewText } from "../../shared/plain-preview";
++import { pushOnHere } from "@/components/openbot/openbot-push";
+ import { finishedNotificationsEnabled, notificationSoundsEnabled, reportNotificationsEnabled } from "./notification-preferences";
+ 
+ export type NotifyFrame = Notification;
+@@ -42,6 +43,8 @@ export function showNotification(
+   const spend = frame.kind === "spend";
+   if (!spend && document.hasFocus() && visibleThreadId === frame.threadId) return;
+   if (Notification.permission !== "granted") return;
++  // OpenBot: con los avisos push encendidos aquí, el aviso llega por el trabajador (public/openbot-sw.js); no se repite.
++  if (!spend && pushOnHere()) return;
+ 
+   const title = placeName ? `${placeName} · ${frame.title}` : frame.title;
+   // Entries saved before the harness spoke plain text still carry Markdown.
+diff --git a/src/state/store.tsx b/src/state/store.tsx
+index 29feddb..1ed7e34 100644
+--- a/src/state/store.tsx
++++ b/src/state/store.tsx
+@@ -60,7 +60,7 @@ import { answerResponse, dismissResponse } from "@/lib/card-answer";
+ import { forgetLiveTurns, noteRuntimeTurn, sendStop } from "@/lib/stop-turn";
+ import { readLastConversation, rememberConversation } from "@/lib/last-conversation";
+ import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
+-import { showNotification } from "@/lib/notify";
++import { showNotification } from "@/lib/notify"; import { reportViewing, startPush, takeLinkTarget } from "@/components/openbot/openbot-push";
+ import { randomUuid } from "@/lib/random-uuid";
+ import { useShowThreads } from "@/lib/thread-preferences";
+ import { speechOwner, spokenReplyStream } from "@/lib/spoken-reply-stream";
+@@ -2059,6 +2059,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
+   useEffect(() => {
+     if (state.selectedId) rememberConversation(state.selectedId);
+   }, [state.selectedId]);
++  // OpenBot: avisos push. Qué conversación se ve (para no avisar de ella), y abrir la de un aviso tocado.
++  const openbotViewing = visibleNotificationThread(state);
++  const openbotViewingBot = openbotViewing ? (state.bots.find((bot) => bot.threadId === openbotViewing || bot.tasks?.some((task) => task.threadId === openbotViewing))?.id ?? null) : null;
++  useEffect(() => { reportViewing(openbotViewing, openbotViewingBot); }, [openbotViewing, openbotViewingBot]);
++  useEffect(() => {
++    startPush((target) => openThread(dispatch, target, stateRef.current, showThreadsRef.current), () => {
++      const threadId = visibleNotificationThread(stateRef.current);
++      return { threadId, botId: threadId ? (stateRef.current.bots.find((bot) => bot.threadId === threadId || bot.tasks?.some((task) => task.threadId === threadId))?.id ?? null) : null };
++    });
++  }, []);
++  const openbotLinkDone = useRef(false);
++  useEffect(() => {
++    if (openbotLinkDone.current || state.bots.length === 0) return;
++    openbotLinkDone.current = true;
++    const target = takeLinkTarget();
++    if (target) openThread(dispatch, target, stateRef.current, showThreadsRef.current);
++  }, [state.bots.length]);
+   useEffect(() => {
+     if (state.settingsOpen && state.botSettingsExpandAccordion) rememberBotSection(state.botSettingsSection);
+   }, [state.settingsOpen, state.botSettingsExpandAccordion, state.botSettingsSection]);

@@ -204,3 +204,21 @@ una línea "Envió el archivo …"), lo que Grok Bot guarda en su nube sin copia
 rutinas y apps, salvo que cada bot las escriba en su exportación), las claves y conexiones (hay que conectar las
 apps otra vez), y el modelo de cada bot (Grok Bot no lo guarda en el Mac; aquí usan el motor de OpenBot). En el
 bot "Investigación" Grok Bot solo guarda en el Mac sus últimos 200 mensajes.
+
+## Avisos en el móvil y en el ordenador (como Grok Bot)
+
+Llegan aunque OpenBot esté cerrada (avisos «push» de la web, con claves VAPID propias; no pasan por nadie más que el
+servicio push del navegador, cifrados).
+
+- **Activarlos:** Ajustes › Este navegador › «Avisos en este aparato», y «Probar». En el iPhone/iPad hace falta iOS 16.4 o
+  más y abrir OpenBot desde la pantalla de inicio (Safari › Compartir › Añadir a pantalla de inicio); Ajustes lo explica.
+- **Cuándo:** cuando un bot termina, te necesita (pregunta, permiso, contraseña), te menciona o escribe por su cuenta.
+  Nunca de la conversación que tienes delante en ese momento.
+- **Cómo:** título = el bot (o «Hermes te está esperando»), texto = el principio del mensaje. Los de un mismo bot se
+  sustituyen; la insignia del icono cuenta los bots con algo nuevo. Al tocarlo se abre esa conversación.
+- **Por persona:** cada aviso va a quien escribió en esa conversación; si nadie escribió (tareas programadas, mensajes por
+  su cuenta), a todos los que ven el bot. Cada persona puede silenciar bots en «Qué bots te avisan».
+- Archivos: `overlay/server/openbot-webpush.ts` (envío y cifrado), `overlay/server/routes/openbot-push.ts`,
+  `overlay/public/openbot-sw.js` (el trabajador), `overlay/src/components/openbot/{openbot-push.ts,OpenbotAvisos.tsx}` y
+  `patches/zzzz-avisos.patch` (enganche al aviso de la base, Ajustes, no repetir el aviso de la página y abrir el chat).
+  Datos: `/opt/data/.openmausbot/openbot-webpush.json`.
