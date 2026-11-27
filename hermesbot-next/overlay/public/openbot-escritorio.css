@@ -24,4 +24,9 @@
   html:root [data-sidebar-root] [data-sidebar-rail-separator] {
     display: none;
   }
+
+  /* Menús: el icono de una opción nunca se encoge hasta desaparecer cuando el texto es largo. */
+  html:root [role="menu"] [role^="menuitem"] > svg {
+    flex-shrink: 0;
+  }
 }
