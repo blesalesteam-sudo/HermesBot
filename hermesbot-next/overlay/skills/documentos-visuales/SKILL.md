@@ -48,17 +48,17 @@ Reglas que no cambian:
 
 ## El título y la portada (lo que se ve en el chat)
 
-En el chat, cada página se ve como una tarjeta: arriba una **miniatura** con los primeros ~180 px de la página,
-y debajo su **título**. Por eso:
+En el chat, cada página se ve como una tarjeta compacta con su **título**; al abrirla, lo primero que se ve
+es la portada. Por eso:
 
 - **`title`** es el nombre de la cosa, corto y concreto: "Competencia: análisis a fondo", "Ventas de noviembre".
   Nunca etiquetas ni tipos ("Documento visual ·", "Panel ·", "Demo ·", "Página de…").
-- **Toda página empieza con una portada** (`<header class="cover">`), que es lo que se ve en la miniatura:
+- **Toda página empieza con una portada** (`<header class="cover">`):
   - `.chip` con el tipo y el momento: "Análisis", "Plan", "Propuesta", "Panel · actualizado 27 nov, 9:00".
   - `h1` con el mismo título.
   - `.lead`: la conclusión en una frase, no una descripción ("Dos competidores te ganan en precio…").
   - En un **panel**, añade `.mini` (un minigráfico de 5-8 barras con la forma real de los datos, la más alta `.hi`),
-    para que en el chat se distinga a primera vista de un documento.
+    para que se distinga a primera vista de un documento.
 - No pongas la tabla de contenidos ni cifras sueltas antes de la portada.
 
 ## Documento
@@ -68,6 +68,8 @@ Después muestra la página con `show_html` (`html` con el documento entero y `t
 lo que ya está en la página.
 
 Usa el kit de esta carpeta: copia `kit.css` dentro de un `<style>` y envuelve todo en `<main class="doc">`.
+Copia el kit tal cual: no cambies la tipografía (una sola letra sin remates para todo, también los titulares),
+los colores ni los tamaños, y no añadas estilos propios salvo que la persona pida otro aspecto.
 `ejemplo.html` es un documento completo hecho con el kit: úsalo como modelo de tono y densidad.
 Se adapta solo a modo oscuro y a móvil. Después de la portada, solo las piezas que aporten:
 
@@ -106,6 +108,7 @@ caracteres). Si la herramienta no está o falla, no lo menciones y sigue.
 
 ## Contenido
 
+- En los mensajes del chat no pongas marcas de cita ni referencias sueltas: las fuentes van en la página, al final.
 - Datos reales y su origen. Si algo es estimación o ejemplo, dilo.
 - Cifras redondeadas y en las unidades de la persona (euros, su zona horaria).
 - Frases cortas y concretas. Nada de relleno.

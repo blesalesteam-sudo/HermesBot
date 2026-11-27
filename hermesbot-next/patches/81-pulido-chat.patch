@@ -1,0 +1,104 @@
+OpenBot: página como tarjeta compacta en el chat, botones dentro del formulario, sin marcas de citas y avisos de espera en español.
+
+--- a/server/drivers/acp/quiet-status.ts	2026-11-27 01:16:46
++++ b/server/drivers/acp/quiet-status.ts	2026-11-27 01:16:46
+@@ -408,10 +408,10 @@
+       return `${name} is compressing its conversation history to make room. This can take a few minutes; it is still working.`;
+     case "waiting-model": {
+       if (state.nearFullContext) {
+-        return `${name} is waiting on its model: no reply for ${quiet}, but its request is still open. Its history is nearly full, so it may be compressing it.`;
++        return `${name} sigue trabajando: su modelo lleva ${quiet} sin responder. La conversación es muy larga y puede estar resumiéndola.`;
+       }
+-      const ownStop = stopAfterMs > 0 ? `; with no tool or question active, the turn may stop after ${formatQuietLimit(stopAfterMs)} of silence` : "";
+-      return `${name} is waiting on its model: no reply for ${quiet}, but its request is still open. Its model provider may be slow or busy${ownStop}.`;
++      const ownStop = stopAfterMs > 0 ? ` Si sigue así ${formatQuietLimit(stopAfterMs)}, se detendrá solo.` : "";
++      return `${name} sigue trabajando: su modelo lleva ${quiet} sin responder; puede ir lento o estar ocupado.${ownStop}`;
+     }
+     case "busy":
+       return `${name} is busy on this computer but has sent nothing for ${quiet}.`;
+--- a/src/components/ChatMarkdown.tsx	2026-11-27 01:16:46
++++ b/src/components/ChatMarkdown.tsx	2026-11-27 01:16:46
+@@ -899,7 +899,9 @@
+   // use() may be called conditionally: only a message that can hold a thread link subscribes to the thread list.
+   const { threads, currentBotId } = MAY_LINK_THREAD.test(text) ? use(ThreadRefsContext) : NO_THREAD_REFS;
+   const streaming = use(StreamingReplyContext);
+-  const parts = useMemo(() => markdownParts(text, streaming), [text, streaming]);
++  // OpenBot: some models leak their search-citation markers ("cite turn0view1…", wrapped in private-use characters) into the reply.
++  const shown = useMemo(() => text.replace(/[\uE200-\uE2FF]?cite(?:[\uE200-\uE2FF]?turn\d+[a-z]+\d+)+[\uE200-\uE2FF]?/g, "").replace(/[\uE200-\uE2FF]/g, ""), [text]);
++  const parts = useMemo(() => markdownParts(shown, streaming), [shown, streaming]);
+   // One answer for the whole text, as a finished message gets: a block alone may hold half of a pair.
+   const needsMath = useMemo(() => normalizedSourceHasMath(parts.length === 1 ? parts[0]!.source : parts.map((part) => part.source).join("")), [parts]);
+   const [katexReady, setKatexReady] = useState(() => katexPlugin !== null);
+--- a/src/components/app/AppChrome.tsx	2026-11-27 01:16:46
++++ b/src/components/app/AppChrome.tsx	2026-11-27 01:18:40
+@@ -6,7 +6,6 @@
+ import type { AppDoneState, AppNetwork } from "../../../shared/app";
+ import { ASK_CHIP, ASK_CHIP_IDLE, ASK_QUIET_BUTTON } from "../AskCard";
+ 
+-const PAGE_ICON = "flex shrink-0 text-ink-secondary";
+ export const APP_SURFACE = "w-full overflow-hidden rounded-2xl bg-composer ring-1 ring-composer-ring";
+ const ICON_BUTTON =
+   "flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40";
+@@ -82,12 +81,19 @@
+   reloading?: boolean;
+ }) {
+   return (
+-    <div data-page-footer className="flex min-h-18 items-center gap-3 border-t border-ink/[0.08] px-5 py-4">
+-      <span data-page-icon className={PAGE_ICON}>
+-        <AppWindow aria-hidden="true" size={16} />
++    <div data-page-footer className="flex min-h-18 items-center gap-3.5 px-4 py-3.5">
++      {/* OpenBot: a small sheet with a chart, so a page reads as a document at a glance. */}
++      <span data-page-icon aria-hidden="true" className="flex h-[46px] w-[38px] shrink-0 flex-col justify-end gap-[3px] rounded-lg bg-app p-[7px] ring-1 ring-ink/[0.10]">
++        <span className="h-[3px] w-[70%] rounded-full bg-ink/[0.14]" />
++        <span className="mb-[3px] h-[3px] w-[45%] rounded-full bg-ink/[0.14]" />
++        <span className="flex h-[14px] items-end gap-[3px]">
++          <span className="h-[6px] w-[5px] rounded-[1px] bg-ink/[0.30]" />
++          <span className="h-[10px] w-[5px] rounded-[1px] bg-ink/[0.50]" />
++          <span className="h-[14px] w-[5px] rounded-[1px] bg-ink" />
++        </span>
+       </span>
+       <div className="min-w-0 flex-1">
+-        <div title={title} className="truncate text-sm font-medium leading-[18px] text-ink"><bdi dir="auto">{title}</bdi></div>
++        <div title={title} className="truncate text-[15px] font-medium leading-5 text-ink"><bdi dir="auto">{title}</bdi></div>
+         <div className="truncate text-[13px] leading-[18px] text-ink-secondary">{detail}</div>
+       </div>
+       {updated && <span role="status" data-page-updated className="shrink-0 rounded-full bg-accent/15 px-2 py-px text-[13px] font-medium text-accent-text">{t("chat.preview.updated")}</span>}
+--- a/src/components/app/AppMessage.tsx	2026-11-27 01:16:46
++++ b/src/components/app/AppMessage.tsx	2026-11-27 01:16:46
+@@ -277,9 +277,11 @@
+   const titled = compact && opens === false;
+   // The compact card clips the page at its natural size, so it reads as a preview of the real thing.
+   const previewHeight = height + (titled ? CARD_TITLE_HEIGHT : 0);
+-  const boxHeight = compact ? Math.min(previewHeight, PAGE_PREVIEW_HEIGHT) : height;
++  // OpenBot: in the chat a page is one compact row (icon, title, kind), with no preview: it opens beside the chat.
++  // The frame stays mounted at no height, so the page is ready the moment the card is opened.
++  const boxHeight = compact ? 0 : height;
+   const body = collapsed ? null : fullScreen && current ? (
+-    <div data-app-box className={cn("relative w-full", bordered && !compact && "border-t border-ink/[0.08]")} style={{ height: boxHeight }}>
++    <div data-app-box className={cn("relative w-full", compact && "overflow-hidden", bordered && !compact && "border-t border-ink/[0.08]")} style={{ height: boxHeight }}>
+       {compact
+         ? <AppPlaceholder height={boxHeight}><span className="ui-pill">{t("chat.preview.closePage")}</span></AppPlaceholder>
+         : <AppPlaceholder height={boxHeight} open={() => setFullScreen(false)} label={t("chat.preview.exitFullScreen")} />}
+--- a/src/components/widget/WidgetMessage.tsx	2026-11-27 01:16:46
++++ b/src/components/widget/WidgetMessage.tsx	2026-11-27 01:16:46
+@@ -257,13 +257,14 @@
+               <span dir="auto" className="min-w-0 break-words">{problem.text}</span>
+             </div>
+           )}
++          {/* OpenBot: the buttons belong to the card, at its end, not loose under it. */}
++          {!settled && (confirm || cancel) && (
++            <div data-widget-actions className="flex flex-wrap items-center justify-end gap-2 px-4 pb-3.5 pt-1">
++              {cancel && <WidgetButton actionRef="cancel" label={cancel.label} look="outline" />}
++              {confirm && <WidgetButton actionRef="confirm" label={confirm.label} look="primary" />}
++            </div>
++          )}
+         </div>
+-        {!settled && (confirm || cancel) && (
+-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+-            {confirm && <WidgetButton actionRef="confirm" label={confirm.label} look="primary" />}
+-            {cancel && <WidgetButton actionRef="cancel" label={cancel.label} look="outline" />}
+-          </div>
+-        )}
+         <span role="status" className="sr-only">{pending !== undefined ? t("widget.sending") : sent !== undefined ? t("widget.sent") : ""}</span>
+       </div>
+     </WidgetFormProvider>
