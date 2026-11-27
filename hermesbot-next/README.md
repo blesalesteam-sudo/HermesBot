@@ -68,6 +68,14 @@ tarjetas para elegir, formularios e imágenes adjuntas) en vez de crear archivos
   al bot principal (respeta las frases sobre MausBot Cloud y los informes a sus autores).
 - `start.sh`: la app arranca en español si no se ha elegido otro idioma en Ajustes.
 
+- **Plantillas** (`patches/99-plantillas.patch`, `overlay/server/openbot-kit.ts`): una página puede enlazar el kit
+  en vez de copiarlo (`<link rel="stylesheet" href="kit.css">`, `<script src="plantilla.js"></script>`); la app lo
+  incrusta al mostrarla. `plantilla.js` es un motor de plantillas: el bot describe la plantilla en JSON (colecciones
+  con campos y filas, y bloques: cifras, progreso, lista con casillas, tablero, tabla, notas) y el motor la dibuja,
+  guarda lo que la persona cambia a mano (`mausbot.state`) y se lo cuenta al bot con su siguiente mensaje. Cuando
+  el bot reescribe la plantilla, sus cambios y los de la persona se combinan campo a campo por el `id` de cada fila.
+  Ejemplos en `overlay/skills/documentos-visuales/ejemplo-plantilla*.html`.
+
 Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis competidores" o
 "¿qué opción me recomiendas, A o B?" y comprueba que llega una página o una tarjeta, no un archivo.
 

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seguimiento de clientes</title>
+<link rel="stylesheet" href="kit.css">
+</head><body>
+<main class="doc" id="plantilla"></main>
+<script type="application/json" id="datos">
+{
+  "titulo": "Seguimiento de clientes",
+  "resumen": "Cada interesado en su fase. Arrastra una tarjeta a otra columna cuando avance; el importe previsto se suma solo.",
+  "aviso": { "titulo": "Datos de ejemplo", "texto": "Nombres e importes inventados para enseñar la plantilla." },
+  "colecciones": {
+    "clientes": {
+      "nombre": "cliente",
+      "campos": [
+        { "id": "nombre", "nombre": "Cliente", "tipo": "texto" },
+        { "id": "fase", "nombre": "Fase", "tipo": "opcion", "opciones": ["Nuevo", "En conversación", "Propuesta enviada", "Ganado", "Perdido"] },
+        { "id": "importe", "nombre": "Importe", "tipo": "moneda" },
+        { "id": "siguiente", "nombre": "Siguiente paso", "tipo": "texto" },
+        { "id": "fecha", "nombre": "Cuándo", "tipo": "fecha" },
+        { "id": "origen", "nombre": "Origen", "tipo": "opcion", "opciones": ["YouTube", "Correo", "Referido"] }
+      ],
+      "filas": [
+        { "id": "c1", "nombre": "Laura Ejemplo", "fase": "Propuesta enviada", "importe": 1497, "siguiente": "Llamar para resolver dudas", "fecha": "2026-12-01", "origen": "YouTube" },
+        { "id": "c2", "nombre": "Marcos Prueba", "fase": "En conversación", "importe": 997, "siguiente": "Enviar la clase de muestra", "fecha": "2026-12-02", "origen": "Correo" },
+        { "id": "c3", "nombre": "Academia Norte", "fase": "Nuevo", "importe": 2994, "siguiente": "Primera llamada", "fecha": "2026-12-03", "origen": "Referido" },
+        { "id": "c4", "nombre": "Sofía Demo", "fase": "Ganado", "importe": 1497, "siguiente": "Dar acceso al curso", "fecha": "2026-11-28", "origen": "YouTube" },
+        { "id": "c5", "nombre": "Iván Muestra", "fase": "En conversación", "importe": 1497, "siguiente": "Esperar respuesta", "fecha": "2026-12-04", "origen": "YouTube" }
+      ]
+    }
+  },
+  "bloques": [
+    { "tipo": "cifras", "de": "clientes", "cifras": [
+      { "nombre": "En marcha", "donde": { "fase": ["Nuevo", "En conversación", "Propuesta enviada"] } },
+      { "nombre": "Previsto", "donde": { "fase": ["Nuevo", "En conversación", "Propuesta enviada"] }, "suma": "importe" },
+      { "nombre": "Ganado", "donde": { "fase": "Ganado" }, "suma": "importe" }
+    ] },
+    { "tipo": "tablero", "de": "clientes", "titulo": "Por fase", "columnas": "fase", "texto": "nombre", "detalles": ["importe", "fecha"] },
+    { "tipo": "tabla", "de": "clientes", "titulo": "Todos los clientes", "columnas": ["nombre", "fase", "importe", "siguiente", "fecha", "origen"], "suma": ["importe"], "filtros": ["origen"] }
+  ]
+}
+</script>
+<script src="plantilla.js"></script>
+</body></html>

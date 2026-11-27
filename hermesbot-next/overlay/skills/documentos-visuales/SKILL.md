@@ -1,6 +1,6 @@
 ---
 name: documentos-visuales
-description: "Criterio para elegir cómo se ve cada respuesta en el chat (texto, tarjeta, formulario, documento, panel o imagen) y kit de piezas para documentos y paneles con aspecto profesional. Está siempre disponible: aplícala con juicio en cada respuesta."
+description: "Criterio para elegir cómo se ve cada respuesta en el chat (texto, tarjeta, formulario, documento, panel, plantilla o imagen), kit de piezas para documentos y paneles con aspecto profesional, y motor de plantillas con las que la persona y tú trabajáis (tareas, seguimientos, tableros). Está siempre disponible: aplícala con juicio en cada respuesta."
 ---
 
 # Cómo se ve cada respuesta
@@ -30,7 +30,10 @@ Hazte estas preguntas, en orden, y quédate con la primera que encaje:
    **documento** con `show_html` (ver "Documento").
 6. **¿Son cifras que se entienden mejor viéndolas?** Evolución, reparto, comparación de cantidades, KPIs:
    un **panel** con `show_html` (ver "Panel"). Para datos de su base, además la habilidad `data-dashboards`.
-7. **¿Es una imagen?** Créala o edítala con `generate_image` / `edit_image` en 16:9 (miniaturas, portadas,
+7. **¿Es algo con lo que va a trabajar y que cambia con el tiempo?** Tareas, un seguimiento de clientes o de
+   contenidos, hábitos, gastos, un tablero por estados, una lista de comprobación, o cuando pide "una plantilla" o
+   "un sistema": una **plantilla** (ver "Plantillas").
+8. **¿Es una imagen?** Créala o edítala con `generate_image` / `edit_image` en 16:9 (miniaturas, portadas,
    esquemas) o 1:1 (redes), nunca más ancha que 2:1, y adjúntala con `attach_file`. Nunca pegues una ruta ni un enlace suelto.
 
 Reglas que no cambian:
@@ -70,9 +73,10 @@ el título sale como enlace a la página. Haz lo mismo cada vez que la amplíes 
 Después muestra la página con `show_html` (`html` con el documento entero y `title`). No repitas en el mensaje
 lo que ya está en la página.
 
-Usa el kit de esta carpeta: copia `kit.css` dentro de un `<style>` y envuelve todo en `<main class="doc">`.
-Copia el kit tal cual: no cambies la tipografía (una sola letra sin remates para todo, también los titulares),
-los colores ni los tamaños, y no añadas estilos propios salvo que la persona pida otro aspecto.
+Usa el kit de esta carpeta: pon `<link rel="stylesheet" href="kit.css">` en el `<head>` (la app lo incrusta sola al
+mostrar la página; no lo copies ni lo pegues) y envuelve todo en `<main class="doc">`.
+No cambies la tipografía (una sola letra sin remates para todo, también los titulares), los colores ni los tamaños,
+y no añadas estilos propios salvo que la persona pida otro aspecto.
 `ejemplo.html` es un documento completo hecho con el kit: úsalo como modelo de tono y densidad.
 Se adapta solo a modo oscuro y a móvil. Después de la portada, solo las piezas que aporten:
 
@@ -104,6 +108,63 @@ Un panel es para mirar cifras de un vistazo: tiene que llevar **al menos un grá
 - Dos gráficos que se leen juntos van lado a lado: `.cols` con dos `.chart` dentro.
 - Calcula las alturas y puntos a partir de los datos reales; no inventes formas.
 - Si hacen falta gráficos interactivos o muchos datos, puedes usar echarts o Chart en `jsx`, con la misma portada.
+
+## Plantillas
+
+Una plantilla es una página viva con la que la persona y tú trabajáis: ella marca, escribe, añade y mueve cosas a
+mano; tú la creas y la vas actualizando. No programes nada: describe la plantilla con datos y el motor la dibuja
+con buen diseño, guarda lo que ella cambia y te lo cuenta.
+
+La página es siempre esta, con tu descripción dentro. Hay dos completas para copiar como base:
+`ejemplo-plantilla.html` (tareas: cifras, progreso, lista agrupada y notas) y `ejemplo-plantilla-seguimiento.html`
+(clientes por fases: tablero y tabla con totales).
+
+```html
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tareas de la semana</title>
+<link rel="stylesheet" href="kit.css"></head><body>
+<main class="doc" id="plantilla"></main>
+<script type="application/json" id="datos">{ …la descripción… }</script>
+<script src="plantilla.js"></script>
+</body></html>
+```
+
+**La descripción** (JSON):
+
+- `titulo` y `resumen` (una frase: para qué sirve y cómo se usa). `aviso` opcional: `{ "titulo", "texto" }`.
+- `colecciones`: los datos. Cada una tiene `nombre` en singular ("tarea", "cliente"), `campos` y `filas`.
+  - Un campo: `{ "id", "nombre", "tipo" }` con tipo `texto`, `casilla`, `opcion` (con `opciones`), `fecha`
+    (`AAAA-MM-DD`), `numero` o `moneda`. En `opcion` puedes fijar `colores`: `{ "Alta": "rojo" }` (rojo, ambar,
+    verde, azul, morado, gris); si no, se eligen solos.
+  - Una fila: un objeto con un `id` corto y **estable** (`"t1"`, `"c7"`) y un valor por campo.
+- `bloques`: lo que se ve, en orden. Cada bloque lleva `tipo`, casi siempre `de` (la colección) y `titulo`:
+  - `cifras`: contadores que se calculan solos. `cifras: [{ "nombre": "Abiertas", "donde": { "hecho": false } }]`;
+    con `"suma": "importe"` suma un campo en vez de contar.
+  - `progreso`: barra con cuántas filas tienen marcada la casilla.
+  - `lista`: filas con casilla para marcar. `detalles` (campos que salen como etiquetas a la derecha), `agrupar`
+    (un campo `opcion`), `filtros` (campos `opcion` por los que filtrar), `ocultarHechas`.
+  - `tablero`: columnas por los valores de un campo `opcion` (`"columnas": "estado"`); las tarjetas se arrastran.
+  - `tabla`: filas y columnas editables; `columnas` (campos a mostrar), `suma` (campos que se totalizan).
+  - `notas`: un cuadro de texto libre que se guarda (`id`, `ayuda`).
+  - `texto`: una sección tuya con `html` y las piezas del kit (para explicar, enlazar o añadir un gráfico).
+
+**Cómo diseñarla.** Antes de construir, piensa qué decide o hace la persona con ella cada día y quédate con lo
+justo: una colección por cada cosa distinta, pocos campos (los que de verdad va a mirar o filtrar), arriba las
+cifras, después la vista principal y al final las notas. Si pide algo concreto ("con checklist, por prioridad y
+con fecha"), eso manda. Si falta un dato para acertar (qué estados, qué áreas), pregúntalo con una tarjeta de
+opciones; si no, elige lo razonable y dilo en una línea. Rellénala con sus datos reales si los tienes; si pones
+ejemplos, avisa y que sean pocos.
+
+**Cómo se trabaja con ella.**
+
+- Lo que la persona cambia a mano se guarda en la página. Con su siguiente mensaje te llega una nota ("cambios
+  hechos a mano…") con lo que marcó, añadió, editó o borró: tenlo en cuenta al responder.
+- Para cambiar tú algo (añadir tareas, marcar una hecha, reorganizar), vuelve a mostrar la página con su `app_id`
+  y la descripción entera actualizada. Conserva los `id` de las filas: así lo tuyo y lo suyo se combinan sin
+  pisarse (en cada dato gana quien lo cambió el último).
+- Incluye en tu versión los cambios a mano que te hayan llegado, y no borres filas que ella añadió salvo que lo pida.
+- Una plantilla por sistema: tareas en una, clientes en otra. Si pide una vista más (un tablero además de la
+  lista), añade un bloque a la misma.
+- En el mensaje, di en una frase qué tiene y cómo se usa, y nómbrala por su título exacto.
 
 ## Resumen en audio
 

@@ -1,0 +1,24 @@
+diff -ruN a/server/chat-apps.ts b/server/chat-apps.ts
+--- a/server/chat-apps.ts	2026-11-27 12:45:57
++++ b/server/chat-apps.ts	2026-11-27 12:56:22
+@@ -11,6 +11,7 @@
+ import { AppStates } from "./app-state.ts";
+ import { speakerIn, type AgentCardResult, type AgentCardStore } from "./chat-widgets.ts";
+ import { compileJsxPage } from "./jsx-compile.ts";
++import { withOpenbotKit } from "./openbot-kit.ts";
+ import { appDocRefs } from "./message-db.ts";
+ import { createPageFiles, type PageFilesViewer } from "./page-files.ts";
+ import { pageSignature, PageBundleError, readBotPageBundle, readPageBundle, skippedNote, stillReadable, type BotFolders, type PageBundle, type PageFile } from "./pages/bundle.ts";
+@@ -120,8 +121,10 @@
+   const existing = "appId" in parsed.value ? appRow(store, threadId, parsed.value.appId) : undefined;
+   const title = parsed.value.title ?? existing?.app.title ?? "Page";
+   if (parsed.value.path === undefined) {
+-    const made = pageText(parsed.value, title);
+-    return made.ok ? placePage(args, parsed.value, made) : { ok: false, status: 400, error: made.error };
++    // OpenBot: a page that links kit.css or plantilla.js gets them written in; a template keeps its state.
++    const value = withOpenbotKit(parsed.value, existing?.app.doc ? args.docs.read(existing.app.doc)?.data?.uses : undefined);
++    const made = pageText(value, title);
++    return made.ok ? placePage(args, value, made) : { ok: false, status: 400, error: made.error };
+   }
+   const folders = args.folders;
+   if (!folders) return { ok: false, status: 400, error: "path: a page from a folder can't be shown here; send html instead." };

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tareas de la semana</title>
+<link rel="stylesheet" href="kit.css">
+</head><body>
+<main class="doc" id="plantilla"></main>
+<script type="application/json" id="datos">
+{
+  "titulo": "Tareas de la semana",
+  "resumen": "Todo lo pendiente por área y prioridad. Marca lo que termines; yo me entero y lo tengo en cuenta.",
+  "colecciones": {
+    "tareas": {
+      "nombre": "tarea",
+      "campos": [
+        { "id": "texto", "nombre": "Tarea", "tipo": "texto" },
+        { "id": "hecho", "nombre": "Hecha", "tipo": "casilla" },
+        { "id": "prioridad", "nombre": "Prioridad", "tipo": "opcion", "opciones": ["Alta", "Media", "Baja"] },
+        { "id": "area", "nombre": "Área", "tipo": "opcion", "opciones": ["Producto", "Ventas", "Contenido"] },
+        { "id": "fecha", "nombre": "Para cuándo", "tipo": "fecha" }
+      ],
+      "filas": [
+        { "id": "t1", "texto": "Cerrar el temario del curso avanzado", "hecho": true, "prioridad": "Alta", "area": "Producto", "fecha": "2026-11-30" },
+        { "id": "t2", "texto": "Grabar la clase de muestra", "hecho": false, "prioridad": "Alta", "area": "Producto", "fecha": "2026-12-02" },
+        { "id": "t3", "texto": "Llamar a los cinco interesados de la lista de espera", "hecho": false, "prioridad": "Alta", "area": "Ventas", "fecha": "2026-12-01" },
+        { "id": "t4", "texto": "Preparar la página de precios", "hecho": false, "prioridad": "Media", "area": "Ventas", "fecha": "2026-12-04" },
+        { "id": "t5", "texto": "Guion del vídeo «Tres señales de un backtest engañoso»", "hecho": false, "prioridad": "Media", "area": "Contenido", "fecha": "2026-12-03" },
+        { "id": "t6", "texto": "Programar los tres correos de lanzamiento", "hecho": false, "prioridad": "Baja", "area": "Contenido" }
+      ]
+    }
+  },
+  "bloques": [
+    { "tipo": "cifras", "de": "tareas", "cifras": [
+      { "nombre": "Abiertas", "donde": { "hecho": false } },
+      { "nombre": "Prioridad alta", "donde": { "hecho": false, "prioridad": "Alta" } },
+      { "nombre": "Hechas", "donde": { "hecho": true } }
+    ] },
+    { "tipo": "progreso", "de": "tareas", "titulo": "Avance de la semana" },
+    { "tipo": "lista", "de": "tareas", "titulo": "Lista de tareas", "agrupar": "area", "detalles": ["prioridad", "fecha"], "filtros": ["prioridad"] },
+    { "tipo": "notas", "id": "notas", "titulo": "Notas", "ayuda": "Lo que quieras apuntar para la próxima revisión…" }
+  ]
+}
+</script>
+<script src="plantilla.js"></script>
+</body></html>
