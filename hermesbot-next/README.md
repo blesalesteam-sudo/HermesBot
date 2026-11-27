@@ -154,8 +154,33 @@ En **Ajustes → Funciones → Grupos de Telegram y WhatsApp**. Todo empieza apa
 - **WhatsApp** (no oficial, por código QR como WhatsApp Web): **puede bloquear el número**. Usa un número solo para el
   bot. La librería (Baileys) se instala aparte desde `whatsapp/` con versión fijada; la sesión vive en
   `/opt/data/.openmausbot/grupos/whatsapp-sesion/`. No marca mensajes como leídos ni aparece en línea.
-- Código: `patches/90-grupos.patch` (archivos nuevos en `server/grupos/`, `server/routes/grupos.ts`,
-  `src/components/settings/GruposSettings.tsx`, y dos líneas en `server/index.ts` y en la página Funciones).
+- Código: `overlay/server/grupos/`, `overlay/server/routes/grupos.ts`, `overlay/src/components/settings/GruposSettings.tsx`
+  y `patches/90-grupos.patch` (una línea en `server/index.ts` y otra en la página Funciones).
+
+## Bots en WhatsApp y Telegram (hablar con ellos desde el móvil)
+
+En **Ajustes → Funciones → Bots en WhatsApp y Telegram**. Usa la misma conexión de WhatsApp y Telegram que los grupos.
+
+- Hablas con un bot (el principal, el jefe, el de tareas…) **igual que en la app**: el mensaje entra por el mismo
+  camino que la caja de escribir (mismas herramientas, memoria y nivel). Cada bot guarda lo hablado en una
+  conversación propia por persona y aplicación («WhatsApp · Daniel»), que se ve y se sigue desde la app.
+- Lo que el bot escribe en esa conversación llega al móvil: respuestas, recordatorios («recuérdame en una hora…»),
+  resultados de rutinas, archivos y preguntas. Mientras trabaja sale «escribiendo…».
+- Además, según lo que elija cada persona: **permisos y preguntas** de cualquier conversación (se contestan con el
+  número, «sí» o «no»), **trabajos terminados** y **fallos**.
+- **WhatsApp**: un solo número. Se habla con el «bot activo»; `@Nombre mensaje` o `/bots` cambian de bot.
+  **Telegram**: el mismo contacto general, y si se quiere un **contacto propio por bot** (un token de @BotFather para
+  cada uno; ahí solo habla ese bot).
+- Órdenes: `/bots`, `@Nombre`, `/nuevo` (conversación nueva), `/parar`, `/quien`, `/ayuda`. Se pueden mandar fotos,
+  documentos y notas de voz (las notas se pasan a texto si OpenBot tiene servicio de voz; si no, van como archivo).
+- **Quién puede hablar**: solo las personas añadidas en Ajustes. Cada una se vincula una vez mandando desde su móvil un
+  código de un solo uso (15 minutos; con QR que abre el chat con el código escrito). A cualquier otro número o
+  cuenta no se le contesta nada.
+- Datos en `/opt/data/.openmausbot/canales/` (ajustes y tokens de los contactos propios, solo legibles por el dueño).
+- Código: `overlay/server/canales/`, `overlay/server/routes/canales.ts`, `overlay/src/components/settings/CanalesSettings.tsx`
+  y `patches/99zzz-bots-en-whatsapp-y-telegram.patch` (unas líneas en `server/index.ts`: conectar el módulo, y que los
+  avisos de la app también salgan por WhatsApp/Telegram; y una línea en la página Funciones). Va el último a propósito.
+- Para pruebas: `OPENBOT_TELEGRAM_API` cambia la dirección de la Bot API (por ejemplo, un Telegram simulado).
 
 ## Traer los bots de Grok Bot
 

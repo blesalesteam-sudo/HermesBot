@@ -1,0 +1,65 @@
+diff --git a/server/index.ts b/server/index.ts
+index 8f2b7bc..0c171d3 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -467,6 +467,7 @@ import { createTeamMemoryRequests } from "./team-memory-requests.ts";
+ import { createAgentCard } from "./chat-widgets.ts";
+ import { createChatAppRoutes, createChatApps, createChatAppsMcp } from "./routes/chat-apps.ts";
+ import { createGruposRoutes } from "./routes/grupos.ts"; import { crearGrupos } from "./grupos/index.ts"; // OpenBot: oyente de grupos de Telegram y WhatsApp
++import { createCanalesRoutes } from "./routes/canales.ts"; import { crearCanales, motivoDeError } from "./canales/index.ts"; // OpenBot: bots en WhatsApp y Telegram
+ import { buildBotOverview, type BotOverview, connectedAppsFacts } from "./bot-overview.ts";
+ import { ProfileRequestService } from "./profile-requests.ts"; import { browserProfileLabel } from "./bot-browser-profile.ts";
+ import { ModelRequestService } from "./model-requests.ts";
+@@ -4940,9 +4941,13 @@ const providerLabel = (provider: string): string => {
+ const quietTurnThreads = new Set<string>(); const doneNotice = createDoneNotice({ awaitingTeammates: (threadId) => coordinator.awaitingTeammateThreads().has(threadId) || checkWork.holds(threadId), queuedFollowUp: hasQueuedPersonMessage }); const personWaits = createPersonWaits({ store, notify, threadsWithCards: threadsWithCardsSince, waitingElsewhere: askCards.showWaitingOnCardChip, waitSettled: askCards.settleWaitingOnCardChip, waitResumed: askCards.reopenWaitingOnCardChip });
+ const QUIET_TURN_NEWS: ReadonlySet<Notification["kind"]> = new Set(["done", "turn-failed", "incident"]);
+ 
++// OpenBot: los avisos también llegan a WhatsApp/Telegram (server/canales). `var` porque un aviso puede salir antes de que se cree.
++// eslint-disable-next-line no-var
++var openbotAviso: ((notification: Notification) => void) | undefined;
+ function notify(notification: Notification | null, how?: { routine?: boolean; summary?: boolean }) {
+   if (notification && QUIET_TURN_NEWS.has(notification.kind) && quietTurnThreads.has(notification.threadId)) return;
+   const routed = notification && teamMessages.route(notification, how); if (routed) broadcast({ kind: "notify", notification: logNotification(routed) }); teamAway.notified(notification, routed, how);
++  if (routed) try { openbotAviso?.(routed); } catch { /* un fallo al avisar por WhatsApp no para nada */ }
+ }
+ 
+ const roomTurnLevels = createRoomTurnLevels();
+@@ -11983,6 +11988,18 @@ const liveRoots = (threadId: string, botId: string | undefined) => { const bot =
+ const chatAppsMcp = createChatAppsMcp({ store, apps: chatApps, dataDir: DATA_DIR, keys: mcpKeys, storedServers: () => cfg.mcpServers ?? {}, mountedServers: (bot) => teamConnections.engineMcp(bot), personMcp: teamConnections.personMcp, probeAs: (server) => mcpServersHost.probeAs(server), oauth: mcpOAuth });
+ ROUTES.push(createChatAppRoutes({ store, apps: chatApps, threadRefusal: cloudThreadRefusal, mcpRpc: chatAppsMcp.rpc, data: dataEngine, dataOff: (botId) => serverTurnedOff(store.bot(botId)?.toolsOff, "data"), threadVisible: (auth, threadId) => (auth.kind !== "session" || sessions.isLive(auth.session.id)) && visibleTo(viewerFor(auth)).thread(threadId) }));
+ const openbotGrupos = crearGrupos({ dataDir: DATA_DIR, bots: () => store.bots.filter((bot) => !bot.hidden).map((bot) => ({ id: bot.id, name: bot.name })), escritor: (botId) => sideJobs.text("memory", botId) }); ROUTES.push(createGruposRoutes(openbotGrupos)); openbotGrupos.arrancar(); // OpenBot: oyente de grupos (server/grupos)
++const openbotCanales = crearCanales({ dataDir: DATA_DIR, conectores: openbotGrupos.conectores, alRecibirPrivado: openbotGrupos.alRecibirPrivado, // OpenBot: bots en WhatsApp y Telegram (server/canales)
++  bots: () => store.bots.filter((bot) => !bot.hidden).map((bot) => ({ id: bot.id, name: bot.name, principal: Boolean(bot.defaultBot), jefe: Boolean(bot.chiefOfStaff) })),
++  personasOpenbot: () => { try { return openbotPeople.list().map((person) => ({ clave: person.key, nombre: person.name || (person.owner ? "Dueño (tú)" : "Sin nombre") })); } catch { return []; } },
++  enviar: async ({ botId, threadId, texto, sendId, remitente }) => { try { const receipt = await acceptDirectSend({ botId, threadId, text: texto, sendId, ...(remitente ? { sender: remitente } : {}), trigger: remitente ? { kind: "user", label: remitente.name } : { kind: "owner" }, personPresent: true, followUp: "queue" }); return { ok: true, enCola: "queued" in receipt && receipt.queued === true }; } catch (error) { return { ok: false, motivo: motivoDeError(error) }; } },
++  crearConversacion: (botId, titulo) => store.createTask(botId, titulo, false)?.threadId ?? null,
++  conversacionExiste: (botId, threadId) => Boolean(store.taskByThread(botId, threadId)),
++  mensajes: (threadId) => store.messagesFor(threadId),
++  alCambiar: (listener) => store.onChange(listener),
++  responderTarjeta: async (threadId, requestId, answer) => { const out = await respondToCard({ auth: { kind: "loopback", scopes: ["admin", "client"] }, threadId, requestId, behavior: answer.behavior, ...(answer.message ? { message: answer.message } : {}) }); return out.ok ? null : out.error; },
++  parar: async (botId, threadId) => { await stopThreadForPerson(botId, threadId); },
++  config: () => cfg });
++ROUTES.push(createCanalesRoutes(openbotCanales)); openbotCanales.arrancar(); openbotAviso = (notification) => { void openbotCanales.aviso(notification); };
+ const roomReactionNotes = createRoomReactionNotes({ store }), { react } = createReactions({
+   store, noted: roomReactionNotes.noted, inboxAnswer: (input) => teamMessages.reactedIn(input.auth, input.threadId, input.target.id, input.answer, { sendId: input.sendId, sender: messageSender(input.auth) }), reply: (input) => personReplies.deliver({ ...input, about: "message" }),
+   answerCard: (input) => respondToCard({ ...input, via: "reaction" }), withdraw: personReplies.withdraw,
+diff --git a/src/components/settings/pages/FeaturesPage.tsx b/src/components/settings/pages/FeaturesPage.tsx
+index 86f67d8..010733e 100644
+--- a/src/components/settings/pages/FeaturesPage.tsx
++++ b/src/components/settings/pages/FeaturesPage.tsx
+@@ -4,6 +4,7 @@ import { t } from "@/lib/i18n";
+ import { useFeature, type Feature } from "@/lib/use-feature";
+ import { OPENBOT_EXTRAS, useExtra, type OpenbotExtra } from "@/lib/openbot";
+ import { GruposSettings } from "../GruposSettings";
++import { CanalesSettings } from "../CanalesSettings";
+ import { api, type ConfigStatus } from "@/state/store";
+ import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
+ import { SettingRow, SettingsGroup, SettingsRows, Switch } from "../../SettingsPrimitives";
+@@ -83,6 +84,7 @@ export function FeaturesPage() {
+         </SettingsRows>
+       </SettingsGroup>
+       <GruposSettings />
++      <CanalesSettings />
+     </>
+   );
+ }
