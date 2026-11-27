@@ -1,6 +1,6 @@
 diff -ruN -x node_modules -x skills a/src/components/AttachmentGallery.tsx b/src/components/AttachmentGallery.tsx
 --- a/src/components/AttachmentGallery.tsx	2026-11-27 09:28:27
-+++ b/src/components/AttachmentGallery.tsx	2026-11-27 09:51:47
++++ b/src/components/AttachmentGallery.tsx	2026-11-27 10:00:14
 @@ -2,7 +2,8 @@
  // authorization.
  import { useEffect, useMemo, useRef, useState } from "react";
@@ -82,6 +82,15 @@ diff -ruN -x node_modules -x skills a/src/components/AttachmentGallery.tsx b/src
                </div>
              ))}
            </div>
+@@ -546,7 +558,7 @@
+         <div className={cn("grid gap-2", media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+           {media.map((item) => item.kind === "image" ? (
+             <div key={item.key} className="min-w-0" title={item.image.name} {...reveal.targetProps(item.source)}>
+-              <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="max-h-72 rounded-2xl border-0 bg-transparent" />
++              <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className={cn("border-0 bg-transparent", media.length === 1 ? "max-h-[180px] rounded-[14px]" : "max-h-72 rounded-2xl")} />
+             </div>
+           ) : item.kind === "video" && message ? (
+             <span key={`${message.threadId}:${message.messageId}:${item.key}`} className="contents" {...reveal.targetProps(item.source)}><VideoAttachment file={item.file} message={message} /></span>
 diff -ruN -x node_modules -x skills a/src/components/ChatMarkdown.tsx b/src/components/ChatMarkdown.tsx
 --- a/src/components/ChatMarkdown.tsx	2026-11-27 09:28:28
 +++ b/src/components/ChatMarkdown.tsx	2026-11-27 09:51:47
@@ -442,19 +451,34 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppChrome.tsx b/src/com
        <div className={cn(
 diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/components/app/AppMessage.tsx
 --- a/src/components/app/AppMessage.tsx	2026-11-27 09:28:28
-+++ b/src/components/app/AppMessage.tsx	2026-11-27 09:30:59
-@@ -22,6 +22,8 @@
++++ b/src/components/app/AppMessage.tsx	2026-11-27 10:00:14
+@@ -22,6 +22,11 @@
  const CARD_TITLE = "truncate px-5 pt-5 text-[17px] font-semibold leading-6 text-ink";
  const CARD_TITLE_HEIGHT = 44;
  const DOC_REUSE_MS = 60_000;
 +/** OpenBot: the card shows the top of the page drawn smaller, as a preview of the real thing. */
 +const PREVIEW_SCALE = 0.64;
++/** OpenBot: the card never repeats the title over its preview (the footer names the page), so it does not wait for the
++ * page to say whether it opens with a heading either. */
++const TITLE_OVER_PREVIEW = false;
  
  const heights = new Map<string, number>();
  /** Whether a page opens with a heading of its own, as it last said: by message id and version. */
-@@ -276,10 +278,9 @@
+@@ -260,7 +265,7 @@
+   // the title above the preview. Until the page has spoken the preview stays covered, so nothing moves under the eye.
+   const said = heading?.key === `${message.id}:${rev}` ? heading.opens : undefined;
+   const opens = said ?? headings.get(`${message.id}:${rev}`);
+-  const undecided = compact && Boolean(current) && opens === undefined;
++  const undecided = TITLE_OVER_PREVIEW && compact && Boolean(current) && opens === undefined;
+   const timing = undecided && arrived;
+   const drawing = said === null;
+   const frameKey = loaded?.key;
+@@ -274,12 +279,11 @@
+     return () => clearTimeout(timer);
+   }, [timing, drawing, frameKey, message.id, rev]);
    // The title stays while the frame is away (the pool took its slot), so the card keeps its height.
-   const titled = compact && opens === false;
+-  const titled = compact && opens === false;
++  const titled = TITLE_OVER_PREVIEW && compact && opens === false;
    // The compact card clips the page at its natural size, so it reads as a preview of the real thing.
 -  const previewHeight = height + (titled ? CARD_TITLE_HEIGHT : 0);
 -  // OpenBot: in the chat a page is one compact row (icon, title, kind), with no preview: it opens beside the chat.
@@ -466,7 +490,7 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/co
    const body = collapsed ? null : fullScreen && current ? (
      <div data-app-box className={cn("relative w-full", compact && "overflow-hidden", bordered && !compact && "border-t border-ink/[0.08]")} style={{ height: boxHeight }}>
        {compact
-@@ -295,6 +296,7 @@
+@@ -295,6 +299,7 @@
        style={{ height: boxHeight }}>
        {titled && <div data-page-title title={payload.title} className={CARD_TITLE}><bdi dir="auto">{payload.title}</bdi></div>}
        {current ? (
@@ -474,7 +498,7 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/co
          <AppFrame
            key={loaded!.key}
            doc={current}
-@@ -311,17 +313,17 @@
+@@ -311,17 +316,17 @@
            {...(!room ? { onSelection: setSelection } : {})}
            {...onDraft}
          />
@@ -496,7 +520,7 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/co
        )}
      </div>
    );
-@@ -331,9 +333,7 @@
+@@ -331,9 +336,7 @@
        <AppOpenButton label={t("app.openAgain")} onClick={reloadNow} />
      </div>
    );
@@ -507,7 +531,7 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/co
  
    return (
      <div
-@@ -354,7 +354,7 @@
+@@ -354,7 +357,7 @@
              {body}
              <PageCardFooter
                title={payload.title}
