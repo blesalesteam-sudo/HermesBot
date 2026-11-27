@@ -105,7 +105,7 @@ select.tp-chip:focus-visible,.tp-date:focus-within,.tp-check:focus-visible,.tp-p
 .tp-col .tp-add{border-top:0;padding:4px 2px;margin-top:auto}.tp-col .tp-add-input{font-size:14px}
 .tp-table{border:0;border-radius:0;margin:0;background:transparent;font-size:14px}
 .tp-table th{font-weight:500;color:var(--tx2);font-size:13px;padding:10px 12px;border-left:0}
-.tp-table td{padding:7px 12px;border-left:0;vertical-align:middle}.tp-table td+td,.tp-table th+th{border-left:0}
+.tp-table td{padding:7px 12px;border-left:0;vertical-align:middle}.tp-table th.chk,.tp-table td.chk{text-align:center;width:1%;padding-inline:8px;white-space:nowrap}.tp-table td.chk .tp-check{margin:0 auto}.tp-count{white-space:nowrap}.tp-table td+td,.tp-table th+th{border-left:0}
 .tp-table .num{text-align:right}.tp-table tr:last-child td{border-bottom:1px solid var(--line)}
 .tp-table .tp-sum td{font-weight:600;border-bottom:0}.tp-th-x,.tp-td-x{width:32px;padding-left:0!important}
 .tp-card-table .tp-add{padding:7px 12px;border-top:0}

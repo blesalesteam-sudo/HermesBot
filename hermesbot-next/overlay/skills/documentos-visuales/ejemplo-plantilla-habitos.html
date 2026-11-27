@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hábitos de la semana</title>
+<link rel="stylesheet" href="kit.css">
+</head><body>
+<main class="doc" id="plantilla"></main>
+<script type="application/json" id="datos">
+{
+  "titulo": "Hábitos de la semana",
+  "resumen": "Marca cada día que cumplas un hábito; la cuenta de cada uno se lleva sola.",
+  "colecciones": {
+    "habitos": {
+      "nombre": "hábito",
+      "campos": [
+        { "id": "habito", "nombre": "Hábito", "tipo": "texto" },
+        { "id": "l", "nombre": "L", "tipo": "casilla" },
+        { "id": "m", "nombre": "M", "tipo": "casilla" },
+        { "id": "x", "nombre": "X", "tipo": "casilla" },
+        { "id": "j", "nombre": "J", "tipo": "casilla" },
+        { "id": "v", "nombre": "V", "tipo": "casilla" },
+        { "id": "s", "nombre": "S", "tipo": "casilla" },
+        { "id": "d", "nombre": "D", "tipo": "casilla" },
+        { "id": "dias", "nombre": "Días", "tipo": "cuenta" }
+      ],
+      "filas": [
+        { "id": "h1", "habito": "Entrenar", "l": true, "m": false, "x": true },
+        { "id": "h2", "habito": "Leer 20 minutos", "l": true, "m": true, "x": true },
+        { "id": "h3", "habito": "Grabar un vídeo", "m": true },
+        { "id": "h4", "habito": "Revisar los números", "l": true }
+      ]
+    }
+  },
+  "bloques": [
+    { "tipo": "cifras", "de": "habitos", "cifras": [
+      { "nombre": "Días cumplidos", "suma": "dias" },
+      { "nombre": "Hábitos", "detalle": "en seguimiento" }
+    ] },
+    { "tipo": "tabla", "de": "habitos", "titulo": "Esta semana", "columnas": ["habito", "l", "m", "x", "j", "v", "s", "d", "dias"] }
+  ]
+}
+</script>
+<script src="plantilla.js"></script>
+</body></html>

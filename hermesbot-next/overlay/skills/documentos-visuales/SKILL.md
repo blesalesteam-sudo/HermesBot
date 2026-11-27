@@ -117,8 +117,9 @@ con buen diseño, guarda lo que ella cambia y te lo cuenta.
 
 La página es siempre esta, con tu descripción dentro. Hay dos completas para copiar como base:
 `ejemplo-plantilla.html` (tareas: cifras, progreso, lista agrupada y notas), `ejemplo-plantilla-seguimiento.html`
-(clientes por fases: tablero y tabla con totales) y `ejemplo-plantilla-semana.html` (planificador de la semana:
-cuadrícula de días por bloques, con horas).
+(clientes por fases: tablero y tabla con totales), `ejemplo-plantilla-semana.html` (planificador de la semana:
+cuadrícula de días por bloques, con horas) y `ejemplo-plantilla-habitos.html` (registro por días: una fila por
+hábito, una casilla por día y la cuenta).
 
 ```html
 <!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tareas de la semana</title>
@@ -139,6 +140,9 @@ Muéstrala con `show_html` pasando la página en `html`, sin guardarla antes com
     (`AAAA-MM-DD`), `numero` o `moneda`. En `opcion` puedes fijar `colores`: `{ "Alta": "rojo" }` (rojo, ambar,
     verde, azul, morado, gris); si no, se eligen solos. En `numero`, `unidad` (`"h"`, `"kg"`, `"%"`) la escribe
     detrás de cada valor y de cada suma: no la pongas en los nombres.
+  - `cuenta`: no se rellena, se calcula: cuántas casillas de la fila están marcadas ("3 de 7"); con `"de": [...]`
+    cuenta solo esas. Para un registro por días (hábitos, asistencia, rutinas) pon una fila por hábito y una
+    `casilla` por día en una `tabla`, con un campo `cuenta` al final: no hagas una fila por cada día.
   - Una fecha pasada sale en rojo mientras la fila siga abierta. Se da por cerrada con la casilla marcada o en un
     estado final (Hecho, Publicado, Ganado, Perdido, Pagado, Cancelado…); si tus estados finales se llaman de otra
     forma, dilos en el campo: `"final": ["Emitida"]`. Si la fecha no es un plazo, ponle `"vence": false`.

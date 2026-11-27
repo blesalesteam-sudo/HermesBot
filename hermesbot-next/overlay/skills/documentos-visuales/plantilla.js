@@ -235,9 +235,14 @@
     return String(value);
   }
   /* La suma de un campo en unas filas, escrita como ese campo (euros, o con su unidad). */
-  function total(f, rows) {
-    var sum = rows.reduce(function (acc, row) { return acc + (Number(row[f.id]) || 0); }, 0);
+  function total(f, rows, col) {
+    var sum = rows.reduce(function (acc, row) { return acc + (f.tipo === "cuenta" && col ? countOf(col, row, f).n : Number(row[f.id]) || 0); }, 0);
     return shown(f.tipo === "moneda" || f.tipo === "numero" ? f : { tipo: "numero" }, sum);
+  }
+  /* Un campo «cuenta» no se guarda: dice cuántas casillas de la fila están marcadas (los días cumplidos de un hábito). */
+  function countOf(col, row, f) {
+    var ids = Array.isArray(f.de) ? f.de : col.fields.filter(function (one) { return one.tipo === "casilla"; }).map(function (one) { return one.id; });
+    return { n: ids.filter(function (id) { return Boolean(row[id]); }).length, of: ids.length };
   }
   function matches(row, where) {
     for (var key in where || {}) {
@@ -281,6 +286,10 @@
   function editor(col, row, f, compact) {
     var value = row[f.id];
     if (f.tipo === "casilla") return checkbox(col, row, f.id, f.nombre);
+    if (f.tipo === "cuenta") {
+      var count = countOf(col, row, f);
+      return el("span", { class: "tp-chip tp-count" + (count.of && count.n === count.of ? " tp-verde" : ""), text: count.n + " de " + count.of });
+    }
     if (f.tipo === "opcion") {
       var select = el("select", { class: "tp-chip tp-" + tone(f, value), "aria-label": f.nombre || f.id, onchange: function () { setValue(col, row, f.id, select.value); } },
         [el("option", { value: "", text: compact ? "—" : (f.nombre || "—") })].concat((f.opciones || []).map(function (option) {
@@ -350,7 +359,7 @@
         var rows = col.rows.filter(function (row) { return matches(row, figure.donde); });
         if (figure.suma) {
           f = field(col, figure.suma);
-          value = total(f, rows);
+          value = total(f, rows, col);
         } else if (blank(value)) value = String(rows.length);
       }
       return el("div", { class: "kpi" }, [el("div", { class: "n", text: blank(value) ? "0" : String(value) }), el("div", { class: "l", text: figure.nombre || "" }), figure.detalle ? el("div", { class: "d", text: figure.detalle }) : null]);
@@ -482,7 +491,7 @@
     };
     var cells = [el("div", { class: "tp-grid-corner" })].concat(xs.map(function (x) {
       var inColumn = col.rows.filter(function (row) { return at(row, across) === x; });
-      return el("div", { class: "tp-grid-head" }, [el("span", { class: "tp-chip tp-" + tone(across, x), text: bucketName(across, x) }), el("i", { text: sumField ? total(sumField, inColumn) : String(inColumn.length) })]);
+      return el("div", { class: "tp-grid-head" }, [el("span", { class: "tp-chip tp-" + tone(across, x), text: bucketName(across, x) }), el("i", { text: sumField ? total(sumField, inColumn, col) : String(inColumn.length) })]);
     }));
     ys.forEach(function (y) {
       cells.push(el("div", { class: "tp-grid-side" }, [el("span", { class: "tp-chip tp-" + tone(down, y), text: bucketName(down, y) })]));
@@ -533,21 +542,22 @@
     return el("section", {}, [heading(block), el("div", { class: "tp-board" }, columns)]);
   }
 
+  function cellClass(f) { return f.tipo === "numero" || f.tipo === "moneda" ? "num" : f.tipo === "casilla" ? "chk" : ""; }
   function table(block, key) {
     var col = collections[block.de];
     if (!col) return null;
     var fields = (block.columnas && Array.isArray(block.columnas) ? block.columnas : col.fields.map(function (f) { return f.id; })).map(function (id) { return field(col, id); });
     var rows = visible(col, key, null);
     var sums = block.suma || [];
-    var head = el("tr", {}, fields.map(function (f) { return el("th", { class: f.tipo === "numero" || f.tipo === "moneda" ? "num" : "", text: f.nombre || f.id }); }).concat([el("th", { class: "tp-th-x" })]));
+    var head = el("tr", {}, fields.map(function (f) { return el("th", { class: cellClass(f), text: f.nombre || f.id }); }).concat([el("th", { class: "tp-th-x" })]));
     var body = rows.map(function (row) {
       return el("tr", {}, fields.map(function (f) {
-        return el("td", { class: f.tipo === "numero" || f.tipo === "moneda" ? "num" : "" }, [editor(col, row, f, "cell")]);
+        return el("td", { class: cellClass(f) }, [editor(col, row, f, "cell")]);
       }).concat([el("td", { class: "tp-td-x" }, [removeButton(col, row)])]));
     });
     var foot = sums.length ? el("tr", { class: "tp-sum" }, fields.map(function (f, index) {
       if (sums.indexOf(f.id) < 0) return el("td", { text: index === 0 ? "Total" : "" });
-      return el("td", { class: "num", text: total(f, rows) });
+      return el("td", { class: f.tipo === "cuenta" ? "" : "num", text: total(f, rows, col) });
     }).concat([el("td", {})])) : null;
     var first = fields[0] ? fields[0].id : "texto";
     return el("section", {}, [heading(block), filterBar(col, block, key, null),
