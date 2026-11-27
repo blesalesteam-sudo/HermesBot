@@ -1,0 +1,51 @@
+diff --git a/src/lib/interface-mode.ts b/src/lib/interface-mode.ts
+--- a/src/lib/interface-mode.ts
++++ b/src/lib/interface-mode.ts
+@@ -1,6 +1,5 @@
+ import { useSyncExternalStore } from "react";
+ 
+-import { hasPriorRun } from "./prior-run";
+ import { SIMPLE_ONLY } from "./simple-only";
+ import { windowPrefChanged } from "./window-pref-changes";
+ 
+@@ -25,7 +24,9 @@
+     const stored = store?.getItem(ADVANCED_MODE_KEY);
+     if (stored === "1") return true;
+     if (stored === "0") return false;
+-    return hasPriorRun(store);
++    // OpenBot: a new browser starts in Advanced mode, like the desktop app it replaces (field on its own line, model
++    // and mic under it). Settings still switches it back to Simple.
++    return true;
+   } catch {
+     return false;
+   }
+diff --git a/src/lib/interface-mode.test.ts b/src/lib/interface-mode.test.ts
+--- a/src/lib/interface-mode.test.ts
++++ b/src/lib/interface-mode.test.ts
+@@ -48,7 +48,7 @@
+     vi.resetModules();
+     expect((await vi.importActual<typeof import("./simple-only")>("./simple-only")).SIMPLE_ONLY).toBe(false);
+     const { readAdvancedMode, setAdvancedMode } = await import("./interface-mode");
+-    expect(readAdvancedMode()).toBe(false);
++    expect(readAdvancedMode(), "OpenBot starts a new browser in Advanced").toBe(true);
+     setAdvancedMode(true);
+     expect(readAdvancedMode()).toBe(true);
+     expect(local.getItem("omb-advanced-mode")).toBe("1");
+@@ -58,13 +58,13 @@
+ });
+ 
+ describe("with the switch back", () => {
+-  it("defaults a fresh install to Simple and stores that once", async () => {
++  it("defaults a fresh install to Advanced (OpenBot) and stores that once", async () => {
+     const { readAdvancedMode, settleAdvancedModeDefault, ADVANCED_MODE_KEY } = await fresh();
+-    expect(readAdvancedMode()).toBe(false);
++    expect(readAdvancedMode()).toBe(true);
+     settleAdvancedModeDefault();
+     local.setItem("omb-skin", "midnight");
+-    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("0");
+-    expect((await fresh()).readAdvancedMode()).toBe(false);
++    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("1");
++    expect((await fresh()).readAdvancedMode()).toBe(true);
+   });
+ 
+   it("defaults an existing install to Advanced so an update hides nothing", async () => {

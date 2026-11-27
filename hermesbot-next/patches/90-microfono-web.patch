@@ -1,0 +1,51 @@
+diff --git a/src/lib/speech.ts b/src/lib/speech.ts
+--- a/src/lib/speech.ts
++++ b/src/lib/speech.ts
+@@ -4,6 +4,7 @@
+ import type { ConfigStatus } from "@/state/store";
+ import { desktopCapabilitiesNow } from "./desktop";
+ import { fishSpeech, type SpeechBridge } from "./fish-speech";
++import { browserSpeech, browserSpeechSupported } from "./browser-speech";
+ 
+ /** Quiet after speech that ends the person's turn in a call, through the Mac's helper or Fish Audio alike: long enough
+  * for a short thinking pause mid-sentence. */
+@@ -17,6 +18,10 @@
+ /** DeepSeek voice also hears through DeepSeek, on every computer that can listen at all. */
+ const deepseekHears = (config: ConfigStatus | null | undefined) => config?.tts?.provider === "deepseek";
+ 
++/** OpenBot: the web app, outside the desktop app, where the browser's own recognizer does the dictation. */
++const inBrowser = (capabilities: DesktopCapabilities) =>
++  capabilities.dictation.reasonCode === "desktop-app-required" && !globalThis.window?.ogb;
++
+ /** The person's own ElevenLabs key is saved (not the plan's included voice). */
+ export function ownElevenLabsKey(config: ConfigStatus | null | undefined): boolean {
+   const eleven = savedState(keyEntry("elevenlabs"), config);
+@@ -45,17 +50,19 @@
+  * Fish Audio or ElevenLabs), or the desktop app's helper. */
+ export function speechBridge(config: ConfigStatus | null | undefined): SpeechBridge | Window["ogb"] {
+   const capabilities = desktopCapabilitiesNow();
++  if (inBrowser(capabilities) && browserSpeechSupported()) return browserSpeech;
+   if (capabilities.dictation.available && scribeChosen(config)) return fishSpeech;
+   if (capabilities.dictation.available && deepseekHears(config)) return deepseekSpeech;
+   return pageRecords(capabilities, config) ? fishSpeech : globalThis.window?.ogb;
+ }
+ 
+ /** The page's recorder hears a clip only at its end, so stopping the mic must finish it. */
+-export const recordsClips = (bridge: SpeechBridge | Window["ogb"]) => bridge === fishSpeech || bridge === deepseekSpeech;
++export const recordsClips = (bridge: SpeechBridge | Window["ogb"]) => bridge === fishSpeech || bridge === deepseekSpeech || bridge === browserSpeech;
+ 
+ /** Stops whichever bridge is listening, for a caller that cannot know which one started. */
+ export function stopListening(): void {
+   void fishSpeech.speechStop();
++  void browserSpeech.speechStop();
+   void globalThis.window?.ogb?.speechStop?.();
+ }
+ 
+@@ -76,6 +83,7 @@
+ 
+ /** Whether speech can be heard here: the engine is there and, through the server, so is a saved key. */
+ export function listensHere(capabilities: DesktopCapabilities, config: ConfigStatus | null | undefined): boolean {
++  if (inBrowser(capabilities) && browserSpeechSupported()) return true;
+   return capabilities.dictation.available && missingListenKey(capabilities, config) === null;
+ }
+ 
