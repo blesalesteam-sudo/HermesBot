@@ -111,7 +111,7 @@ export function LocalAccountsSection() {
                   <PersonAvatar person={person} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-semibold text-ink">{person.name || person.username || "Sin nombre"}</span>
-                    <span className="block truncate text-[12px] text-ink-secondary">{[person.username ? `@${person.username}` : "sin usuario todavía", person.job].filter(Boolean).join(" · ")}</span>
+                    <span className="block truncate text-[12px] text-ink-secondary">{[person.username ? `@${person.username}` : "sin usuario todavía", person.job, person.devices ? `${person.devices} ${person.devices === 1 ? "aparato" : "aparatos"}` : null].filter(Boolean).join(" · ")}</span>
                   </span>
                   <span className="shrink-0 rounded-full bg-inset px-2.5 py-1 text-[11px] font-semibold text-ink-secondary">{person.owner ? "Dueño" : person.role === "admin" ? "Administrador" : "Miembro"}</span>
                   {admin && account && !account.owner ? (

@@ -56,6 +56,12 @@ lleva quién lo escribió y los bots lo saben: en cada mensaje reciben una nota 
   `/opt/data/.openmausbot/openbot-people/`. Los bots reciben la lista de personas con su perfil en sus instrucciones, y en
   cada mensaje una nota con el perfil de quien escribe; lo que aprenden de alguien va a su «Sobre ti», no al de los demás.
   Archivos: `overlay/server/openbot-people.ts`, `overlay/src/components/openbot/` y `patches/99z-entrar-y-perfiles.patch`.
+- **Una sola cuenta en todos los aparatos:** el perfil de «Tu cuenta» es el único: el de la barra lateral, el de Ajustes →
+  Bots (que lleva a Tu cuenta), el nombre de cada aparato en Dispositivos y el que leen los bots. Cuando el dueño ya tiene
+  usuario, cada aparato que emparejó con un código pasa a ser de su cuenta la próxima vez que abre la app (una sesión nueva
+  de su cuenta en su lugar), así que es la misma persona en todos. Ajustes → Tu cuenta → «Tus aparatos» lista los aparatos
+  con tu sesión abierta y deja cerrar cualquiera; en Personas sale cuántos tiene cada uno.
+  Archivo: `patches/99zzz-una-sola-cuenta.patch`.
 
 Archivos: `overlay/server/local-accounts.ts` (cuentas, contraseñas con scrypt),
 `overlay/server/routes/local-accounts.ts` (entrar y gestionar), `overlay/src/components/LocalAccountsSection.tsx`

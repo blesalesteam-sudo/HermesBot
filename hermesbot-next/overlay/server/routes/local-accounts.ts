@@ -8,7 +8,7 @@ import { localEmail, localUsername, PASSWORD_MIN, type LocalAccount, type LocalA
 import { accountKey, type OpenbotInvites, type OpenbotPeople } from "../openbot-people.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { labelFromUserAgent, requestOrigin, requestSource, serializeSessionCookie } from "../request-auth.ts";
-import { cookieMaxAgeSeconds, type SessionRegistry } from "../sessions.ts";
+import { cookieMaxAgeSeconds, type PublicSession, type SessionRecord, type SessionRegistry } from "../sessions.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface PasswordSignInDeps {
@@ -26,7 +26,7 @@ export interface PasswordSignInDeps {
   placeName?(): string;
 }
 
-function issueFor(deps: PasswordSignInDeps, req: IncomingMessage, res: ServerResponse, account: LocalAccount, label: string) {
+function issueFor(deps: { sessions: Pick<SessionRegistry, "issue">; cookieName: string }, req: IncomingMessage, res: ServerResponse, account: LocalAccount, label: string) {
   const issued = deps.sessions.issue({
     label: label.trim() || labelFromUserAgent(req.headers["user-agent"]),
     scopes: account.role === "admin" ? ["admin", "client"] : ["client"],
@@ -151,6 +151,9 @@ export interface LocalAccountsRouteDeps {
   names: PersonNames;
   people: OpenbotPeople;
   invites: OpenbotInvites;
+  /** Each person's devices (Ajustes → Tu cuenta), and the owner's code-paired devices joining their account. */
+  sessions: Pick<SessionRegistry, "issue" | "list" | "revoke">;
+  cookieName: string;
   /** After a change: sessions of a removed or demoted person end, and open windows refresh. */
   changed(): void;
 }
@@ -177,6 +180,43 @@ function meOf(deps: LocalAccountsRouteDeps, auth: RequestAuth): { key: string; a
 
 const TEXT = (value: unknown) => (typeof value === "string" ? value : undefined);
 
+type DeviceSession = Pick<SessionRecord, "email" | "scopes" | "owner" | "teamRole" | "token"> | PublicSession;
+
+/** A device the owner paired with a code before having an account: full access, no address, not a script token. */
+function ownerCodeDevice(session: DeviceSession): boolean {
+  return !session.email && session.scopes.includes("admin") && !session.token && !session.owner && !session.teamRole;
+}
+
+/** Whose device a session is: the account's person, or the owner for a device paired with a code. */
+function deviceKey(deps: LocalAccountsRouteDeps, session: DeviceSession): string | null {
+  const username = localUsername(session.email);
+  if (username) {
+    const account = deps.accounts.get(username);
+    return account ? accountKey(account) : null;
+  }
+  return ownerCodeDevice(session) ? deps.people.ownerKey() : null;
+}
+
+/** OpenBot: once the owner has an account, a device they paired with a code becomes a device of that account the next time
+ * it opens the app: a new sign-in for the account in its place, so the owner is one person on every device (the same name,
+ * photo, memory and key everywhere). Only a browser's own sign-in, which can take the new cookie. */
+function joinOwnerAccount(deps: LocalAccountsRouteDeps, ctx: Parameters<RouteHandler>[0]): boolean {
+  const { auth, req, res } = ctx;
+  if (auth.kind !== "session" || auth.via !== "cookie" || !ownerCodeDevice(auth.session)) return false;
+  const owner = deps.accounts.list().find((one) => one.owner);
+  if (!owner) return false;
+  issueFor(deps, req, res, owner, auth.session.label);
+  deps.sessions.revoke(auth.session.id);
+  return true;
+}
+
+function myDevices(deps: LocalAccountsRouteDeps, key: string, current: string | null) {
+  return deps.sessions.list()
+    .filter((session) => !session.token && session.expiresAt > Date.now() && deviceKey(deps, session) === key)
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+    .map(({ id, label, lastSeenAt, createdAt }) => ({ id, label, lastSeenAt, createdAt, current: id === current }));
+}
+
 async function openbotRoutes(deps: LocalAccountsRouteDeps, ctx: Parameters<RouteHandler>[0]): Promise<typeof PASS | void> {
   const { req, res, path, method, auth, json: send, readBody: read } = ctx;
   const me = meOf(deps, auth);
@@ -190,10 +230,31 @@ async function openbotRoutes(deps: LocalAccountsRouteDeps, ctx: Parameters<Route
     return;
   }
   if (path === "/api/openbot/people" && method === "GET") {
-    return send(res, 200, { people: deps.people.list().map(({ aboutMe: _about, ...person }) => person) });
+    const counts = new Map<string, number>();
+    for (const session of deps.sessions.list()) {
+      if (session.token || session.expiresAt <= Date.now()) continue;
+      const key = deviceKey(deps, session);
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return send(res, 200, { people: deps.people.list().map(({ aboutMe: _about, ...person }) => ({ ...person, devices: counts.get(person.key) ?? 0 })) });
+  }
+  if (path === "/api/openbot/me/devices" && method === "GET") {
+    if (!me) return send(res, 404, { error: "Esta sesión no es de ninguna persona." });
+    return send(res, 200, { devices: myDevices(deps, me.key, auth.kind === "session" ? auth.session.id : null) });
+  }
+  const device = /^\/api\/openbot\/me\/devices\/([\w-]+)$/.exec(path);
+  if (device && method === "DELETE") {
+    if (!me) return send(res, 404, { error: "Esta sesión no es de ninguna persona." });
+    if (!myDevices(deps, me.key, null).some((one) => one.id === device[1])) return send(res, 404, { error: "Ese aparato no es tuyo." });
+    deps.sessions.revoke(device[1]);
+    return send(res, 200, { ok: true });
   }
   if (path === "/api/openbot/me") {
     if (!me) return send(res, 404, { error: "Esta sesión no es de ninguna persona." });
+    if (method === "GET" && joinOwnerAccount(deps, ctx)) {
+      const owner = deps.accounts.list().find((one) => one.owner)!;
+      return send(res, 200, { ...deps.people.byAccount(owner), needsAccount: false, passwordMin: PASSWORD_MIN, joined: true });
+    }
     if (method === "PUT") {
       const body = await read(req, 1024 * 1024);
       const given = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
@@ -234,7 +295,9 @@ async function openbotRoutes(deps: LocalAccountsRouteDeps, ctx: Parameters<Route
     deps.people.save(accountKey(made.account), { job: previous.job, ...(before ? { photo: `data:${before.type};base64,${before.data.toString("base64")}` } : {}) });
     deps.names.save({ id: "", email: made.account.email }, made.account.displayName);
     deps.changed();
-    return send(res, 200, { account: made.account });
+    // This device is the account's from now on (the others join the next time they open the app).
+    const joined = joinOwnerAccount(deps, ctx);
+    return send(res, 200, { account: made.account, joined });
   }
   if (path === "/api/openbot/invites") {
     if (!auth.scopes.includes("admin")) return send(res, 403, { error: "Solo un administrador invita." });
@@ -258,7 +321,7 @@ async function openbotRoutes(deps: LocalAccountsRouteDeps, ctx: Parameters<Route
 export function createLocalAccountsRoutes(deps: LocalAccountsRouteDeps): RouteHandler {
   return async (ctx) => {
     const { req, res, path, method, json: send, readBody: read } = ctx;
-    if (path.startsWith("/api/openbot/") && /^\/api\/openbot\/(me|people|claim|invites|photo\/|invites\/)/.test(path)) return openbotRoutes(deps, ctx);
+    if (path.startsWith("/api/openbot/") && /^\/api\/openbot\/(me|people|claim|invites|photo\/)/.test(path)) return openbotRoutes(deps, ctx);
     if (path !== "/api/local-accounts" && !path.startsWith("/api/local-accounts/")) return PASS;
     if (path === "/api/local-accounts" && method === "GET") return send(res, 200, { accounts: deps.accounts.list().map((account) => ({ ...account, profile: deps.people.byAccount(account) })) });
     if (path === "/api/local-accounts" && method === "POST") {

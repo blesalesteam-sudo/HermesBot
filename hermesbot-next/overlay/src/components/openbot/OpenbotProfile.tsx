@@ -1,8 +1,8 @@
 // OpenBot: «Tu perfil» en Ajustes (foto, nombre, a qué te dedicas, «Sobre ti» y contraseña), el aviso para que el dueño
 // elija usuario y contraseña la primera vez, y la foto o inicial de cada persona.
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Loader2 } from "lucide-react";
-import { call, initials, loadMyProfile, personColor, photoUrl, saveMyProfile, shrinkPhoto, useMyProfile, type MyProfile } from "./people-api";
+import { Camera, Check, Laptop, Loader2, Smartphone } from "lucide-react";
+import { call, initials, personColor, photoUrl, saveMyProfile, shrinkPhoto, useMyProfile, type MyDevice, type MyProfile } from "./people-api";
 
 export const obField = "h-11 w-full rounded-xl border border-transparent bg-inset px-3.5 text-[15px] text-ink outline-none transition-colors placeholder:text-ink-tertiary focus:border-hairline focus:bg-app";
 export const obPrimary = "inline-flex h-10 items-center justify-center gap-2 rounded-full bg-accent px-5 text-[14px] font-semibold text-accent-ink transition-opacity disabled:opacity-40";
@@ -37,8 +37,10 @@ function ClaimForm({ me, onDone }: { me: MyProfile; onDone(): void }) {
     const result = await call("/api/openbot/claim", "POST", { username: username.trim().toLowerCase(), password });
     setBusy(false);
     if (!result.ok) return setError(result.error);
-    await loadMyProfile();
     onDone();
+    // This device now signs in as the new account: start again with it, and say so once it is back.
+    try { sessionStorage.setItem(JUST_CLAIMED, "1"); } catch {}
+    location.reload();
   }
   return (
     <form onSubmit={submit} className="flex flex-col gap-2.5">
@@ -54,6 +56,10 @@ function ClaimForm({ me, onDone }: { me: MyProfile; onDone(): void }) {
 }
 
 const NUDGE_LATER = "openbot.claim-later";
+const JUST_CLAIMED = "openbot.just-claimed";
+function justClaimed(): boolean {
+  try { const yes = sessionStorage.getItem(JUST_CLAIMED) === "1"; sessionStorage.removeItem(JUST_CLAIMED); return yes; } catch { return false; }
+}
 const NUDGE_REST_MS = 7 * 24 * 60 * 60 * 1000;
 
 function nudgeResting(): boolean {
@@ -70,7 +76,7 @@ export function OpenbotAccountNudge() {
   const me = useMyProfile();
   const [later, setLater] = useState(nudgeResting);
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(justClaimed);
   const putAway = () => { try { localStorage.setItem(NUDGE_LATER, String(Date.now())); } catch {} setLater(true); };
   const asking = Boolean(me?.needsAccount) && !later && !done;
   useEffect(() => {
@@ -100,7 +106,7 @@ export function OpenbotAccountNudge() {
         <img src="/openbot-logo.svg" alt="" width={52} height={52} className="mx-auto size-[52px]" />
         <p id="openbot-nudge-title" className="mt-4 text-[18px] font-semibold tracking-[-0.01em]">Crea tu usuario y contraseña</p>
         <p className="mx-auto mt-1.5 max-w-[320px] text-[14px] leading-5 text-ink-secondary">Así entras desde cualquier sitio sin códigos. No pierdes nada de lo que tienes.</p>
-        {open ? <div className="mt-5 text-left"><ClaimForm me={me} onDone={() => setDone(true)} /></div> : (
+        {open ? <div className="mt-5 text-left"><ClaimForm me={me} onDone={() => {}} /></div> : (
           <div className="mt-5 flex flex-col gap-2">
             <button type="button" autoFocus className={obPrimary} onClick={() => setOpen(true)}>Crear ahora</button>
             <button type="button" className={obQuiet} onClick={putAway}>Más tarde</button>
@@ -201,9 +207,68 @@ export function OpenbotProfileCard() {
         <div className="flex flex-col gap-3 border-t border-hairline/30 pt-4">
           <p className="text-[14px] font-semibold text-ink">Tu usuario y contraseña</p>
           <p className="-mt-2 text-[13px] text-ink-secondary">Todavía entras con un código. Elige usuario y contraseña para entrar desde cualquier sitio.</p>
-          <ClaimForm me={me} onDone={() => setNote({ ok: true, text: "Listo. Desde ahora entras con tu usuario y tu contraseña." })} />
+          <ClaimForm me={me} onDone={() => {}} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** The base names devices in English («Chrome on Mac»): said in Spanish here. */
+const deviceName = (label: string) => label.replace(/ on /g, " en ").replace(/^Unnamed device$/, "Aparato sin nombre");
+const isPhone = (label: string) => /iphone|ipad|android|m[oó]vil|phone|tablet/i.test(label);
+
+function seenText(at: number): string {
+  const minutes = Math.round((Date.now() - at) / 60_000);
+  if (minutes < 5) return "Activo ahora";
+  const words = new Intl.RelativeTimeFormat("es", { numeric: "auto" });
+  if (minutes < 60) return `Activo ${words.format(-minutes, "minute")}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Activo ${words.format(-hours, "hour")}`;
+  return `Activo ${words.format(-Math.round(hours / 24), "day")}`;
+}
+
+/** Settings → Account: every device signed in as you, this one first, each with a way to sign it out. */
+export function OpenbotMyDevices() {
+  const [devices, setDevices] = useState<MyDevice[] | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    const result = await call<{ devices: MyDevice[] }>("/api/openbot/me/devices");
+    if (result.ok) setDevices([...result.data.devices].sort((a, b) => Number(b.current) - Number(a.current)));
+    else setError(result.error);
+  };
+  useEffect(() => { void load(); }, []);
+  async function signOut(id: string) {
+    setError(null);
+    const result = await call(`/api/openbot/me/devices/${encodeURIComponent(id)}`, "DELETE");
+    setAsking(null);
+    if (!result.ok) return setError(result.error);
+    await load();
+  }
+  if (!devices) return <p className="flex items-center gap-2 px-1 py-3 text-[13px] text-ink-secondary">{error ?? <><Loader2 size={14} className="animate-spin" /> Cargando…</>}</p>;
+  return (
+    <div data-openbot-devices className="flex flex-col gap-2">
+      <ul className="flex flex-col overflow-hidden rounded-2xl border border-hairline/30 bg-app">
+        {devices.map((device) => (
+          <li key={device.id} className="flex items-center gap-3 px-4 py-3 [&+&]:border-t [&+&]:border-hairline/20">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-inset text-ink-secondary">{isPhone(device.label) ? <Smartphone size={17} /> : <Laptop size={17} />}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium text-ink">{deviceName(device.label)}</span>
+              <span className="block truncate text-[12px] text-ink-secondary">{device.current ? "Este aparato" : seenText(device.lastSeenAt)}</span>
+            </span>
+            {device.current ? <span className="shrink-0 rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent-text">Aquí</span>
+              : asking === device.id ? (
+                <span className="flex shrink-0 gap-1.5">
+                  <button type="button" className={`${obPrimary} h-8 px-3 text-[13px]`} onClick={() => void signOut(device.id)}>Cerrar</button>
+                  <button type="button" className={`${obQuiet} h-8 px-3 text-[13px]`} onClick={() => setAsking(null)}>No</button>
+                </span>
+              ) : <button type="button" className="shrink-0 text-[13px] text-ink-secondary hover:text-ink" onClick={() => setAsking(device.id)}>Cerrar sesión</button>}
+          </li>
+        ))}
+      </ul>
+      {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}
+      <p className="px-1 text-[12px] text-ink-tertiary">Entra con tu usuario y contraseña en cualquier aparato y aparecerá aquí. Tus bots te reconocen en todos.</p>
     </div>
   );
 }

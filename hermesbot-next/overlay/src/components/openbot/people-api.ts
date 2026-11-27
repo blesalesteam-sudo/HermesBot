@@ -14,9 +14,13 @@ export interface MyProfile {
   /** The owner on a device paired with a code, with no username and password yet. */
   needsAccount: boolean;
   passwordMin: number;
+  /** This device was paired with a code and has just become a device of the owner's account (a new sign-in cookie). */
+  joined?: boolean;
 }
 
-export interface PersonSummary { key: string; name: string; job: string; hasPhoto: boolean; username?: string; role?: "admin" | "member"; owner: boolean }
+export interface PersonSummary { key: string; name: string; job: string; hasPhoto: boolean; username?: string; role?: "admin" | "member"; owner: boolean; devices?: number }
+
+export interface MyDevice { id: string; label: string; lastSeenAt: number; createdAt: number; current: boolean }
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -38,8 +42,20 @@ const changed = () => { for (const listener of listeners) listener(); };
 
 export function myProfile(): MyProfile | null { return mine; }
 
+function reloadOnce(): boolean {
+  try {
+    const at = Number(sessionStorage.getItem("openbot.joined-at"));
+    if (Number.isFinite(at) && Date.now() - at < 15_000) return false;
+    sessionStorage.setItem("openbot.joined-at", String(Date.now()));
+  } catch { return false; }
+  location.reload();
+  return true;
+}
+
 export async function loadMyProfile(): Promise<MyProfile | null> {
   const result = await call<MyProfile>("/api/openbot/me");
+  // The server just made this code-paired device one of the owner's account: start again with the new sign-in.
+  if (result.ok && result.data.joined && reloadOnce()) return new Promise(() => {});
   mine = result.ok ? result.data : null;
   changed();
   return mine;
