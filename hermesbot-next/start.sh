@@ -10,6 +10,8 @@ export OMB_STATIC_DIR=/app/dist
 export OMB_DUCKDB_DIR=/app/duckdb
 export OMB_PORT=8799
 export OMB_WEBHOOK_PORT=8800
+# Oyente de grupos de OpenBot: dónde está la librería de WhatsApp (ver Dockerfile).
+export OPENBOT_WHATSAPP_LIB=/app/whatsapp/node_modules
 export OMB_TUNNEL_SOCKET=/tmp/hermesbot/http.sock
 export NODE_ENV=production
 mkdir -p /tmp/hermesbot "$OMB_DATA_DIR"

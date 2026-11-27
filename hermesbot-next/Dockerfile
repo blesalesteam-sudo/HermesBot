@@ -23,6 +23,10 @@ ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN sed -i '/^supportedArchitectures:/,/^allowBuilds:/{/- arm64/d}' pnpm-workspace.yaml \
   && pnpm install --frozen-lockfile --filter openmausbot
 RUN OMB_DUCKDB_ARCH=x64 node scripts/prepare-duckdb.mjs && mv dist-native/duckdb/linux-x64 dist-native/duckdb/target
+# OpenBot: librería de WhatsApp para el oyente de grupos (patches/90-grupos.patch), aparte de la base y con versión
+# fijada en whatsapp/package-lock.json. Solo se usa si alguien vincula un número en Ajustes.
+COPY whatsapp/package.json whatsapp/package-lock.json /whatsapp/
+RUN cd /whatsapp && npm ci --omit=dev --no-audit --no-fund
 # Lo que cambia a menudo (nuestros parches e imágenes) va después.
 COPY patches/ /patches/
 RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "aplicando $p"; patch -p1 --batch < "$p" || exit 1; done
@@ -38,6 +42,7 @@ COPY --from=build /src/dist-native/duckdb/target /app/duckdb
 COPY --from=build /src/dist-server /app/dist-server
 COPY --from=build /src/dist /app/dist
 COPY --from=build /src/skills /app/skills
+COPY --from=build /whatsapp/node_modules /app/whatsapp/node_modules
 # Avisos de licencia de OpenMausBot, que hay que conservar.
 COPY --from=build /src/LICENSE /src/NOTICE /app/
 COPY edge.mjs start.sh /opt/hermesbot/

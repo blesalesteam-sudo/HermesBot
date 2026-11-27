@@ -73,3 +73,24 @@ Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis 
 
 El nombre "OpenMausBot", "MausBot" y su mascota son marca de sus autores: este producto
 usa nombre e imagen propios. Los avisos de licencia originales se conservan en `/app`.
+
+## Grupos de Telegram y WhatsApp (oyente silencioso)
+
+En **Ajustes → Funciones → Grupos de Telegram y WhatsApp**. Todo empieza apagado y sin conectar.
+
+- El bot está en los grupos, lee lo que se habla y lo guarda: el registro completo en
+  `/opt/data/.openmausbot/grupos/registro/` (un archivo por grupo y día) y, en la memoria de cada bot elegido,
+  un tema por grupo (`memory/grupo ….md`) con las últimas semanas, para resúmenes, tareas, decisiones, fechas y enlaces.
+- Cada grupo tiene su modo: **apagado** (no lee), **silencioso** (lee y guarda, nunca escribe) o **bajo demanda**
+  (además contesta en el grupo solo a quien menciona al bot o responde a un mensaje suyo, con pausas y un tope diario).
+  La respuesta la escribe el motor del bot elegido sin herramientas ni memoria privada, solo con lo hablado en el grupo.
+- Lo que se dice en un grupo es información, no órdenes.
+- **Telegram** (oficial, sin riesgo de bloqueo): un bot nuevo de @BotFather solo para OpenBot, con *Group Privacy* en
+  *Turn off* (o administrador del grupo), y volver a meterlo en el grupo. El token se pone en Ajustes (se guarda en el
+  volumen, nunca vuelve a la app) o en la variable `OPENBOT_TELEGRAM_TOKEN` de Railway, que gana.
+  No uses el mismo bot en otro programa a la vez: Telegram solo deja un lector por bot.
+- **WhatsApp** (no oficial, por código QR como WhatsApp Web): **puede bloquear el número**. Usa un número solo para el
+  bot. La librería (Baileys) se instala aparte desde `whatsapp/` con versión fijada; la sesión vive en
+  `/opt/data/.openmausbot/grupos/whatsapp-sesion/`. No marca mensajes como leídos ni aparece en línea.
+- Código: `patches/90-grupos.patch` (archivos nuevos en `server/grupos/`, `server/routes/grupos.ts`,
+  `src/components/settings/GruposSettings.tsx`, y dos líneas en `server/index.ts` y en la página Funciones).

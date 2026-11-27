@@ -1,0 +1,13 @@
+{
+  "name": "openbot-whatsapp",
+  "private": true,
+  "description": "Librería de WhatsApp (Baileys) para el oyente de grupos de OpenBot. Se instala aparte de la base al construir.",
+  "type": "module",
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc13",
+    "pino": "9.6.0"
+  },
+  "overrides": {
+    "protobufjs": "^7.5.5"
+  }
+}
