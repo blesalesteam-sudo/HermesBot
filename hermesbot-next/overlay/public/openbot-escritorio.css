@@ -1,0 +1,35 @@
+/* OpenBot, escritorio: acabados de la revisión frente a Grok Bot. Todo dentro de pantallas anchas (el móvil va en
+   openbot-movil.css). Anidado en html:root para ganar a styles.css, que carga después. */
+@media (min-width: 768px) {
+  /* Cabecera del chat: lo que sube por debajo de las pastillas se desvanece del todo antes de llegar a ellas, en vez
+     de verse a medias detrás (la base lo hacía en una rampa recta de 60px). */
+  html:root main .glass-scroller[data-top-fade] {
+    -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0,
+      transparent calc(var(--glass-top, 0px) * 0.42),
+      rgba(0, 0, 0, 0.3) calc(var(--glass-top, 0px) * 0.8),
+      #000 calc(var(--glass-top, 0px) + 18px));
+    mask-image: linear-gradient(to bottom,
+      transparent 0,
+      transparent calc(var(--glass-top, 0px) * 0.42),
+      rgba(0, 0, 0, 0.3) calc(var(--glass-top, 0px) * 0.8),
+      #000 calc(var(--glass-top, 0px) + 18px));
+  }
+
+  /* Panel lateral (modo sencillo): solo los bots. Fuera el sello del motor sobre cada personaje y las rayas entre
+     bots del panel estrecho. El motor sigue en el perfil del bot y en la cabecera del chat. */
+  html:root [data-sidebar-root]:has([data-sidebar-top-row="simple"]) [data-sidebar-bot-row] [data-testid="model-badge"] {
+    display: none;
+  }
+  html:root [data-sidebar-root] [data-sidebar-rail-separator] {
+    display: none;
+  }
+
+  /* Selector de conversaciones abierto: si no caben, los títulos se acortan con puntos suspensivos en vez de quedar
+     cortados por la izquierda. */
+  html:root [data-chathead-switch="open"] [data-thread-chip] {
+    flex-shrink: 1;
+    min-width: 4.5rem;
+    max-width: 16rem;
+  }
+}

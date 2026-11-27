@@ -1,0 +1,29 @@
+diff --git a/index.html b/index.html
+index f6694e5..44b608b 100644
+--- a/index.html
++++ b/index.html
+@@ -14,6 +14,7 @@
+     <link rel="stylesheet" href="/openbot-theme.css" />
+     <link rel="stylesheet" href="/openbot-movil.css?v=2" />
+     <script defer src="/openbot-movil.js?v=2"></script>
++    <link rel="stylesheet" href="/openbot-escritorio.css?v=1" />
+     <title>OpenBot</title>
+   </head>
+   <body>
+diff --git a/src/components/Sidebar.tsx b/src/components/Sidebar.tsx
+index 6cfbcae..c9d273a 100644
+--- a/src/components/Sidebar.tsx
++++ b/src/components/Sidebar.tsx
+@@ -1378,7 +1378,11 @@ export const Sidebar = memo(function Sidebar({ open, onClose, collapseToIcons =
+                   : sectionName
+                     ? sectionedBots.filter((bot) => bot.section === sectionName)
+                     : [];
+-            const headless = simple && id === BOTS_SECTION_ID && index === 0;
++            // OpenBot: a department that holds one bot and carries that bot's own name shows no title over it (Simple mode).
++            const loneBot = simple && sectionName && sectionGroupItems.length === 0 && sectionChiefItems.length + sectionBotItems.length === 1
++              ? (sectionChiefItems[0] ?? sectionBotItems[0]) : undefined;
++            const ownName = Boolean(loneBot && loneBot.name.trim().toLowerCase() === sectionName!.trim().toLowerCase());
++            const headless = (simple && id === BOTS_SECTION_ID && index === 0) || ownName;
+             const collapsed = !headless && sectionCollapsed(id);
+             const queued = collapsed ? [...sectionChiefItems, ...sectionBotItems].flatMap((bot) =>
+               sidebarBotActivityTasks(bot, state.pendingQueued).filter((task) => task.queued).map((task) => `${bot.name}: ${task.title}`)) : [];
