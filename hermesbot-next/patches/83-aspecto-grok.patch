@@ -1,6 +1,90 @@
+diff -ruN -x node_modules -x skills a/src/components/AttachmentGallery.tsx b/src/components/AttachmentGallery.tsx
+--- a/src/components/AttachmentGallery.tsx	2026-11-27 09:28:27
++++ b/src/components/AttachmentGallery.tsx	2026-11-27 09:51:47
+@@ -2,7 +2,8 @@
+ // authorization.
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import { fromMarkdown } from "mdast-util-from-markdown";
+-import { ChevronDown, ChevronUp, Download, Film, LoaderCircle, Music, Play, X } from "lucide-react";
++import { ChevronDown, ChevronUp, Download, Film, LoaderCircle, Play, X } from "lucide-react";
++import { AudioPill, nextAudioRate } from "./AudioPill";
+ import { attachmentBasename, PREVIEW_MAX_BYTES, type TranscriptFileAttachment, type TranscriptImageAttachment } from "@/lib/composer-attachments";
+ import { cn } from "@/lib/cn";
+ import { t } from "@/lib/i18n";
+@@ -404,9 +405,15 @@
+   const [src, setSrc] = useState<string | null>(null);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState("");
++  const [playing, setPlaying] = useState(false);
++  const [time, setTime] = useState(0);
++  const [duration, setDuration] = useState<number | null>(null);
++  const [rate, setRate] = useState(1);
++  const audio = useRef<HTMLAudioElement | null>(null);
+   const request = useRef<AbortController | null>(null);
+   useEffect(() => () => request.current?.abort(), []);
+   useEffect(() => () => { if (src?.startsWith("blob:")) URL.revokeObjectURL(src); }, [src]);
++  useEffect(() => { if (audio.current) audio.current.playbackRate = rate; }, [rate, src]);
+ 
+   const load = async () => {
+     if (request.current) return;
+@@ -424,24 +431,29 @@
+       if (request.current === controller) request.current = null;
+     }
+   };
++  // OpenBot: the first press fetches the audio and plays it; after that the same button plays and pauses.
++  const toggle = () => {
++    const element = audio.current;
++    if (!src || !element) { void load(); return; }
++    if (element.paused) void element.play().catch(() => undefined);
++    else element.pause();
++  };
+ 
+   return (
+-    <div className="inline-flex w-72 max-w-full flex-col gap-1.5 rounded-2xl border border-hairline/30 bg-inset/60 px-3 py-2.5 text-left">
+-      <div className="flex items-center gap-2">
+-        {src ? <Music size={14} className="shrink-0 text-accent" aria-hidden="true" />
+-          : (
+-            <button type="button" disabled={loading} onClick={() => void load()} aria-label={t("attach.previewAudio", { name: file.name })}
+-              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-wait">
+-              {loading ? <LoaderCircle size={14} className="animate-spin" /> : <Play size={13} fill="currentColor" />}
+-            </button>
+-          )}
+-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink" title={file.name}>{file.name}</span>
+-        {src && <a href={src} download={file.name} aria-label={t("attach.saveAria", { name: file.name })} title={t("attach.saveAria", { name: file.name })}
+-          className="shrink-0 rounded-lg p-1 text-ink-secondary hover:bg-raised hover:text-ink"><Download size={14} /></a>}
+-      </div>
+-      {src && !error && <audio src={src} controls autoPlay preload="metadata" aria-label={t("attach.previewAudio", { name: file.name })} onError={() => { setSrc(null); setError(t("attach.audioUnavailable")); }} className="h-9 w-full" />}
+-      {error && <p role="alert" className="text-[11px] text-danger">{error}</p>}
+-    </div>
++    <span className="inline-flex max-w-full flex-col items-start gap-1 text-left" title={file.name}>
++      <AudioPill seed={file.path} playing={playing} loading={loading} time={time} duration={duration} rate={rate}
++        labels={{ play: t("attach.previewAudio", { name: file.name }), pause: t("chat.voiceNote.pause"), speed: "Velocidad" }}
++        onToggle={toggle} onRate={() => setRate(nextAudioRate(rate))}
++        onSeek={(next) => { if (audio.current) audio.current.currentTime = next; setTime(next); }}
++        trailing={src ? <a href={src} download={file.name} aria-label={t("attach.saveAria", { name: file.name })} title={t("attach.saveAria", { name: file.name })}
++          className="-me-2 shrink-0 rounded-full p-1.5 text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink"><Download size={14} /></a> : undefined} />
++      {src && !error && <audio ref={audio} src={src} autoPlay hidden preload="metadata" aria-label={t("attach.previewAudio", { name: file.name })}
++        onLoadedMetadata={(event) => { const loaded = event.currentTarget.duration; if (Number.isFinite(loaded) && loaded > 0) setDuration(loaded); event.currentTarget.playbackRate = rate; }}
++        onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
++        onEnded={() => { setPlaying(false); setTime(0); }}
++        onError={() => { setSrc(null); setPlaying(false); setError(t("attach.audioUnavailable")); }} />}
++      {error && <p role="alert" className="px-2 text-[11px] text-danger">{error}</p>}
++    </span>
+   );
+ }
+ 
+@@ -511,7 +523,7 @@
+           <div className="flex max-w-full flex-wrap gap-2">
+             {thumbs.map((item) => item.kind === "image" && (
+               <div key={item.key} className="min-w-0" title={item.image.name} {...reveal.targetProps(item.source)}>
+-                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="h-24 w-auto max-w-48 rounded-2xl border-0" />
++                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className={cn("w-auto rounded-[14px] border-0", thumbs.length === 1 ? "h-[180px] max-w-[min(100%,26rem)]" : "h-[120px] max-w-56")} />
+               </div>
+             ))}
+           </div>
 diff -ruN -x node_modules -x skills a/src/components/ChatMarkdown.tsx b/src/components/ChatMarkdown.tsx
 --- a/src/components/ChatMarkdown.tsx	2026-11-27 09:28:28
-+++ b/src/components/ChatMarkdown.tsx	2026-11-27 09:30:13
++++ b/src/components/ChatMarkdown.tsx	2026-11-27 09:51:47
 @@ -8,7 +8,7 @@
  import { useCopyFeedback } from "@/lib/copy-text";
  import { t } from "@/lib/i18n";
@@ -19,9 +103,21 @@ diff -ruN -x node_modules -x skills a/src/components/ChatMarkdown.tsx b/src/comp
  
    useEffect(() => {
      if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
+@@ -780,8 +780,9 @@
+   ul({ node, children }: BlockProps) {
+     return <ul dir={blockDirection(node)} className="list-disc space-y-1 ps-5">{children}</ul>;
+   },
+-  ol({ node, children }: BlockProps) {
+-    return <ol dir={blockDirection(node)} className="list-decimal space-y-1 ps-5">{children}</ol>;
++  // OpenBot: a list keeps the number it was written with ("4." stays 4), and its numbers are quiet.
++  ol({ node, children, start }: BlockProps & { start?: number }) {
++    return <ol dir={blockDirection(node)} start={start} className="list-decimal space-y-1 ps-5 marker:text-ink-tertiary">{children}</ol>;
+   },
+   h1({ node, children }: BlockProps) {
+     return <div dir={blockDirection(node)} className="md-heading mt-3 text-[20px] font-semibold leading-[26px] tracking-[-0.01em]">{children}</div>;
 diff -ruN -x node_modules -x skills a/src/components/ChatView.tsx b/src/components/ChatView.tsx
 --- a/src/components/ChatView.tsx	2026-11-27 09:28:26
-+++ b/src/components/ChatView.tsx	2026-11-27 09:30:13
++++ b/src/components/ChatView.tsx	2026-11-27 09:51:47
 @@ -1,5 +1,5 @@
  import { memo, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 -import { useAdvancedMode } from "@/lib/interface-mode";
@@ -29,7 +125,25 @@ diff -ruN -x node_modules -x skills a/src/components/ChatView.tsx b/src/componen
  import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
  import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
  import { useShowThreads } from "@/lib/thread-preferences";
-@@ -808,7 +808,7 @@
+@@ -523,7 +523,7 @@
+               ) : text ? (
+                 <div data-citation-source={message.id} data-citation-owner-type="bot" data-citation-owner={botId} data-citation-thread={threadId}><ChatMarkdown text={text} mentionPeers={mentionPeers} mentionPerson={mentionPerson} message={{ threadId, messageId: message.id }} delivered={group?.delivered} originals={group?.originals} /></div>
+               ) : null}
+-              {group && group.images.length + group.files.length > 0 && <AttachmentGallery images={group.images} files={group.files} originals={group.originals} message={{ threadId, messageId: message.id }} eager={eagerAttachments} beneath />}
++              {group && !simple && group.images.length + group.files.length > 0 && <AttachmentGallery images={group.images} files={group.files} originals={group.originals} message={{ threadId, messageId: message.id }} eager={eagerAttachments} beneath />}
+             </MessageBoundary>
+           )}
+         </div>
+@@ -537,6 +537,8 @@
+           {formatTime(message.at)}
+         </span>
+       </div>
++      {/* OpenBot: what a reply attaches (images, audio, files) sits under its bubble, not inside it. */}
++      {group && simple && group.images.length + group.files.length > 0 && <AttachmentGallery images={group.images} files={group.files} originals={group.originals} message={{ threadId, messageId: message.id }} eager={eagerAttachments} beneath className="mt-1.5 mb-2" />}
+       {Boolean(message.reactions?.length) && <ReactionChips threadId={threadId} message={message} bots={bots} align={user ? "end" : "start"} canReact={canReact} />}
+       {peer && expanded && peerLong && <PeerOpenedActions peer={peer} bots={bots} botId={botId} botName={botName} onFold={() => { setExpanded(false); setFolded(true); }} />}{earlierRound !== undefined && expanded && <button type="button" onClick={() => setExpanded(false)} className="mt-1 pl-0.5 text-[13px] text-ink-secondary hover:text-ink">{t("chat.showLess")}</button>}
+       {forked && <ForkLinks kind="bot" ownerId={botId} threadId={threadId} messageId={message.id} phone={phone} />}
+@@ -808,7 +810,7 @@
    const reactor = useReactor();
    const speakerViewer = reactor !== "user" ? reactor : null;
    const rows = useMemo<ChatRows>(
@@ -75,6 +189,26 @@ diff -ruN -x node_modules -x skills a/src/components/MessageBoundary.tsx b/src/c
    return <div data-chat-bubble={simple ? "simple" : ""} className={plainBotBubble(simple)}>{text}</div>;
  }
  
+diff -ruN -x node_modules -x skills a/src/components/ReplyBlocks.tsx b/src/components/ReplyBlocks.tsx
+--- a/src/components/ReplyBlocks.tsx	2026-11-27 09:28:26
++++ b/src/components/ReplyBlocks.tsx	2026-11-27 09:51:47
+@@ -22,11 +22,12 @@
+       data-citation-owner={citation.ownerId}
+       data-citation-thread={citation.threadId}
+     >
+-      <div data-chat-bubble="simple" data-reply-bubble className={cn("flex w-fit min-w-0 max-w-[var(--chat-card-pct)] flex-col gap-3", SIMPLE_BOT_BUBBLE,
+-        joinedCorners("start", { above: Boolean(join?.above), below: Boolean(join?.below) }))}>
++      {/* OpenBot: the words stay in bubbles and each table is a card of its own under them, not a box inside a bubble. */}
++      <div data-reply-stack className="flex w-full min-w-0 max-w-[var(--chat-card-pct)] flex-col items-start gap-3">
+         {blocks.map((block, index) => block.kind === "table"
+-          ? <div key={index} data-reply-table className="min-w-0">{render(block.text)}</div>
+-          : <div key={index} data-reply-prose className="min-w-full max-w-[var(--chat-bubble-max)]">{render(block.text)}</div>)}
++          ? <div key={index} data-reply-table className="w-full min-w-0 max-w-[var(--chat-bubble-max)]">{render(block.text)}</div>
++          : <div key={index} data-chat-bubble="simple" data-reply-prose className={cn("w-fit min-w-0 max-w-[var(--chat-bubble-max)]", SIMPLE_BOT_BUBBLE,
++            joinedCorners("start", { above: index === 0 && Boolean(join?.above), below: index === blocks.length - 1 && Boolean(join?.below) }))}>{render(block.text)}</div>)}
+       </div>
+       {tray}
+     </div>
 diff -ruN -x node_modules -x skills a/src/components/RichTable.tsx b/src/components/RichTable.tsx
 --- a/src/components/RichTable.tsx	2026-11-27 09:28:26
 +++ b/src/components/RichTable.tsx	2026-11-27 09:30:13
@@ -117,6 +251,125 @@ diff -ruN -x node_modules -x skills a/src/components/RoomTextMessage.tsx b/src/c
    const speakerBot = members.find((member) => member.id === m.from?.botId);
    const botText = rawText; const teammates = useTeammates(); const peers = useMemo(() => [...members, ...teammates.peers], [members, teammates]);
    const pin = roomPin({ id: groupId, pinnedMessageId: pinned ? m.id : undefined }, m, dispatch);
+diff -ruN -x node_modules -x skills a/src/components/VoiceNoteBubble.tsx b/src/components/VoiceNoteBubble.tsx
+--- a/src/components/VoiceNoteBubble.tsx	2026-11-27 09:28:26
++++ b/src/components/VoiceNoteBubble.tsx	2026-11-27 09:51:47
+@@ -1,6 +1,7 @@
+ // No playback during a Live call: the call's microphone would pick the note up.
+ import { useEffect, useRef, useState } from "react";
+-import { ChevronRight, Pause, Play } from "lucide-react";
++import { ChevronRight } from "lucide-react";
++import { AudioPill, nextAudioRate } from "./AudioPill";
+ 
+ import { attachmentAudioUrl } from "@/lib/composer-attachments";
+ import { t } from "@/lib/i18n";
+@@ -17,11 +18,6 @@
+   text?: string;
+ }
+ 
+-function clock(seconds: number): string {
+-  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+-  const whole = Math.floor(seconds);
+-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+-}
+ 
+ export function VoiceNoteBubble({
+   attachment,
+@@ -41,6 +37,8 @@
+   );
+   const [time, setTime] = useState(0);
+   const [transcriptOpen, setTranscriptOpen] = useState(false);
++  const [rate, setRate] = useState(1);
++  useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = rate; }, [rate]);
+   const transcript = attachment.text?.trim() ?? "";
+   const onLiveCall = isLiveCallRunning(useLiveMedia().phase);
+ 
+@@ -80,57 +78,34 @@
+   };
+ 
+   return (
+-    <div
+-      className={cn("flex w-full flex-col rounded-xl bg-inset/60 px-3 py-2", className)}
+-      data-test-voice-note=""
+-    >
+-      <div className="flex w-full items-center gap-3">
+-        <audio
+-          ref={audioRef}
+-          src={url}
+-          preload="metadata"
+-          onLoadedMetadata={(event) => {
+-            const loaded = event.currentTarget.duration;
+-            if (Number.isFinite(loaded) && loaded > 0) setDuration(loaded);
+-          }}
+-          onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+-          onPlay={() => setPlaying(true)}
+-          onPause={(event) => {
+-            // A queued pause can land after playback already resumed.
+-            if (!event.currentTarget.paused) return;
+-            setPlaying(false);
+-            giveBackVoice();
+-          }}
+-          onEnded={() => {
+-            setPlaying(false);
+-            giveBackVoice();
+-          }}
+-        />
+-        <button
+-          type="button"
+-          onClick={toggle}
+-          disabled={onLiveCall && !playing}
+-          aria-label={playing ? t("chat.voiceNote.pause") : onLiveCall ? t("chat.voiceNote.onLiveCall") : t("chat.voiceNote.play")}
+-          title={playing ? t("chat.voiceNote.pause") : onLiveCall ? t("chat.voiceNote.onLiveCall") : t("chat.voiceNote.play")}
+-          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+-        >
+-          {playing ? <Pause size={13} className="fill-current" /> : <Play size={13} className="translate-x-px fill-current" />}
+-        </button>
+-        <input
+-          type="range"
+-          aria-label={t("chat.voiceNote.seek")}
+-          min={0}
+-          max={duration ?? 0}
+-          step={0.1}
+-          value={Math.min(time, duration ?? time)}
+-          onChange={(event) => seek(Number(event.currentTarget.value))}
+-          disabled={!duration}
+-          className="h-1 flex-1 accent-accent"
+-        />
+-        <span className="shrink-0 text-[11px] tabular-nums text-ink-secondary">
+-          {clock(time)} / {duration === null ? "--:--" : clock(duration)}
+-        </span>
+-      </div>
++    <div className={cn("flex max-w-full flex-col items-start", className)} data-test-voice-note="">
++      <audio
++        ref={audioRef}
++        src={url}
++        preload="metadata"
++        hidden
++        onLoadedMetadata={(event) => {
++          const loaded = event.currentTarget.duration;
++          if (Number.isFinite(loaded) && loaded > 0) setDuration(loaded);
++          event.currentTarget.playbackRate = rate;
++        }}
++        onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
++        onPlay={() => setPlaying(true)}
++        onPause={(event) => {
++          // A queued pause can land after playback already resumed.
++          if (!event.currentTarget.paused) return;
++          setPlaying(false);
++          giveBackVoice();
++        }}
++        onEnded={() => {
++          setPlaying(false);
++          setTime(0);
++          giveBackVoice();
++        }}
++      />
++      <AudioPill seed={attachment.path} playing={playing} disabled={onLiveCall && !playing} time={time} duration={duration} rate={rate}
++        labels={{ play: onLiveCall ? t("chat.voiceNote.onLiveCall") : t("chat.voiceNote.play"), pause: t("chat.voiceNote.pause"), speed: "Velocidad" }}
++        onToggle={toggle} onSeek={seek} onRate={() => setRate(nextAudioRate(rate))} />
+       {transcript && (
+         <>
+           <button
 diff -ruN -x node_modules -x skills a/src/components/app/AppChrome.tsx b/src/components/app/AppChrome.tsx
 --- a/src/components/app/AppChrome.tsx	2026-11-27 09:28:28
 +++ b/src/components/app/AppChrome.tsx	2026-11-27 09:30:59
@@ -265,7 +518,7 @@ diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/co
                infoId={infoId}
 diff -ruN -x node_modules -x skills a/src/components/app/PageTools.tsx b/src/components/app/PageTools.tsx
 --- a/src/components/app/PageTools.tsx	2026-11-27 09:28:28
-+++ b/src/components/app/PageTools.tsx	2026-11-27 09:30:59
++++ b/src/components/app/PageTools.tsx	2026-11-27 09:51:47
 @@ -231,7 +231,7 @@
        <div className="ms-auto flex flex-wrap items-center gap-1">
          <button type="button" aria-pressed={point.pointing} onClick={point.toggle} disabled={!ready} title={t("chat.preview.pointHint")}
@@ -275,6 +528,15 @@ diff -ruN -x node_modules -x skills a/src/components/app/PageTools.tsx b/src/com
          </button>
          {!room && <>
            <button type="button" onClick={() => void share.run(version.rev)} disabled={busy} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>
+@@ -249,7 +249,7 @@
+           aria-label={t("chat.preview.save")} title={t("chat.preview.save")}>
+           {save.busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+         </button>
+-        <button type="button" className={TOOL} disabled={!share.url} onClick={() => share.url && void openExternalLink(share.url)}
++        <button type="button" className={cn(TOOL, lead !== undefined && !share.url && "hidden")} disabled={!share.url} onClick={() => share.url && void openExternalLink(share.url)}
+           aria-label={t("chat.preview.openTab")} title={share.url ? t("chat.preview.openTab") : t("chat.preview.openTabNeedsLink")}>
+           <ArrowUpRight size={15} />
+         </button>
 @@ -319,7 +319,7 @@
  
  /** How tall the preview on a page's compact card is, at most. */
@@ -284,20 +546,24 @@ diff -ruN -x node_modules -x skills a/src/components/app/PageTools.tsx b/src/com
  
  function typing(target: EventTarget | null): boolean {
    return target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
-@@ -358,8 +358,8 @@
+@@ -356,10 +356,11 @@
+   return createPortal(
+     <div {...(pane ? { role: "region", "data-page-pane": props.doc.messageId } : { role: "dialog", "aria-modal": true })}
        aria-label={props.title} data-page-fullscreen={props.doc.messageId}
-       className={cn(pane ? "absolute inset-x-0 top-0 z-[1] bottom-[var(--page-pane-bottom,0px)] pt-[var(--glass-top,0px)]" : "fixed inset-0 z-50",
+-      className={cn(pane ? "absolute inset-x-0 top-0 z-[1] bottom-[var(--page-pane-bottom,0px)] pt-[var(--glass-top,0px)]" : "fixed inset-0 z-50",
++      // OpenBot: the open page takes the chat's header too, so its title sits where the bot's name was.
++      className={cn(pane ? "absolute inset-x-0 top-0 z-40 bottom-[var(--page-pane-bottom,0px)]" : "fixed inset-0 z-50",
          "flex flex-col bg-panel")}>
 -      <div ref={closer} className="flex flex-col gap-2 border-b border-hairline/40 px-4 pb-3 pt-3">
 -        <PageToolbar {...props} lead={<div data-page-open-title className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink" title={props.title}><bdi dir="auto">{props.title}</bdi></div>} />
-+      <div ref={closer} className="flex flex-col gap-2 bg-app px-4 pb-2 pt-2.5">
-+        <PageToolbar {...props} lead={<div className="flex min-w-0 flex-1 justify-center"><div data-page-open-title className="max-w-full truncate rounded-full bg-composer px-4 py-1.5 text-[14px] font-medium text-ink shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-composer-ring" title={props.title}><bdi dir="auto">{props.title}</bdi></div></div>} />
++      <div ref={closer} className="flex min-h-14 flex-col justify-center gap-2 bg-app px-4 py-2">
++        <PageToolbar {...props} lead={<div className="flex min-w-0 flex-1 justify-center"><div data-page-open-title className="flex max-w-full items-center gap-2 rounded-full bg-composer px-4 py-2 text-[14px] font-medium leading-5 text-ink shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-ink/[0.08]" title={props.title}><span aria-hidden="true" className="flex h-3 shrink-0 items-end gap-[1.5px]"><span className="h-[5px] w-[2.5px] rounded-full bg-[#ef6b5a]" /><span className="h-[7px] w-[2.5px] rounded-full bg-[#f2a33a]" /><span className="h-[9px] w-[2.5px] rounded-full bg-[#3fae6a]" /><span className="h-3 w-[2.5px] rounded-full bg-[#3f7fe8]" /></span><bdi dir="auto" className="min-w-0 truncate">{props.title}</bdi></div></div>} />
          <PageNotes version={props.version} point={point} share={props.share} save={props.save} room={props.room} />
        </div>
        <div className={cn("relative min-h-0 flex-1 bg-app", point.pointing && "ring-2 ring-inset ring-accent/60")}>
 diff -ruN -x node_modules -x skills a/src/components/widget/WidgetMessage.tsx b/src/components/widget/WidgetMessage.tsx
 --- a/src/components/widget/WidgetMessage.tsx	2026-11-27 09:28:28
-+++ b/src/components/widget/WidgetMessage.tsx	2026-11-27 09:30:13
++++ b/src/components/widget/WidgetMessage.tsx	2026-11-27 09:51:47
 @@ -9,7 +9,7 @@
  import { cn } from "@/lib/cn";
  import { activeLocale, t } from "@/lib/i18n";
@@ -307,6 +573,15 @@ diff -ruN -x node_modules -x skills a/src/components/widget/WidgetMessage.tsx b/
  import {
    PHONE_PAIRING_ACTION, widgetActions, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetField, type WidgetNode, type WidgetOther, type WidgetPayload,
    type WidgetSettled, type WidgetValues,
+@@ -21,7 +21,7 @@
+ import { kids } from "./widget-style";
+ import { newWidgetSendId, sendWidgetAction, type WidgetSendResult } from "./widget-send";
+ 
+-const WIDTH: Record<string, string> = { sm: "max-w-[360px]", md: "max-w-[440px]", lg: "max-w-[600px]", full: "max-w-[600px]" };
++const WIDTH: Record<string, string> = { sm: "max-w-[360px]", md: "max-w-[440px]", lg: "max-w-[560px]", full: "max-w-[560px]" };
+ const SURFACE = "w-full overflow-hidden rounded-2xl bg-composer ring-1 ring-composer-ring transition-opacity";
+ const SENT_MS = 1600;
+ 
 @@ -39,7 +39,7 @@
  
  /** `viewOnly`: shown in a room, where a press would speak for everyone; links and thread jumps still open. */
@@ -318,7 +593,7 @@ diff -ruN -x node_modules -x skills a/src/components/widget/WidgetMessage.tsx b/
    const payload = useMemo(() => (message.widget?.root ? localizedCard(message.widget, serverCard, locale) : message.widget), [message.widget, serverCard, locale]);
 diff -ruN -x node_modules -x skills a/src/components/widget/WidgetNodes.tsx b/src/components/widget/WidgetNodes.tsx
 --- a/src/components/widget/WidgetNodes.tsx	2026-11-27 09:28:25
-+++ b/src/components/widget/WidgetNodes.tsx	2026-11-27 09:31:34
++++ b/src/components/widget/WidgetNodes.tsx	2026-11-27 09:51:47
 @@ -109,6 +109,28 @@
    return children.length > 1 && children.every((child) => FLOWS.has(child.type));
  }
@@ -339,7 +614,7 @@ diff -ruN -x node_modules -x skills a/src/components/widget/WidgetNodes.tsx b/sr
 +    <button type="button" data-widget-ref={node.id} disabled={node.disabled === true || !widgetCanPress(form, entry)} aria-busy={pending || undefined}
 +      onClick={(event) => { event.stopPropagation(); form.press(node.id); }}
 +      className="flex min-h-[38px] w-full min-w-0 items-center gap-3 rounded-xl px-1.5 py-1.5 text-start text-[14.5px] leading-5 text-ink transition-colors enabled:hover:bg-ink/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55 aria-busy:opacity-100">
-+      <span aria-hidden="true" data-letter={letter} className={cn("flex size-[22px] shrink-0 items-center justify-center rounded-md text-[12px] font-medium before:content-[attr(data-letter)]", sent || pending ? "bg-accent text-accent-ink" : "bg-ink/[0.06] text-ink-secondary")} />
++      <span aria-hidden="true" data-letter={letter} className={cn("flex size-[22px] shrink-0 items-center justify-center rounded-md text-[12px] font-medium before:content-[attr(data-letter)]", sent || pending ? "bg-accent text-accent-ink" : "bg-ink/[0.05] text-ink-secondary ring-1 ring-ink/[0.07]")} />
 +      <span dir="auto" className="min-w-0 flex-1 [overflow-wrap:anywhere]">{widgetString(node, "label")}</span>
 +    </button>
 +  );
@@ -373,3 +648,27 @@ diff -ruN -x node_modules -x skills a/src/lib/interface-mode.ts b/src/lib/interf
  let sessionChoice: boolean | undefined;
  const listeners = new Set<() => void>();
  
+diff -ruN -x node_modules -x skills a/src/styles.css b/src/styles.css
+--- a/src/styles.css	2026-11-27 09:28:27
++++ b/src/styles.css	2026-11-27 09:51:47
+@@ -4003,3 +4003,20 @@
+   --shadow-2xl: 0 0 0 1px color-mix(in srgb, var(--color-ink) 14%, transparent);
+ }
+ :root[data-skin] .composer-shell, :root[data-skin] .popover-surface { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-ink) 12%, transparent); }
++
++/* OpenBot: a table in a reply is a white card of its own, like a page card: soft edge, room above the header. */
++[data-reply-table] [data-table-card] {
++  width: 100%;
++  border-radius: 20px;
++  background: var(--color-composer);
++  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-ink) 8%, transparent), 0 1px 4px rgb(0 0 0 / 0.05);
++  padding-top: 12px;
++}
++[data-reply-table] [data-table-card] thead { background: transparent; }
++/* A bubble that is one short list keeps the tight bubble, numbers and all. */
++[data-chat-bubble="simple"]:has(> .chat-md > :is(ol, ul):only-child) { padding: 7px 12px; }
++/* A table card that ends a reply keeps its distance from the next bubble, which otherwise tucks up under it. */
++[data-reply-stack]:has(> [data-reply-table]:last-child) { margin-bottom: 12px; }
++/* A voice note on its own is just its pill, with no bubble around it; beside words it is a darker pill in their bubble. */
++[data-chat-bubble="simple"]:has([data-test-voice-note]):not(:has(.chat-md)) { background: transparent; padding: 0; box-shadow: none; }
++[data-chat-bubble]:has(.chat-md) [data-audio-pill] { background: color-mix(in srgb, var(--color-ink) 6%, transparent); }
