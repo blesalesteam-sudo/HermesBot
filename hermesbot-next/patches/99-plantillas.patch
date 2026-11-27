@@ -1,3 +1,24 @@
+diff -ruN a/server/app-docs.ts b/server/app-docs.ts
+--- a/server/app-docs.ts	2026-11-27 16:40:51
++++ b/server/app-docs.ts	2026-11-27 16:40:51
+@@ -7,6 +7,7 @@
+ 
+ import type { AppNetwork, AppSource, AppToolDefinition, AppToolResult, AppUse } from "../shared/app.ts";
+ import type { PageVideo } from "./pages/bundle.ts";
++import { refreshOpenbotKit } from "./openbot-kit.ts";
+ 
+ export const APP_DOCS_MAX_BYTES = 512 * 1024 * 1024;
+ export const APP_DOCS_SWEEP_GRACE_MS = 10 * 60_000;
+@@ -145,7 +146,8 @@
+       if (manifest.source !== "html" && manifest.source !== "mcp") return null;
+       const html = readFileSync(this.path("html", manifest.html), "utf8");
+       const data = manifest.data ? JSON.parse(readFileSync(this.path("data", manifest.data), "utf8")) as AppDocData : undefined;
+-      return { doc, source: manifest.source, html, ...(data ? { data } : {}) };
++      // OpenBot: a stored page that carries the house kit always gets today's kit, so older templates gain each fix.
++      return { doc, source: manifest.source, html: manifest.source === "html" ? refreshOpenbotKit(html) : html, ...(data ? { data } : {}) };
+     } catch {
+       return null;
+     }
 diff -ruN a/server/chat-apps.ts b/server/chat-apps.ts
 --- a/server/chat-apps.ts	2026-11-27 12:45:57
 +++ b/server/chat-apps.ts	2026-11-27 13:11:09
