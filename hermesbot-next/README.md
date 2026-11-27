@@ -61,7 +61,7 @@ lleva quién lo escribió y los bots lo saben: en cada mensaje reciben una nota 
   usuario, cada aparato que emparejó con un código pasa a ser de su cuenta la próxima vez que abre la app (una sesión nueva
   de su cuenta en su lugar), así que es la misma persona en todos. Ajustes → Tu cuenta → «Tus aparatos» lista los aparatos
   con tu sesión abierta y deja cerrar cualquiera; en Personas sale cuántos tiene cada uno.
-  Archivo: `patches/99zzz-una-sola-cuenta.patch`.
+  Archivo: `patches/zzz-una-sola-cuenta.patch`.
 
 Archivos: `overlay/server/local-accounts.ts` (cuentas, contraseñas con scrypt),
 `overlay/server/routes/local-accounts.ts` (entrar y gestionar), `overlay/src/components/LocalAccountsSection.tsx`
