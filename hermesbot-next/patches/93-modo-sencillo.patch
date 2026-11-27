@@ -1,0 +1,89 @@
+diff -ruN a/src/lib/interface-mode.test.ts b/src/lib/interface-mode.test.ts
+--- a/src/lib/interface-mode.test.ts	2026-11-27 10:16:47
++++ b/src/lib/interface-mode.test.ts	2026-11-27 10:17:06
+@@ -48,7 +48,7 @@
+     vi.resetModules();
+     expect((await vi.importActual<typeof import("./simple-only")>("./simple-only")).SIMPLE_ONLY).toBe(false);
+     const { readAdvancedMode, setAdvancedMode } = await import("./interface-mode");
+-    expect(readAdvancedMode(), "OpenBot starts a new browser in Advanced").toBe(true);
++    expect(readAdvancedMode(), "OpenBot starts a new browser in Simple").toBe(false);
+     setAdvancedMode(true);
+     expect(readAdvancedMode()).toBe(true);
+     expect(local.getItem("omb-advanced-mode")).toBe("1");
+@@ -58,21 +58,31 @@
+ });
+ 
+ describe("with the switch back", () => {
+-  it("defaults a fresh install to Advanced (OpenBot) and stores that once", async () => {
++  it("defaults a fresh install to Simple (OpenBot) and stores that once", async () => {
+     const { readAdvancedMode, settleAdvancedModeDefault, ADVANCED_MODE_KEY } = await fresh();
+-    expect(readAdvancedMode()).toBe(true);
++    expect(readAdvancedMode()).toBe(false);
+     settleAdvancedModeDefault();
+     local.setItem("omb-skin", "midnight");
+-    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("1");
+-    expect((await fresh()).readAdvancedMode()).toBe(true);
++    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("0");
++    expect((await fresh()).readAdvancedMode()).toBe(false);
+   });
+ 
+-  it("defaults an existing install to Advanced so an update hides nothing", async () => {
++  it("defaults an existing install to Simple too (OpenBot)", async () => {
+     local.setItem("omb-skin", "lagoon");
+     const { readAdvancedMode, settleAdvancedModeDefault, ADVANCED_MODE_KEY } = await fresh();
+-    expect(readAdvancedMode()).toBe(true);
++    expect(readAdvancedMode()).toBe(false);
+     settleAdvancedModeDefault();
+-    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("1");
++    expect(local.getItem(ADVANCED_MODE_KEY)).toBe("0");
++  });
++
++  it("moves a browser the earlier default left in Advanced to Simple once, then keeps what the person chooses", async () => {
++    local.setItem("omb-advanced-mode", "1");
++    const first = await fresh();
++    expect(first.readAdvancedMode(), "moved once").toBe(false);
++    expect(local.getItem(first.ADVANCED_MODE_KEY)).toBe("0");
++    first.setAdvancedMode(true);
++    expect((await fresh()).readAdvancedMode(), "their own choice sticks").toBe(true);
++    expect(local.getItem(first.ADVANCED_MODE_KEY)).toBe("1");
+   });
+ 
+   it("keeps an explicit choice over the existing-install default", async () => {
+diff -ruN a/src/lib/interface-mode.ts b/src/lib/interface-mode.ts
+--- a/src/lib/interface-mode.ts	2026-11-27 10:16:47
++++ b/src/lib/interface-mode.ts	2026-11-27 10:16:53
+@@ -20,17 +20,31 @@
+   }
+ }
+ 
++/** OpenBot: browsers that an earlier default started in Advanced move to Simple once. After that the stored choice is
++ * the person's own (Settings), and it is never touched again. */
++const SIMPLE_DEFAULT_MARK = "openbot-simple-default";
++function moveToSimpleOnce(store: Storage | undefined): void {
++  try {
++    if (!store || store.getItem(SIMPLE_DEFAULT_MARK)) return;
++    store.setItem(SIMPLE_DEFAULT_MARK, "1");
++    if (store.getItem(ADVANCED_MODE_KEY) === "1") store.setItem(ADVANCED_MODE_KEY, "0");
++  } catch {
++    // Storage that cannot be written keeps whatever it holds.
++  }
++}
++
+ export function readAdvancedMode(): boolean {
+   if (SIMPLE_ONLY) return false;
+   if (sessionChoice !== undefined) return sessionChoice;
+   try {
+     const store = storage();
++    moveToSimpleOnce(store);
+     const stored = store?.getItem(ADVANCED_MODE_KEY);
+     if (stored === "1") return true;
+     if (stored === "0") return false;
+-    // OpenBot: a new browser starts in Advanced mode, like the desktop app it replaces (field on its own line, model
+-    // and mic under it). Settings still switches it back to Simple.
+-    return true;
++    // OpenBot: a new browser starts in Simple mode, the look the app is meant to have (one-line message box, the bot's
++    // name in a pill, bots as tiles). Settings → Modo avanzado still turns the extra controls on, and that sticks.
++    return false;
+   } catch {
+     return false;
+   }
