@@ -28,7 +28,7 @@
    brand: Brand;
 --- a/index.html
 +++ b/index.html
-@@ -6,11 +6,12 @@
+@@ -6,11 +6,13 @@
      <meta name="theme-color" content="#121212" />
      <meta name="mobile-web-app-capable" content="yes" />
      <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -40,6 +40,7 @@
 +    <link rel="alternate icon" sizes="32x32" href="/favicon.ico" />
 +    <link rel="apple-touch-icon" sizes="180x180" href="/openbot-touch-icon.png" />
      <link rel="manifest" href="/manifest.webmanifest" />
++    <link rel="stylesheet" href="/openbot-theme.css" />
 -    <title>MausBot</title>
 +    <title>OpenBot</title>
    </head>

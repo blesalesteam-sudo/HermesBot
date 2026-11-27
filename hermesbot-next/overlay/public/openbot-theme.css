@@ -1,0 +1,66 @@
+/* OpenBot · colores "Tinta": blanco y negro como el logo, sin color de acento.
+   Cambia los dos temas que la app usa por defecto (Daylight de día, Midnight de noche); los demás temas
+   de Ajustes → Apariencia siguen igual. El selector va doblado ([data-skin=x][data-skin=x]) para ganar a los
+   de la base sin depender del orden en que carguen las hojas de estilo, y sigue valiendo para las miniaturas
+   del selector de temas. */
+
+[data-skin="daylight"][data-skin="daylight"] {
+  --color-app: #fcfcfc;
+  --color-panel: #f4f4f5;
+  --color-raised: #e6e6e8;
+  --color-raised-hover: #dadadd;
+  --color-card: #efeff0;
+  --color-inset: #e9e9eb;
+  --color-control: #e3e3e5;
+  --color-hairline: #18181b3d;
+  --color-edge: #18181b1f;
+  --color-ink: #18181b;
+  --color-ink-secondary: #18181bad;
+  --color-ink-tertiary: #18181ba6;
+  --color-accent: #18181b;
+  --color-accent-border: #3f3f46;
+  --color-accent-text: #18181b;
+  --color-focus: #18181b;
+  --color-accent-ink: #ffffff;
+  --color-composer: #ffffff;
+  --color-composer-ring: #18181b1f;
+  --color-menu: #ffffff;
+  --color-menu-hover: #18181b0f;
+  --color-menu-active: #18181b14;
+  --color-bubble-user: #18181b;
+  --color-bubble-user-ink: #fcfcfc;
+}
+
+[data-skin="midnight"][data-skin="midnight"] {
+  --color-app: #111214;
+  --color-panel: #0c0d0e;
+  --color-raised: #222326;
+  --color-raised-hover: #2c2d31;
+  --color-composer: #1d1e21;
+  --color-composer-ring: #2a2b2f;
+  --color-card: #1d1e21;
+  --color-menu: #1d1e21;
+  --color-inset: #191a1c;
+  --color-control: #27282b;
+  --color-hairline: #37383c;
+  --color-ink: #f4f4f5;
+  --color-ink-secondary: #f4f4f5a8;
+  --color-ink-tertiary: #f4f4f591;
+  --color-accent: #f4f4f5;
+  --color-accent-border: #ffffff;
+  --color-accent-text: #ffffff;
+  --color-focus: #f4f4f5;
+  --color-accent-ink: #111214;
+  --color-bubble-user: #3a3b3f;
+  --color-bubble-user-ink: #f4f4f5;
+  --color-scrollbar: #3d3e42;
+}
+
+/* De noche el acento es casi blanco: lo que la base pinta en blanco encima del acento pasa a ser oscuro. */
+:root[data-skin="midnight"] :is(.bg-accent, .hover\:bg-accent:hover, .group:hover .group-hover\:bg-accent):is(.text-white, .text-white *),
+:root[data-skin="midnight"] .bg-accent .text-white {
+  color: var(--color-accent-ink);
+}
+:root[data-skin="midnight"] .bg-accent > .bg-white {
+  background-color: var(--color-accent-ink);
+}
