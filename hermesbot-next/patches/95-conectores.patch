@@ -1,134 +1,104 @@
 diff --git a/src/components/PluginsPanel.tsx b/src/components/PluginsPanel.tsx
-index 8392795..86147df 100644
+index 8392795..ef90895 100644
 --- a/src/components/PluginsPanel.tsx
 +++ b/src/components/PluginsPanel.tsx
-@@ -1,5 +1,5 @@
- import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
--import { ChevronDown, ChevronRight, Loader2, RefreshCw, Search, Server, TriangleAlert, X } from "lucide-react";
-+import { AudioLines, CalendarDays, ChevronDown, ChevronRight, Clapperboard, ExternalLink, KeyRound, Loader2, Mail, MessageCircle, NotebookText, Plug, Plus, Send, RefreshCw, Search, Server, TriangleAlert, X } from "lucide-react";
- import { api, type Bot, type InstanceInfo } from "@/state/store";
- import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
- import { cn } from "@/lib/cn";
-@@ -340,6 +340,8 @@ export function PluginsPanel() {
+@@ -46,6 +46,7 @@ import { AppGrantPrompt, botsForApps, useAppGrants } from "./AppGrantPrompt";
+ import { ConfirmDialog } from "./ConfirmDialog";
+ import { ServiceIcon, type ToolkitCard } from "./ServiceIcon"; import { AppsSection } from "./AppsSection";
+ import { AppTile, tileStanding, useTileActions } from "./AppTile";
++import { ConectarInicio, HojaConexion, deCatalogo, type Recomendado } from "./openbot/Conectar";
+ import { useAppTileWindow } from "./app-tile-window";
+ import { appCatalogMemory, loadAppCatalog, onAppCatalog, type AppCatalog, type CatalogPagination, type ConnectorSetup } from "@/lib/app-catalog-cache";
+ export { ServiceIcon, type ToolkitCard } from "./ServiceIcon";
+@@ -144,6 +145,11 @@ export function PluginsPanel() {
+   const [hostedConnected, setHostedConnected] = useState<HostedConnections | null>(null);
+   const [cardsRefresh, setCardsRefresh] = useState(0);
+   const [category, setCategory] = useState<string | null>(null);
++  // OpenBot: a clean front page, the full catalogue behind a link, and each connection walked through in a sheet.
++  const [hoja, setHoja] = useState<Recomendado | null>(null);
++  const [catalogo, setCatalogo] = useState(false);
++  const hojaAbierta = useRef(false);
++  hojaAbierta.current = hoja !== null;
+   // Appended after the older state so tests that seed state by call order keep their indices.
+   const [xConnected, setXConnected] = useState<boolean | null>(null);
+   const [postizConnected, setPostizConnected] = useState<boolean | null>(null);
+@@ -280,6 +286,7 @@ export function PluginsPanel() {
+       if (disconnectingRef.current) return;
+       if (event.key === "Escape") {
+         event.preventDefault();
++        if (hojaAbierta.current) { setHoja(null); return; }
+         dispatch({ type: "togglePlugins", open: false });
+         return;
+       }
+@@ -340,6 +347,7 @@ export function PluginsPanel() {
  
    const connect = async (slug: string, alias?: string, replacing?: ConnectorAccount) => {
      if (busySlug || opening.current) return;
-+    // OpenBot: there is no paid broker here, so without a project key "Connect" can only fail. Show where the key goes instead.
-+    if (!configured && !stale && setup === "needs-setup" && !remoteClient) { close(); dispatch(openKeySettings("composio")); return; }
++    if (!configured && !stale && setup === "needs-setup" && !remoteClient) { setHoja(deCatalogo(slug, cards?.find((card) => card.slug === slug)?.label ?? slug)); return; }
      const launch = reserveConnectionPage();
      opening.current = launch;
      statusGenerations.current.set(slug, (statusGenerations.current.get(slug) ?? 0) + 1);
-@@ -503,7 +505,7 @@ export function PluginsPanel() {
+@@ -486,6 +494,9 @@ export function PluginsPanel() {
+     ? "bg-ink text-app"
+     : "bg-control/70 text-ink-secondary hover:bg-raised-hover hover:text-ink";
+ 
++  const home = !catalogo && !search && filter === "all" && category === null;
++  const conectado = (item: Recomendado) => item.tipo === "composio" ? hasActiveConnection(status[item.slug ?? item.id]) : item.tipo === "mcp" ? hostedConnected?.[item.id as keyof HostedConnections] === true : false;
++
+   return (
+     <div
+       className="glass-popup-frame"
+@@ -501,7 +512,7 @@ export function PluginsPanel() {
+         aria-modal="true"
+         aria-labelledby="plugins-title"
          tabIndex={-1}
-         className="glass-surface glass-popup animate-pop-in relative flex max-w-[780px] flex-col overflow-hidden rounded-2xl"
+-        className="glass-surface glass-popup animate-pop-in relative flex max-w-[780px] flex-col overflow-hidden rounded-2xl"
++        className={cn("glass-surface glass-popup animate-pop-in relative flex max-w-[780px] flex-col overflow-hidden rounded-2xl", hoja && "min-h-[min(680px,88vh)]")}
        >
--        <header className="flex flex-col gap-4 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
-+        <header className="flex flex-col gap-4 border-b border-hairline/40 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
+         <header className="flex flex-col gap-4 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
            <div>
-           <div className="flex items-center justify-between gap-3">
-             <h2 id="plugins-title" className="min-w-0 truncate text-[20px] font-semibold leading-7 tracking-[-0.01em] text-ink">{t("apps.title")}</h2>
-@@ -611,7 +613,7 @@ export function PluginsPanel() {
+@@ -564,7 +575,7 @@ export function PluginsPanel() {
+               />
+             </label>
            </div>
+-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("apps.categoriesAria")}>
++          <div className={cn("flex flex-wrap items-center gap-2", home && "hidden")} role="group" aria-label={t("apps.categoriesAria")}>
+             <button
+               type="button"
+               data-apps-filter="all"
+@@ -612,6 +623,16 @@ export function PluginsPanel() {
          </header>
  
--        <div ref={tileWindow.scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 sm:px-7">
-+        <div ref={tileWindow.scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 pt-4 sm:px-7">
+         <div ref={tileWindow.scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 sm:px-7">
++          {home ? (
++            <>
++              <ConectarInicio conectado={conectado} onAbrir={setHoja} onCatalogo={() => setCatalogo(true)} />
++              <div className="hidden"><McpServersPanel hostedCards={{ shown: () => false, onConnections: setHostedConnected }} refreshKey={cardsRefresh} /></div>
++            </>
++          ) : <>
++          <button type="button" onClick={() => { setCatalogo(false); setSearch(""); chooseFilter("all"); pickCategory(null); }}
++            className="mb-3 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink">
++            <ChevronRight size={14} className="rotate-180 rtl:rotate-0" />Volver a Conectores
++          </button>
            {stale ? (
              <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-[13px] text-warning">
                <TriangleAlert size={14} className="mt-px shrink-0" />
-@@ -623,7 +625,33 @@ export function PluginsPanel() {
-           ) : (
-             <SavedKeysReset notice />
+@@ -759,7 +780,15 @@ export function PluginsPanel() {
+               <McpServersPanel embedded hideHosted={filter === "all"} />
+             </div>
            )}
--          {setupNotice && filter !== "mcp" && (
-+          {setupNotice && filter !== "mcp" && setupNotice.tone === "info" && !remoteClient && connectedHosted.length === 0 ? (
-+            <section data-openbot-connect-setup className="mb-5 overflow-hidden rounded-2xl border border-hairline/50 bg-control/40">
-+              <div className="flex items-start gap-3.5 px-4 pt-4 sm:px-5 sm:pt-5">
-+                <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><Plug size={20} /></span>
-+                <div className="min-w-0">
-+                  <h3 className="text-[15px] font-semibold leading-6 text-ink">{t("openbot.connect.title")}</h3>
-+                  <p className="mt-0.5 text-[13px] leading-5 text-ink-secondary">{t("openbot.connect.why")}</p>
-+                </div>
-+              </div>
-+              <ol className="mt-4 grid gap-2 px-4 sm:grid-cols-3 sm:px-5">
-+                {(["openbot.connect.step1", "openbot.connect.step2", "openbot.connect.step3"] as const).map((key, index) => (
-+                  <li key={key} className="flex items-start gap-2.5 rounded-xl bg-app/60 px-3 py-2.5 text-[13px] leading-5 text-ink">
-+                    <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-app">{index + 1}</span>
-+                    <span>{t(key)}</span>
-+                  </li>
-+                ))}
-+              </ol>
-+              <div className="flex flex-wrap items-center gap-2 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
-+                <button type="button" onClick={() => { close(); dispatch(openKeySettings("composio")); }} className={cn(pill, "h-8 bg-ink px-4 text-app hover:opacity-90")}>
-+                  <KeyRound size={14} aria-hidden="true" />{t("openbot.connect.addKey")}
-+                </button>
-+                <a href="https://app.composio.dev" target="_blank" rel="noreferrer" className={cn(pill, "h-8 bg-control/70 px-4 text-ink hover:bg-raised-hover")}>
-+                  {t("openbot.connect.getKey")}<ExternalLink size={13} aria-hidden="true" />
-+                </a>
-+              </div>
-+            </section>
-+          ) : setupNotice && filter !== "mcp" && (
-             <div
-               className={cn(
-                 "mb-3 rounded-xl px-4 py-3 text-[13px]",
-@@ -662,6 +690,7 @@ export function PluginsPanel() {
-           )}
-           {error && <div role="alert" className="mb-3 rounded-xl bg-danger/10 px-3 py-2 text-[12px] text-danger">{typeof error === "string" ? error : t(error.key)}</div>}
- 
-+          {filter !== "mcp" && !search && category === null && renderRecommended()}
-           {filter !== "mcp" && (
-             <div data-apps-grid className="@container flex flex-col gap-7 pt-1">
-               {!sections.some((section) => section.kind === "connected") && renderSuggested()}
-@@ -777,6 +806,49 @@ export function PluginsPanel() {
-     </div>
-   );
- 
-+  // OpenBot: the apps people ask for first, in one row at the top, each one click from where it is connected.
-+  function renderRecommended() {
-+    const find = (label: string) => { chooseFilter("all"); setSearch(label); };
-+    const features = () => { close(); dispatch({ type: "toggleAppSettings", open: true, section: "features" }); };
-+    const items: Array<{ key: string; label: string; line: LocaleKey; icon: typeof Mail; on: boolean; go: () => void }> = [
-+      { key: "gmail", label: "Gmail", line: "openbot.rec.gmail", icon: Mail, on: hasActiveConnection(status.gmail), go: () => void connect("gmail") },
-+      { key: "googlecalendar", label: "Google Calendar", line: "openbot.rec.calendar", icon: CalendarDays, on: hasActiveConnection(status.googlecalendar), go: () => void connect("googlecalendar") },
-+      { key: "notion", label: "Notion", line: "openbot.rec.notion", icon: NotebookText, on: hostedConnected?.notion === true, go: () => find("Notion") },
-+      { key: "higgsfield", label: "Higgsfield", line: "openbot.rec.higgsfield", icon: Clapperboard, on: hostedConnected?.higgsfield === true, go: () => find("Higgsfield") },
-+      { key: "elevenlabs", label: "ElevenLabs", line: "openbot.rec.elevenlabs", icon: AudioLines, on: hostedConnected?.elevenlabs === true, go: () => find("ElevenLabs") },
-+      { key: "telegram", label: "Telegram", line: "openbot.rec.telegram", icon: Send, on: false, go: features },
-+      { key: "whatsapp", label: "WhatsApp", line: "openbot.rec.whatsapp", icon: MessageCircle, on: false, go: features },
-+    ];
-+    return (
-+      <section data-openbot-recommended className="mb-7">
-+        <h3 className="mb-2.5 text-[13px] font-semibold uppercase tracking-[0.04em] text-ink-secondary">{t("openbot.rec.title")}</h3>
-+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-+          {items.map((item) => (
-+            <button key={item.key} type="button" data-openbot-rec={item.key} onClick={item.go}
-+              className="flex min-w-0 items-center gap-3 rounded-xl border border-hairline/40 bg-control/30 px-3 py-2.5 text-start transition-colors hover:bg-raised-hover">
-+              <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app/70 text-ink"><item.icon size={18} /></span>
-+              <span className="min-w-0 flex-1">
-+                <span className="block truncate text-[14px] font-medium leading-5 text-ink">{item.label}</span>
-+                <span className="block truncate text-[12px] leading-4 text-ink-secondary">{t(item.line)}</span>
-+              </span>
-+              <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium", item.on ? "bg-success/15 text-success" : "bg-ink text-app")}>
-+                {item.on ? t("openbot.rec.connected") : t("openbot.rec.connect")}
-+              </span>
-+            </button>
-+          ))}
-+          <button type="button" data-openbot-rec="own-mcp" onClick={() => chooseFilter("mcp")}
-+            className="flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-hairline/70 px-3 py-2.5 text-start transition-colors hover:bg-raised-hover">
-+            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent"><Plus size={18} /></span>
-+            <span className="min-w-0 flex-1">
-+              <span className="block truncate text-[14px] font-medium leading-5 text-ink">{t("openbot.rec.ownTitle")}</span>
-+              <span className="block truncate text-[12px] leading-4 text-ink-secondary">{t("openbot.rec.ownLine")}</span>
-+            </span>
-+          </button>
-+        </div>
-+      </section>
-+    );
-+  }
-+
-   function renderSuggested() {
-     const shown = suggestions.cards.filter((card) => !isConnected(card.slug));
-     if (!sectioned || shown.length === 0) return null;
++          </>}
+         </div>
++        {hoja && (
++          <HojaConexion item={hoja} conectado={conectado(hoja)} clavePuesta={configured} remoto={remoteClient}
++            ocupado={busySlug === hoja.slug} enlace={hoja.slug ? pendingUrls[hoja.slug]?.url : undefined}
++            onConectar={(slug) => void connect(slug)} onHosted={setHostedConnected}
++            onAcceso={() => { setHoja(null); close(); dispatch({ type: "toggleAppSettings", open: true, section: "botAccess" }); }}
++            onCerrar={() => setHoja(null)} />
++        )}
+         <ConfirmDialog open={disconnecting !== null} layer="z-[60]" tone="danger" title={t("connectors.disconnect")} confirmLabel={t("connectors.disconnect")}
+           body={disconnecting ? disconnectAccountConfirmation(disconnecting.label, disconnecting.account) : ""} onCancel={() => setDisconnecting(null)}
+           onConfirm={() => { if (disconnecting) disconnectAccount(disconnecting.slug, disconnecting.account.id); setDisconnecting(null); }} />
 diff --git a/src/lib/hosted-mcp-apps.ts b/src/lib/hosted-mcp-apps.ts
 index cd86688..bc008e1 100644
 --- a/src/lib/hosted-mcp-apps.ts
@@ -166,68 +136,30 @@ index cd86688..bc008e1 100644
  
  /** A row of the table, with its own literal id. */
 diff --git a/src/locales/en.json b/src/locales/en.json
-index 361a917..a248141 100644
+index 361a917..a531ec9 100644
 --- a/src/locales/en.json
 +++ b/src/locales/en.json
-@@ -12267,5 +12267,28 @@
+@@ -12267,5 +12267,9 @@
    "settings.features.openbot.updates": "Update notices",
    "settings.features.openbot.updatesLine": "Version and update checks in Settings. Your server updates on its own.",
    "settings.features.openbot.themes": "All colour themes",
 -  "settings.features.openbot.themesLine": "Show every theme, including the festive ones. Off, only the plain ones are offered."
 +  "settings.features.openbot.themesLine": "Show every theme, including the festive ones. Off, only the plain ones are offered.",
-+  "openbot.connect.title": "Turn on connectors",
-+  "openbot.connect.why": "For your bot to use Gmail, Slack, Notion and 500+ more apps, OpenBot needs a free Composio key, the service that bridges them. You set it up once.",
-+  "openbot.connect.step1": "Create a free Composio account.",
-+  "openbot.connect.step2": "Copy your project's API key.",
-+  "openbot.connect.step3": "Paste it in Settings, then come back here to connect.",
-+  "openbot.connect.addKey": "Add key",
-+  "openbot.connect.getKey": "Get a key",
-+  "openbot.rec.title": "Recommended",
-+  "openbot.rec.connect": "Connect",
-+  "openbot.rec.connected": "Connected",
-+  "openbot.rec.gmail": "Read, search and draft your email",
-+  "openbot.rec.calendar": "See and create events in your calendar",
-+  "openbot.rec.notion": "Pages, notes and databases",
-+  "openbot.rec.higgsfield": "Make images and videos with AI",
-+  "openbot.rec.elevenlabs": "Voices, audio and sound with AI",
-+  "openbot.rec.telegram": "Talk to your bots on Telegram",
-+  "openbot.rec.whatsapp": "Talk to your bots on WhatsApp",
-+  "openbot.rec.ownTitle": "Add my own app (MCP)",
-+  "openbot.rec.ownLine": "Connect any app or MCP server by its address",
 +  "openbot.notion.description": "Your bots read and write your Notion pages and databases.",
 +  "openbot.notion.notice": "Sign in with your Notion account and choose which pages to share. No key needed. Choose which bots use it in Bot access.",
 +  "openbot.elevenlabs.description": "Your bots make voices, audio and sound effects with ElevenLabs, on your own account.",
 +  "openbot.elevenlabs.notice": "Sign in with your ElevenLabs account. What your bots generate spends your account's credits, so choose which bots have it in Bot access."
  }
 diff --git a/src/locales/es.json b/src/locales/es.json
-index fe5707a..8436944 100644
+index fe5707a..5edc9f3 100644
 --- a/src/locales/es.json
 +++ b/src/locales/es.json
-@@ -12267,5 +12267,28 @@
+@@ -12267,5 +12267,9 @@
    "settings.features.openbot.updates": "Avisos de actualización",
    "settings.features.openbot.updatesLine": "La versión y la búsqueda de actualizaciones en Ajustes. Vuestro servidor se actualiza solo.",
    "settings.features.openbot.themes": "Todos los temas de colores",
 -  "settings.features.openbot.themesLine": "Muestra todos los temas, también los de fiestas. Apagado, solo se ofrecen los sencillos."
 +  "settings.features.openbot.themesLine": "Muestra todos los temas, también los de fiestas. Apagado, solo se ofrecen los sencillos.",
-+  "openbot.connect.title": "Activa los conectores",
-+  "openbot.connect.why": "Para que tu bot use Gmail, Slack, Notion y más de 500 apps, OpenBot necesita una clave gratuita de Composio, el servicio que hace de puente. Solo se configura una vez.",
-+  "openbot.connect.step1": "Crea una cuenta gratis en Composio.",
-+  "openbot.connect.step2": "Copia la clave de tu proyecto (API key).",
-+  "openbot.connect.step3": "Pégala en Ajustes y vuelve aquí para conectar.",
-+  "openbot.connect.addKey": "Añadir clave",
-+  "openbot.connect.getKey": "Conseguir clave",
-+  "openbot.rec.title": "Recomendados",
-+  "openbot.rec.connect": "Conectar",
-+  "openbot.rec.connected": "Conectado",
-+  "openbot.rec.gmail": "Lee, busca y redacta tus correos",
-+  "openbot.rec.calendar": "Consulta y crea eventos en tu agenda",
-+  "openbot.rec.notion": "Páginas, notas y bases de datos",
-+  "openbot.rec.higgsfield": "Crea imágenes y vídeos con IA",
-+  "openbot.rec.elevenlabs": "Voces, audio y sonido con IA",
-+  "openbot.rec.telegram": "Habla con tus bots por Telegram",
-+  "openbot.rec.whatsapp": "Habla con tus bots por WhatsApp",
-+  "openbot.rec.ownTitle": "Añadir mi propia app (MCP)",
-+  "openbot.rec.ownLine": "Conecta cualquier app o servidor MCP con su dirección",
 +  "openbot.notion.description": "Tus bots leen y escriben en tus páginas y bases de datos de Notion.",
 +  "openbot.notion.notice": "Inicia sesión con tu cuenta de Notion y elige qué páginas compartes. No hace falta clave. Elige qué bots lo usan en Acceso de los bots.",
 +  "openbot.elevenlabs.description": "Tus bots crean voces, audios y efectos de sonido con ElevenLabs, en tu propia cuenta.",
