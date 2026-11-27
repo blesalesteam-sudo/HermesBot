@@ -77,7 +77,10 @@ usa nombre e imagen propios. Los avisos de licencia originales se conservan en `
 ## El aspecto de los bots
 
 Los bots se crean con el mismo sistema que Grok Bot: eliges una forma de una cuadrícula de 5 columnas y un
-color. Los dibujos son propios de OpenBot y todos llevan las antenas del logo.
+color. Mismo estilo que Grok Bot: color plano, formas un poco giradas y solo dos ojos blancos inclinados,
+sin boca. Los dibujos son propios de OpenBot. Solo el bot principal (Hermes) lleva las antenas del logo:
+el archivo generado trae cada forma dos veces, sin antenas (`MASCOT_BODIES`) y con ellas
+(`MASCOT_BODIES_WITH_ANTENNAS`), y `BotAvatar` usa la segunda cuando el bot tiene `defaultBot`.
 
 - 27 formas (robot, mancha, guijarro, judía, huevo, cuadrado redondeado, tableta, cápsula, cilindro, hexágono,
   gema, cristal, cuña, escudo, cúpula, arco, nube, gota, hoja, cuadrado, destello, trébol, flor, corazón,
@@ -88,13 +91,11 @@ color. Los dibujos son propios de OpenBot y todos llevan las antenas del logo.
 - 12 colores en el orden de Grok Bot: negro (negro de día, blanco de noche), marrón, rojo, naranja, amarillo,
   verde, turquesa, celeste, azul, violeta, magenta y gris. Se guardan con los nombres de siempre, así que los
   bots que ya existían conservan su color.
-- Mientras un bot piensa, busca o trabaja, las puntas de sus antenas se encienden y laten
+- Mientras Hermes piensa, busca o trabaja, las puntas de sus antenas se encienden y laten
   (`overlay/public/openbot-theme.css`).
 - `patches/92-bots-estilo-grok.patch`: colores, todas las formas con el dibujo del robot (antes las formas usaban
-  otro motor sin antenas), el selector solo con formas y el estado del bot en el dibujo para encender las antenas.
+  otro motor sin antenas), ojos blancos sin boca, el selector solo con formas y el estado del bot en el dibujo para encender las antenas.
   Los nombres en español los pone `rebrand.mjs`.
-- `patches/93-bots-volumen.patch`: volumen en cada bot (luz arriba a la izquierda, sombra abajo, un brillo y una
-  sombra suave debajo), dibujado dentro del propio SVG. No uses filtros CSS en el avatar: Chrome deja de pintar la cara.
 
 ## Grupos de Telegram y WhatsApp (oyente silencioso)
 

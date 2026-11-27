@@ -387,6 +387,28 @@ function circlePath(cx: number, cy: number, r: number): string {
     .close()
 }
 
+// ---------------------------------------------------------------- tilt and antennas switch
+
+/** Like Grok Bot, every shape leans a little, as if seen slightly from the side. */
+const TILT = -8
+
+function turn([x, y]: Pt, deg = TILT): Pt {
+  const a = (deg * Math.PI) / 180
+  const dx = x - 100
+  const dy = y - 100
+  return [100 + dx * Math.cos(a) - dy * Math.sin(a), 100 + dx * Math.sin(a) + dy * Math.cos(a)]
+}
+
+/** Turns every point of an M/C/Z path. */
+function turnPath(d: string): string {
+  return d.replace(/([MC])([^MCZ]+)/g, (_, cmd: string, nums: string) => {
+    const n = nums.trim().split(/[\s,]+/).map(Number)
+    const out: number[] = []
+    for (let i = 0; i < n.length; i += 2) out.push(...turn([n[i], n[i + 1]]))
+    return cmd + out.map(fmt).join(" ")
+  })
+}
+
 // ---------------------------------------------------------------- the face solve (as in gen-mascot-bodies.ts)
 
 const AIMS = [{ x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: 1 }] as const
@@ -434,30 +456,34 @@ function solve(outline: string, face: string): { fit: ReturnType<typeof fitTrans
 
 const quote = (s: string) => JSON.stringify(s)
 
-function main(): void {
-  const entries: string[] = []
-  console.log("shape      face size")
-  for (const shape of SHAPES) {
-    const { stalks, tips } = antennasFor(shape.d, shape.dx)
-    const outline = shape.d + stalks + tips.map(t => circlePath(t.cx, t.cy, t.r)).join("")
-    const { fit, anchor } = solve(outline, shape.d)
-    console.log(`  ${shape.id.padEnd(9)} ${anchor.scale.toFixed(3)}`)
+function entry(shape: (typeof SHAPES)[number], withAntennas: boolean): string {
+    const raw = withAntennas ? antennasFor(shape.d, shape.dx) : { stalks: "", tips: [] as Antennas["tips"] }
+    const stalks = turnPath(raw.stalks)
+    const tips = raw.tips.map(t => { const [cx, cy] = turn([t.cx, t.cy]); return { ...t, cx, cy } })
+    const head = turnPath(shape.d)
+    const outline = head + stalks + tips.map(t => circlePath(t.cx, t.cy, t.r)).join("")
+    const { fit, anchor } = solve(outline, head)
+    console.log(`  ${shape.id.padEnd(9)} ${withAntennas ? "antennas" : "plain   "} ${anchor.scale.toFixed(3)}`)
     const tipMarkup = tips
       .map((t, i) => `<circle class="omb-tip omb-tip-${i ? "b" : "a"}" fill="{{GRADIENT}}" cx="${fmt(t.cx)}" cy="${fmt(t.cy)}" r="${t.r}"/>`)
       .join("")
-    entries.push(
+    return (
       [
         `  ${shape.id}: {`,
         `    id: ${quote(shape.id)},`,
         `    name: ${quote(shape.name)},`,
         `    fit: ${quote(fit.transform)},`,
-        `    body: ${quote(`<path fill="{{GRADIENT}}" d="${shape.d}${stalks}"/>${tipMarkup}`)},`,
-        `    clip: ${quote(`<path d="${shape.d}"/>`)},`,
+        `    body: ${quote(`<path fill="{{GRADIENT}}" d="${head}${stalks}"/>${tipMarkup}`)},`,
+        `    clip: ${quote(`<path d="${head}"/>`)},`,
         `    anchor: { x: ${anchor.x}, y: ${anchor.y}, scale: ${anchor.scale} },`,
         `  },`,
       ].join("\n")
     )
-  }
+}
+
+function main(): void {
+  const entries = SHAPES.map(shape => entry(shape, false))
+  const withAntennas = SHAPES.map(shape => entry(shape, true))
 
   const out = `/**
  * The bot shapes a bot can wear.
@@ -465,7 +491,8 @@ function main(): void {
  * GENERATED FILE — do not hand-edit. Run \`node --experimental-strip-types
  * scripts/gen-openbot-bodies.ts\` (OpenBot's generator) to rebuild it.
  *
- * Every shape wears the OpenBot antennas; the tips are \`.omb-tip\` circles. The fields
+ * Every bot wears a plain shape; the main bot (Hermes) wears the same shape with the OpenBot antennas,
+ * whose tips are \`.omb-tip\` circles. The fields
  * match \`CursorSilhouette\`, so a body goes to the renderer with no adapter in between.
  */
 
@@ -497,6 +524,11 @@ export const DEFAULT_MASCOT_BODY: MascotBodyId = "cursor";
 
 export const MASCOT_BODIES: Record<MascotBodyId, MascotBody> = {
 ${entries.join("\n")}
+};
+
+/** The same shapes wearing the OpenBot antennas: only the main bot (Hermes) wears these. */
+export const MASCOT_BODIES_WITH_ANTENNAS: Record<MascotBodyId, MascotBody> = {
+${withAntennas.join("\n")}
 };
 
 /** Runtime-safe read of an untrusted persisted or streamed body id. */

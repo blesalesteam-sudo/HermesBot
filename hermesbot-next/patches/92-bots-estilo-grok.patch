@@ -51,41 +51,102 @@ index ac5a80039..db007344f 100644
  export type MausColor = (typeof MAUS_COLOR_NAMES)[number];
  
 diff --git a/src/components/Avatar.tsx b/src/components/Avatar.tsx
-index 8ac62313b..7f6c8e2c2 100644
+index 8ac62313b..8f4431aab 100644
 --- a/src/components/Avatar.tsx
 +++ b/src/components/Avatar.tsx
-@@ -28,10 +28,17 @@ export const MOUTH_WEIGHT = 11;
+@@ -14,7 +14,7 @@ import { CursorAvatar, type CursorAvatarHandle } from "./CursorAvatar";
+ import { ACTIVE_STATES } from "./mascot-motion";
+ import { MOTION_FACE, useBeatState } from "./mascot-beat";
+ import { avatarCropRadius, botAvatarProfile, clampAvatarFocus, clampAvatarZoom, mascotBodyColorSchema, mascotFaceInk, mascotMaterialSchema, type BotAvatarCrop, type MascotFaceColor, type MascotMaterial } from "../../shared/bot-avatar";
+-import { MASCOT_BODIES, botMascotBody } from "../../shared/mascot-bodies";
++import { MASCOT_BODIES, MASCOT_BODIES_WITH_ANTENNAS, botMascotBody } from "../../shared/mascot-bodies";
+ import { isCarvedBody, type BotBodyId } from "../../shared/bot-body";
+ import { engineBody } from "../../shared/object-bodies";
+ import { useFestivalDress, wornBody } from "@/lib/festival-dress";
+@@ -28,6 +28,10 @@ export const MOUTH_WEIGHT = 11;
  
  const POINTER_GAZE = { forward: 1, authored: 0.25 };
  
-+function mix(hex: string, toward: string, t: number): string {
-+  const a = Number.parseInt(hex.slice(1), 16);
-+  const b = Number.parseInt(toward.slice(1), 16);
-+  const channel = (shift: number) => Math.round(((a >> shift) & 0xff) + (((b >> shift) & 0xff) - ((a >> shift) & 0xff)) * t);
-+  return `#${[channel(16), channel(8), channel(0)].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
-+}
++/** OpenBot, like Grok Bot: white eyes on a flat body, no mouth. */
++const OPENBOT_EYES = "#ffffff";
++const OPENBOT_EYE_SIZE = 1.45;
 +
  const gradientFor = (color: MausColor, custom?: string): [string, string, string] => {
    if (!custom && color === "chrome") return CHROME_GRADIENT;
    const fill = custom ?? MAUS_COLORS[color] ?? MAUS_COLORS.green;
--  return [fill, fill, fill];
-+  return [mix(fill, "#ffffff", 0.2), fill, mix(fill, "#000000", 0.16)];
- };
+@@ -52,6 +56,8 @@ export function roomAvatarGradient(color: MausColor): [string, string, string] {
+ export type MausAvatarHandle = CursorAvatarHandle;
  
- /** A bot's own body colour when it picked one, else undefined. */
-@@ -44,7 +51,7 @@ export function roomAvatarGradient(color: MausColor): [string, string, string] {
-   let gradient = roomGradients.get(color);
-   if (!gradient) {
-     const fill = `var(--identity-${color})`;
--    roomGradients.set(color, (gradient = [fill, fill, fill]));
-+    roomGradients.set(color, (gradient = [`color-mix(in srgb, ${fill} 80%, #ffffff)`, fill, `color-mix(in srgb, ${fill} 84%, #000000)`]));
-   }
-   return gradient;
- }
+ export type MausAvatarProps = {
++  /** OpenBot: only the main bot (Hermes) wears the antennas. */
++  antennas?: boolean;
+   color: MausColor;
+   state?: MausState;
+   expression?: number;
+@@ -142,6 +148,7 @@ function GradientAvatarComponent(
+     trackPointer = true,
+     animated,
+     bodyId,
++    antennas,
+     gradient,
+     faceColor,
+     bodyColor,
+@@ -149,7 +156,7 @@ function GradientAvatarComponent(
+   }: MausAvatarProps,
+   ref: React.Ref<MausAvatarHandle>,
+ ) {
+-  const silhouette = MASCOT_BODIES[botMascotBody(bodyId)];
++  const silhouette = (antennas ? MASCOT_BODIES_WITH_ANTENNAS : MASCOT_BODIES)[botMascotBody(bodyId)];
+   const custom = customFill(bodyColor);
+   const chrome = color === "chrome" && !custom;
+   const paint = custom ? gradientFor(color, custom) : gradient ?? gradientFor(color);
+@@ -183,14 +190,14 @@ function GradientAvatarComponent(
+         silhouette={silhouette}
+         gradient={paint}
+         picture={chrome && !faceInk ? steelBodyImage(silhouette.id, size, globalThis.devicePixelRatio ?? 1) : null}
+-        eyeColor={faceInk ?? (chrome ? CHROME_EYES : undefined)}
++        eyeColor={faceInk ?? (chrome ? CHROME_EYES : OPENBOT_EYES)}
+         title={label ?? null}
+         lookAround={lookAround ?? (forward ? 0 : 1)}
+         gaze={gaze}
+         turn={turn}
+         spring={spring}
+-        eyeScale={eyeScale}
+-        showMouth={showMouth}
++        eyeScale={(eyeScale ?? 1) * OPENBOT_EYE_SIZE}
++        showMouth={showMouth ?? false}
+         mouthStroke={mouthStroke}
+         resting={!live}
+         pointerGaze={trackPointer ? (forward ? POINTER_GAZE.forward : POINTER_GAZE.authored) : 0}
+@@ -214,6 +221,7 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color" | "gradient"> & {
+     avatarFocusX?: number;
+     avatarFocusY?: number;
+     mascotBody?: BotBodyId | null;
++    defaultBot?: unknown;
+     mascotFaceColor?: MascotFaceColor | null;
+     mascotBodyColor?: string | null;
+     mascotMaterial?: MascotMaterial | null;
+@@ -252,6 +260,7 @@ export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotPr
+     return (
+       <MausAvatar
+         bodyId={wornBody(bot.mascotBody, bot.color, festival)}
++        antennas={Boolean(bot.defaultBot)}
+         {...mascotProps}
+         color={bot.color}
+         faceColor={bot.mascotFaceColor}
 diff --git a/src/components/CursorAvatar.tsx b/src/components/CursorAvatar.tsx
-index df4a138c3..78908b895 100644
+index df4a138c3..74a115b7b 100644
 --- a/src/components/CursorAvatar.tsx
 +++ b/src/components/CursorAvatar.tsx
+@@ -497,7 +497,7 @@ export function mouthPath(frame: { x: number; y: number; angle: number }, spec:
+ }
+ 
+ export const anchorTransform = (a: { x: number; y: number; scale: number }) =>
+-  `translate(${a.x} ${a.y}) scale(${a.scale}) translate(${-FACE_CENTRE[0]} ${-FACE_CENTRE[1]})`
++  `translate(${a.x} ${a.y}) rotate(-16) translate(4 -14) scale(${a.scale}) translate(${-FACE_CENTRE[0]} ${-FACE_CENTRE[1]})`
+ 
+ 
+ export interface CursorAvatarProps {
 @@ -1002,6 +1002,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
          height={dimension}
          className={className}
@@ -95,7 +156,7 @@ index df4a138c3..78908b895 100644
          aria-label={label ?? undefined}
          aria-hidden={label ? undefined : true}
 diff --git a/src/lib/mascot.ts b/src/lib/mascot.ts
-index f62af5826..f2186c899 100644
+index f62af5826..6f04918af 100644
 --- a/src/lib/mascot.ts
 +++ b/src/lib/mascot.ts
 @@ -49,18 +49,18 @@ export const STATE_GROUPS = {
@@ -136,7 +197,7 @@ index f62af5826..f2186c899 100644
 -export const CHROME_GRADIENT: [string, string, string] = ["#5B6470", "#5B6470", "#5B6470"];
 -export const CHROME_EYES = "#FFFFFF";
 +// OpenBot: "chrome" is the black bot. Black by day, white by night, like the logo (see openbot-theme.css).
-+export const CHROME_GRADIENT: [string, string, string] = ["var(--omb-black-1)", "var(--omb-black-2)", "var(--omb-black-3)"];
++export const CHROME_GRADIENT: [string, string, string] = ["var(--omb-black-2)", "var(--omb-black-2)", "var(--omb-black-2)"];
 +export const CHROME_EYES = "var(--omb-black-eyes)";
  
  export function colorSwatch(color: MausColor): string {
@@ -144,7 +205,7 @@ index f62af5826..f2186c899 100644
 -  const [light, mid, edge] = CHROME_GRADIENT;
 -  return mid || light || edge;
 +  const [light, , edge] = CHROME_GRADIENT;
-+  return `linear-gradient(135deg, ${light}, ${edge})`;
++  return edge || light;
  }
  
  export const MAUS_MOTIONS = [
