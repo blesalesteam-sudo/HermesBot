@@ -130,3 +130,26 @@ En **Ajustes → Funciones → Grupos de Telegram y WhatsApp**. Todo empieza apa
   `/opt/data/.openmausbot/grupos/whatsapp-sesion/`. No marca mensajes como leídos ni aparece en línea.
 - Código: `patches/90-grupos.patch` (archivos nuevos en `server/grupos/`, `server/routes/grupos.ts`,
   `src/components/settings/GruposSettings.tsx`, y dos líneas en `server/index.ts` y en la página Funciones).
+
+## Traer los bots de Grok Bot
+
+Grok Bot no tiene botón de exportar y guarda casi todo en su nube. En el Mac sí deja una copia de la lista de bots
+(nombre, instrucciones, forma y color) y del chat de cada uno. La app en Railway no puede leer el Mac, así que hay
+dos pasos:
+
+1. En el Mac donde está Grok Bot: `node traslado-grok/exportar.mjs`. Solo lee (nunca cambia nada de Grok Bot ni
+   abre claves o sesiones) y deja `openbot-traslado-grok-bot.json` en Descargas. Si algún bot de Grok Bot ha escrito
+   su propia exportación (`grok-bot-export-*.json` en Descargas, con el mensaje de Ajustes → Importar → Grok Bot), la
+   junta: así vienen también sus habilidades, rutinas, recuerdos y apps.
+2. En OpenBot: Ajustes → Importar → Grok Bot → Elegir archivo → ese archivo → Importar.
+
+Cada bot llega con su nombre, instrucciones, forma y color de Grok Bot, y su chat en un hilo "Chat from Grok Bot"
+(solo como registro: no se responde a nada). Un bot que ya se trajo antes con el mismo nombre no se duplica: recibe
+su chat y su aspecto. `patches/98-traslado-grok.patch`: lee la forma y el chat del archivo, crea los bots con ese
+aspecto y añade la ruta `POST /api/setup-import/grok/chat` (solo el dueño) para subir el chat.
+
+No se puede traer: las imágenes y archivos que los bots mandaron (viven en la nube de Grok Bot; en el chat queda
+una línea "Envió el archivo …"), lo que Grok Bot guarda en su nube sin copia en el Mac (memoria, habilidades,
+rutinas y apps, salvo que cada bot las escriba en su exportación), las claves y conexiones (hay que conectar las
+apps otra vez), y el modelo de cada bot (Grok Bot no lo guarda en el Mac; aquí usan el motor de OpenBot). En el
+bot "Investigación" Grok Bot solo guarda en el Mac sus últimos 200 mensajes.

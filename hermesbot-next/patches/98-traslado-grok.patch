@@ -1,0 +1,426 @@
+diff --git a/server/grok-chat-lines.test.ts b/server/grok-chat-lines.test.ts
+new file mode 100644
+index 0000000..70a4457
+--- /dev/null
++++ b/server/grok-chat-lines.test.ts
+@@ -0,0 +1,31 @@
++import { describe, expect, it } from "vitest";
++
++import { GROK_HISTORY_TITLE, importGrokChatLines, type GrokHistoryStore } from "./grok-history.ts";
++import type { Message } from "./store.ts";
++
++function fakeStore() {
++  const tasks: Array<{ threadId: string; title: string }> = [];
++  const threads = new Map<string, Message[]>();
++  const store = {
++    bot: (id: string) => (id === "b1" ? { id, tasks } : undefined),
++    createTask: (_bot: string, title: string) => { const task = { threadId: `t${tasks.length + 1}`, title }; tasks.push(task); return task; },
++    importTranscript: (threadId: string, messages: Message[]) => { threads.set(threadId, messages); },
++    messagesFor: (threadId: string) => threads.get(threadId) ?? [],
++  } as unknown as GrokHistoryStore;
++  return { store, tasks, threads };
++}
++
++describe("importGrokChatLines (OpenBot)", () => {
++  it("brings the lines into one thread, in time order, once", () => {
++    const { store, tasks, threads } = fakeStore();
++    expect(importGrokChatLines(store, "b1", [{ role: "bot", text: "hola", at: 2 }, { role: "user", text: "buenas", at: 1 }])).toEqual({ messages: 2 });
++    expect(tasks).toEqual([{ threadId: "t1", title: GROK_HISTORY_TITLE }]);
++    expect(threads.get("t1")!.map((m) => [m.role, m.text, m.parentId])).toEqual([["user", "buenas", null], ["bot", "hola", "grok-1"]]);
++    expect(importGrokChatLines(store, "b1", [{ role: "user", text: "otra", at: 3 }])).toEqual({ messages: 2 });
++    expect(tasks).toHaveLength(1);
++  });
++
++  it("answers null for a bot that isn't here", () => {
++    expect(importGrokChatLines(fakeStore().store, "nope", [{ role: "user", text: "x", at: 1 }])).toBeNull();
++  });
++});
+diff --git a/server/grok-history.ts b/server/grok-history.ts
+index a3fa659..281bff8 100644
+--- a/server/grok-history.ts
++++ b/server/grok-history.ts
+@@ -1,4 +1,4 @@
+-import type { GrokHistoryAnswer } from "../shared/grok-import.ts";
++import type { GrokChatLine, GrokHistoryAnswer } from "../shared/grok-import.ts";
+ import { redactSecretsInText } from "../shared/redact.ts";
+ import { readGrokChat } from "./grok-local.ts";
+ import type { SetupMachine } from "./setup-import.ts";
+@@ -85,3 +85,25 @@ export function importGrokHistory(store: GrokHistoryStore, machine: SetupMachine
+   store.importTranscript(task.threadId, messages, messages.at(-1)!.id);
+   return { messages: messages.length };
+ }
++
++/** OpenBot: the same record as importGrokHistory, from chat lines the person brought in a file (the Mac exporter reads
++ * them from the Grok Bot app there), for a server that cannot look at that computer, such as a hosted one. Lines are
++ * untrusted: redacted, in time order, as a record only. Asked again, it finds that thread and adds nothing. */
++export function importGrokChatLines(store: GrokHistoryStore, botId: string, lines: readonly GrokChatLine[]): GrokHistoryAnswer | null {
++  const bot = store.bot(botId);
++  if (!bot) return null;
++  const earlier = bot.tasks?.find((task) => task.title === GROK_HISTORY_TITLE);
++  const kept = earlier ? store.messagesFor(earlier.threadId).length : 0;
++  if (kept) return { messages: kept };
++  const messages: Message[] = [];
++  for (const [index, line] of [...lines].sort((a, b) => a.at - b.at).entries()) {
++    const text = redactSecretsInText(line.text.trim());
++    if (!text) continue;
++    messages.push({ id: `grok-${index + 1}`, kind: "text", role: line.role === "user" ? "user" : "bot", text, at: line.at, parentId: messages.at(-1)?.id ?? null });
++  }
++  if (!messages.length) return { reason: "empty" };
++  const task = earlier ?? store.createTask(botId, GROK_HISTORY_TITLE);
++  if (!task) return null;
++  store.importTranscript(task.threadId, messages, messages.at(-1)!.id);
++  return { messages: messages.length };
++}
+diff --git a/server/routes/setup-import.ts b/server/routes/setup-import.ts
+index 7577cb6..0d06ad8 100644
+--- a/server/routes/setup-import.ts
++++ b/server/routes/setup-import.ts
+@@ -1,7 +1,8 @@
+ import { z } from "zod";
+ 
+ import { claudeUserMcpEnabled, DATA_DIR, type AppConfig } from "../config.ts";
+-import { importGrokHistory, type GrokHistoryStore } from "../grok-history.ts";
++import { importGrokChatLines, importGrokHistory, type GrokHistoryStore } from "../grok-history.ts";
++import { GROK_CHAT_MAX_LINES } from "../../shared/grok-import.ts";
+ import { lookForGrokBot, removeOldCursorSignIn } from "../grok-local.ts";
+ import { createGrokMove, type GrokMove } from "../grok-move-tunnel.ts";
+ import { applySetupImport, detectSetup, thisMachine, type SetupHost, type SetupMachine } from "../setup-import.ts";
+@@ -28,9 +29,16 @@ export const SETUP_IMPORT_PATH = "/api/setup-import";
+ export const GROK_LOOK_PATH = "/api/setup-import/grok";
+ export const GROK_CONNECTOR_PATH = "/api/setup-import/grok/connector";
+ export const GROK_HISTORY_PATH = "/api/setup-import/grok/history";
++/** OpenBot: a moved Bot's chat, sent from a file the person chose; for any server, the owner only. */
++export const GROK_CHAT_PATH = "/api/setup-import/grok/chat";
++const GROK_CHAT_MAX_BYTES = 8 * 1024 * 1024;
+ const LOCAL_ONLY = "Only the desktop app on the computer running OpenMausBot can bring in that computer's skills and tools.";
+ const requestSchema = z.object({ skills: z.boolean().optional(), tools: z.boolean().optional() }).strict();
+ const historySchema = z.object({ botId: z.string().min(1).max(200), grokName: z.string().trim().min(1).max(500) }).strict();
++const chatSchema = z.object({
++  botId: z.string().min(1).max(200),
++  lines: z.array(z.object({ role: z.enum(["user", "bot"]), text: z.string().min(1).max(60_000), at: z.number().int().positive() }).strict()).min(1).max(GROK_CHAT_MAX_LINES),
++}).strict();
+ 
+ /** GET finds what is new here; POST brings in the chosen kinds. The Grok Bot connector: POST opens the link (a quick
+  * tunnel to a listener that serves only the move MCP), GET reads what arrived, DELETE ends it. POST …/grok/history brings
+@@ -70,6 +78,21 @@ export function createSetupImportRoutes(deps: SetupImportRouteDeps): RouteHandle
+         return json(res, 502, { error: error instanceof Error ? error.message : String(error) });
+       }
+     }
++    if (path === GROK_CHAT_PATH) {
++      if (method !== "POST") return json(res, 405, { error: "method not allowed" });
++      // The owner's own: an admin session or the desktop app; never a bot's shell, a paired device or a team member.
++      if (!auth.scopes.includes("admin") || (auth.kind === "loopback" && (auth.trust === "service" || auth.companionDevice))) {
++        return json(res, 403, { error: "forbidden: only the owner can bring a Grok Bot chat here" });
++      }
++      res.setHeader("Cache-Control", "no-store");
++      if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
++        return json(res, 415, { error: "content-type must be application/json" });
++      }
++      const parsed = chatSchema.safeParse(await readBody(req, GROK_CHAT_MAX_BYTES));
++      if (!parsed.success) return json(res, 400, { error: "Name the bot and send its chat lines." });
++      const answer = importGrokChatLines(deps.store, parsed.data.botId, parsed.data.lines);
++      return answer ? json(res, 200, answer) : json(res, 404, { error: "bot not found" });
++    }
+     if (path === GROK_HISTORY_PATH) {
+       if (method !== "POST") return json(res, 405, { error: "method not allowed" });
+       if (!deps.local || auth.kind !== "loopback" || auth.trust === "service") return json(res, 403, { error: LOCAL_ONLY });
+diff --git a/shared/grok-import-openbot.test.ts b/shared/grok-import-openbot.test.ts
+new file mode 100644
+index 0000000..da592d1
+--- /dev/null
++++ b/shared/grok-import-openbot.test.ts
+@@ -0,0 +1,34 @@
++import { describe, expect, it } from "vitest";
++
++import { grokMovePlan, mergeGrokBots, parseGrokExport } from "./grok-import.ts";
++
++// OpenBot: what the Mac exporter (traslado-grok/exportar.mjs) adds to an export: how each Bot looks and its chat.
++const doc = (bot: Record<string, unknown>) => JSON.stringify({ format: "grok-bot-export", version: 1, bots: [bot] });
++
++describe("Grok Bot move with look and chat", () => {
++  it("reads the look and the chat lines, and the plan keeps both", () => {
++    const [bot] = parseGrokExport(doc({
++      name: "Tareas", instructions: "Apunta tareas.", look: { shape: "hexagon", color: "blue" },
++      chat: [{ role: "bot", text: "Hecho", at: 20 }, { role: "user", text: "Apunta esto", at: 10 }, { role: "system", text: "x", at: 5 }, { role: "user", text: "", at: 6 }],
++    }));
++    expect(bot!.look).toEqual({ shape: "hexagon", color: "blue" });
++    expect(bot!.chat).toEqual([{ role: "bot", text: "Hecho", at: 20 }, { role: "user", text: "Apunta esto", at: 10 }]);
++    const plan = grokMovePlan(bot!);
++    expect(plan.document.package.agents[0]!.appearance).toEqual({ color: "blue", mascotBody: "hexagon" });
++    expect(plan.chat).toHaveLength(2);
++  });
++
++  it("drops a shape or colour this app doesn't have and keeps its own pick", () => {
++    const [bot] = parseGrokExport(doc({ name: "A", instructions: "x", look: { shape: "pumpkin", color: "violet" } }));
++    expect(bot!.look).toBeUndefined();
++    expect(grokMovePlan(bot!).document.package.agents[0]!.appearance.mascotBody).toBeUndefined();
++  });
++
++  it("joins a chat split over two files in time order", () => {
++    const parts = [
++      ...parseGrokExport(doc({ name: "A", instructions: "x", chat: [{ role: "user", text: "dos", at: 2 }] })),
++      ...parseGrokExport(doc({ name: "A", instructions: "x", chat: [{ role: "user", text: "uno", at: 1 }, { role: "user", text: "dos", at: 2 }] })),
++    ];
++    expect(mergeGrokBots(parts)[0]!.chat!.map((line) => line.text)).toEqual(["uno", "dos"]);
++  });
++});
+diff --git a/shared/grok-import.ts b/shared/grok-import.ts
+index 6cdeb16..722a7b9 100644
+--- a/shared/grok-import.ts
++++ b/shared/grok-import.ts
+@@ -11,6 +11,8 @@ import {
+ } from "./package-format.ts";
+ import { BOT_PROFILE_LIMITS } from "./bot-profile.ts";
+ import { redactSecretsInText } from "./redact.ts";
++import { MASCOT_BODY_IDS } from "./mascot-bodies.ts";
++import { MAUS_COLOR_NAMES } from "./wire.ts";
+ import { normalizeCronSchedule } from "./routine-schedule.ts";
+ import { parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES, yamlFrontmatterValue } from "./skill-md.ts";
+ 
+@@ -89,10 +91,18 @@ export interface GrokRoutine {
+   paused: boolean; skills: string[]; details: string;
+ }
+ export interface GrokApp { name: string; mcpUrl: string; transport: string; headerNames: string[] }
++/** OpenBot: one line of a Bot's chat, as the Mac exporter (traslado-grok/exportar.mjs) reads it from Grok Bot's cache. */
++export interface GrokChatLine { role: "user" | "bot"; text: string; at: number }
++/** OpenBot: how the Bot looks in Grok Bot, already in this app's names (shape = mascot body, colour = Maus colour). */
++export interface GrokLook { shape: string; color: string }
+ export interface GrokBot {
+   name: string; title: string; description: string; instructions: string;
+   memories: string[]; userFacts: string[]; skills: GrokSkill[]; routines: GrokRoutine[]; apps: GrokApp[];
++  look?: GrokLook; chat?: GrokChatLine[];
+ }
++/** OpenBot: a chat that big would not come over in one request; the exporter splits long chats under this. */
++export const GROK_CHAT_MAX_LINES = 5_000;
++const GROK_CHAT_LINE_MAX_CHARS = 60_000;
+ 
+ const isRecord = (value: unknown): value is Record<string, unknown> =>
+   Boolean(value) && typeof value === "object" && !Array.isArray(value);
+@@ -243,9 +253,31 @@ function readBot(bot: Record<string, unknown>): GrokBot {
+       details: first(routine.trigger_details, routine.details),
+     }] : [])),
+     apps: list(bot.apps ?? bot.plugins ?? bot.integrations).flatMap(readApp),
++    ...readLook(bot.look),
++    ...readChat(bot.chat),
+   };
+ }
+ 
++/** OpenBot: a look only when both names are this app's own; anything else keeps the move's own pick. */
++function readLook(value: unknown): { look?: GrokLook } {
++  if (!isRecord(value)) return {};
++  const shape = str(value.shape), color = str(value.color);
++  const knownShape = (MASCOT_BODY_IDS as readonly string[]).includes(shape), knownColor = (MAUS_COLOR_NAMES as readonly string[]).includes(color);
++  return knownShape || knownColor ? { look: { shape: knownShape ? shape : "", color: knownColor ? color : "" } } : {};
++}
++
++/** OpenBot: the chat lines the exporter wrote, read as untrusted: only a role, a text and a time each. */
++function readChat(value: unknown): { chat?: GrokChatLine[] } {
++  const chat = list(value).flatMap((line) => {
++    if (!isRecord(line)) return [];
++    const text = typeof line.text === "string" ? line.text.trim().slice(0, GROK_CHAT_LINE_MAX_CHARS) : "";
++    const at = typeof line.at === "number" && Number.isFinite(line.at) && line.at > 0 ? Math.floor(line.at) : 0;
++    const role = line.role === "user" ? "user" as const : line.role === "bot" ? "bot" as const : null;
++    return text && at && role ? [{ role, text, at }] : [];
++  }).slice(0, GROK_CHAT_MAX_LINES);
++  return chat.length ? { chat } : {};
++}
++
+ function redactStrings<T>(value: T): T {
+   if (typeof value === "string") return redactSecretsInText(value) as T;
+   if (Array.isArray(value)) return value.map((item: unknown) => redactStrings(item)) as T;
+@@ -275,6 +307,9 @@ export function mergeGrokBots(bots: readonly GrokBot[]): GrokBot[] {
+       skills: union(into.skills, bot.skills),
+       routines: union(into.routines, bot.routines),
+       apps: union(into.apps, bot.apps),
++      ...((bot.look ?? into.look) ? { look: { shape: bot.look?.shape || into.look?.shape || "", color: bot.look?.color || into.look?.color || "" } } : {}),
++      // A chat split over several files comes together in time order; a line in two parts counts once.
++      ...((into.chat || bot.chat) ? { chat: union(into.chat ?? [], bot.chat ?? []).sort((a, b) => a.at - b.at) } : {}),
+     });
+   }
+   return [...merged.values()];
+@@ -309,6 +344,8 @@ export function grokExportDocument(bots: readonly GrokBot[]): Record<string, unk
+         schedule_text: routine.when, timezone: routine.timeZone, paused: routine.paused, skills: routine.skills,
+         trigger_details: routine.details,
+       })),
++      ...(bot.look ? { look: bot.look } : {}),
++      ...(bot.chat ? { chat: bot.chat } : {}),
+       apps: bot.apps.map((app) => ({
+         name: app.name, mcp_url: app.mcpUrl, transport: app.transport,
+         ...(app.headerNames.length ? { headers: Object.fromEntries(app.headerNames.map((header) => [header, ""])) } : {}),
+@@ -412,6 +449,10 @@ export interface GrokMovePlan {
+   memories: number;
+   /** Apps to connect again here: all but those whose server name is already here. */
+   apps: number;
++  /** OpenBot: the Bot's chat from Grok Bot, when the export carries it (the Mac exporter writes it). */
++  chat: GrokChatLine[];
++  /** OpenBot: how it looks in Grok Bot, when the export says. */
++  look: GrokLook | null;
+ }
+ 
+ const sameFact = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+@@ -547,7 +588,10 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
+         ...(bot.title ? { title: clip(bot.title, 200) } : {}),
+         ...(description ? { description: clip(description, 4_000) } : {}),
+         ...(soul ? { soul } : {}),
+-        appearance: { color: BOT_COLORS[hash % BOT_COLORS.length]! },
++        appearance: {
++          color: (bot.look?.color || BOT_COLORS[hash % BOT_COLORS.length]!) as typeof MAUS_COLOR_NAMES[number],
++          ...(bot.look?.shape ? { mascotBody: bot.look.shape } : {}),
++        },
+         ...(skills.length ? { skills: skills.map((skill) => skill.name) } : {}),
+         ...(connections.length ? { connections: connections.map((connection) => connection.key) } : {}),
+         ...(Object.keys(seed).length ? { seed: { memory: seed } } : {}),
+@@ -568,5 +612,7 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
+     notes: seed[GROK_NOTES_FILE] ? unscheduled.length : 0,
+     memories: seed["MEMORY.md"] ? memory.count : 0,
+     apps,
++    chat: bot.chat ?? [],
++    look: bot.look ?? null,
+   };
+ }
+diff --git a/src/components/GrokMoveDialog.tsx b/src/components/GrokMoveDialog.tsx
+index 5abc7b8..df6be94 100644
+--- a/src/components/GrokMoveDialog.tsx
++++ b/src/components/GrokMoveDialog.tsx
+@@ -275,6 +275,9 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+     };
+   }, [onStart]);
+ 
++  // OpenBot: a file from the Mac exporter carries each Bot's chat, so any server brings it, not only the desktop app.
++  const fileChats = Boolean(preview && (preview.plans.some((plan) => plan.chat.length > 0) || preview.moved.some((bot) => (bot.chat?.length ?? 0) > 0 || bot.look)));
++  const bringsChats = local || fileChats;
+   const start = async () => {
+     if (!preview) return;
+     setImporting(true);
+@@ -332,10 +335,10 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+                 <BotCounts key={plan.packageId} heading={plan.addedAs} skills={plan.skills.length} routines={plan.routines} memories={plan.memories} notes={plan.notes}
+                   skillsOff={plan.skills.filter((skill) => !skill.on).map((skill) => skill.name)} />
+               ))}
+-              <GrokMoveLines history={local ? t("grokMove.historyPreview") : null} paused={preview.plans.some((plan) => plan.routines > 0) ? t("grokMove.pausedPreview") : null}
++              <GrokMoveLines history={fileChats ? t("grokMove.historyFromFile") : local ? t("grokMove.historyPreview") : null} paused={preview.plans.some((plan) => plan.routines > 0) ? t("grokMove.pausedPreview") : null}
+                 apps={preview.plans.reduce((total, plan) => total + plan.apps, 0)}
+-                moved={local ? [] : preview.moved.map(({ name }) => name)} unreadable={preview.unreadable} />
+-              {local && preview.moved.length > 0 && <p className={LINE}>{t("grokMove.alreadyHereChats", { names: preview.moved.map(({ name }) => name).join(", ") })}</p>}
++                moved={bringsChats ? [] : preview.moved.map(({ name }) => name)} unreadable={preview.unreadable} />
++              {bringsChats && preview.moved.length > 0 && <p className={LINE}>{t("grokMove.alreadyHereChats", { names: preview.moved.map(({ name }) => name).join(", ") })}</p>}
+             </>
+           ) : (
+             <BringBack local={local} look={look} found={found} reply={reply} error={error} onReply={setReply}
+@@ -356,7 +359,7 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+           ) : preview ? (
+             <>
+               <button type="button" disabled={importing} onClick={() => setPreview(null)} className={SECONDARY}>{t("grokMove.back")}</button>
+-              <button type="button" data-grok-move-import disabled={importing || !(preview.plans.length || (local && preview.moved.length))} onClick={() => void start()} className={cn(PRIMARY, "inline-flex items-center gap-2")}>
++              <button type="button" data-grok-move-import disabled={importing || !(preview.plans.length || (bringsChats && preview.moved.length))} onClick={() => void start()} className={cn(PRIMARY, "inline-flex items-center gap-2")}>
+                 {importing && <Loader2 size={15} className="animate-spin" />}
+                 {importing ? t("grokMove.importing") : t("grokMove.import")}
+               </button>
+diff --git a/src/lib/grok-move.ts b/src/lib/grok-move.ts
+index 06c423b..fabff3f 100644
+--- a/src/lib/grok-move.ts
++++ b/src/lib/grok-move.ts
+@@ -3,7 +3,7 @@ import { addTemplate } from "@/lib/template-add";
+ import { api, type Action, type Bot } from "@/state/store";
+ import type { LocaleKey } from "@/locales";
+ import { takeImportName } from "../../shared/import-name";
+-import { GROK_HISTORY_REASONS, GrokImportError, grokMovePlan, mergeGrokBots, parseGrokExport, type GrokBot, type GrokHistoryReason, type GrokMovePlan } from "../../shared/grok-import";
++import { GROK_HISTORY_REASONS, GrokImportError, grokMovePlan, mergeGrokBots, parseGrokExport, type GrokBot, type GrokChatLine, type GrokHistoryReason, type GrokLook as GrokBotLook, type GrokMovePlan } from "../../shared/grok-import";
+ 
+ /** What the desktop app found on this computer. */
+ export interface GrokLook {
+@@ -79,8 +79,8 @@ export function foundExports(files: GrokLook["files"]): FoundExports {
+ export interface GrokPreview {
+   /** `addedAs`: the Bot's name here, numbered when it is taken. */
+   plans: Array<GrokMovePlan & { addedAs: string }>;
+-  /** Bots moved before: `botId` is the bot here, so the move can still bring its chat. */
+-  moved: Array<{ name: string; botId: string }>;
++  /** Bots moved before: `botId` is the bot here, so the move can still bring its chat (and, OpenBot, its look). */
++  moved: Array<{ name: string; botId: string; chat?: GrokChatLine[]; look?: GrokBotLook | null }>;
+   unreadable: string[];
+ }
+ 
+@@ -93,15 +93,21 @@ export interface GrokPreviewFacts {
+ /** The whole plan, nothing written. A Bot already moved or that can't be read is named, and costs the others nothing. */
+ export function previewGrokMove(bots: readonly GrokBot[], facts: GrokPreviewFacts): GrokPreview {
+   const installed = new Map(facts.bots.flatMap((bot) => bot.installedPackage ? [[bot.installedPackage.id, bot.id] as const] : []));
++  // OpenBot: a Bot moved before with other instructions has another package id; the same Grok Bot name and agent still find it.
++  const movedByName = new Map(facts.bots.flatMap((bot) => {
++    const stamp = bot.installedPackage as { name?: string; agentKey?: string } | undefined;
++    return stamp?.name && stamp.agentKey ? [[`${stamp.agentKey}\n${stamp.name.trim().toLowerCase()}`, bot.id] as const] : [];
++  }));
+   const names = new Set(facts.bots.map((bot) => bot.name.trim().toLowerCase()));
+   const servers = new Set(facts.servers);
+   const preview: GrokPreview = { plans: [], moved: [], unreadable: [] };
+   for (const bot of bots) {
+     try {
+       const plan = grokMovePlan(bot, { timeZone: facts.timeZone, takenServers: servers });
+-      const here = installed.get(plan.packageId);
++      const agentKey = plan.document.package.agents[0]?.key ?? "";
++      const here = installed.get(plan.packageId) ?? movedByName.get(`${agentKey}\n${plan.name.trim().toLowerCase()}`);
+       if (here) {
+-        preview.moved.push({ name: plan.name, botId: here });
++        preview.moved.push({ name: plan.name, botId: here, ...(plan.chat.length ? { chat: plan.chat } : {}), ...(plan.look ? { look: plan.look } : {}) });
+         continue;
+       }
+       for (const connection of plan.document.package.connections ?? []) servers.add(connection.key);
+@@ -113,6 +119,14 @@ export function previewGrokMove(bots: readonly GrokBot[], facts: GrokPreviewFact
+   return preview;
+ }
+ 
++/** OpenBot: a moved Bot's chat from the file the person chose, for any server; the desktop app may still read it itself. */
++async function sendChat(botId: string, lines: readonly GrokChatLine[]): Promise<GrokHistory> {
++  const answer = await api<{ messages?: unknown; reason?: unknown } | null>("/api/setup-import/grok/chat",
++    { method: "POST", body: JSON.stringify({ botId, lines }), timeoutMs: 120_000 }).catch(() => null);
++  if (typeof answer?.messages === "number") return { messages: answer.messages };
++  return { reason: GROK_HISTORY_REASONS.find((reason) => reason === answer?.reason) ?? "failed" };
++}
++
+ /** A moved Bot's chat: how many messages came over, or why none did ("failed": the request itself didn't get an answer). */
+ export type GrokHistory = { messages: number } | { reason: GrokHistoryReason | "failed" };
+ 
+@@ -148,8 +162,10 @@ export interface GrokReport {
+  * over from the Grok Bot app there. One Bot failing is named and the rest carry on. */
+ export async function runGrokMove(preview: GrokPreview, dispatch: (action: Action) => void, local = false): Promise<GrokReport> {
+   const report: GrokReport = { bots: [], moved: [], unreadable: preview.unreadable, failed: [] };
+-  for (const { name, botId } of preview.moved) {
+-    const history = local ? await bringHistory(botId, name) : undefined;
++  for (const { name, botId, chat, look } of preview.moved) {
++    // OpenBot: the look Grok Bot gives it, as an ordinary profile edit.
++    if (look && (look.color || look.shape)) dispatch({ type: "updateBot", botId, patch: { ...(look.color ? { color: look.color } : {}), ...(look.shape ? { mascotBody: look.shape } : {}) } } as Action);
++    const history = chat?.length ? await sendChat(botId, chat) : local ? await bringHistory(botId, name) : undefined;
+     report.moved.push({ name, ...(history ? { history } : {}) });
+   }
+   for (const plan of preview.plans) {
+@@ -161,7 +177,7 @@ export async function runGrokMove(preview: GrokPreview, dispatch: (action: Actio
+         const on = skill.on && await api(`/api/bots/${bot.id}/skills/${encodeURIComponent(skill.folder)}`, { method: "PATCH", body: JSON.stringify({ enabled: true }) }).then(() => true, () => false);
+         if (!on) skillsOff.push(skill.name);
+       }
+-      const history = local ? await bringHistory(bot.id, plan.name) : undefined;
++      const history = plan.chat.length ? await sendChat(bot.id, plan.chat) : local ? await bringHistory(bot.id, plan.name) : undefined;
+       report.bots.push({ name: bot.name, skills: plan.skills.length, skillsOff, routines: plan.routines, notes: plan.notes, memories: plan.memories, apps: plan.apps,
+         ...(history ? { history } : {}) });
+     } catch {
+diff --git a/src/locales/en.json b/src/locales/en.json
+index 07d8982..74e4a59 100644
+--- a/src/locales/en.json
++++ b/src/locales/en.json
+@@ -8541,6 +8541,7 @@
+   "grokMove.count.memories": "Memories",
+   "grokMove.count.notes": "Routines saved as notes",
+   "grokMove.count.messages": "Chat messages",
++  "grokMove.historyFromFile": "Each Bot's chat comes over too, with its shape and colour, from the file you chose.",
+   "grokMove.historyPreview": "Each Bot's chat comes over too, from the Grok Bot app on this computer.",
+   "grokMove.history.noApp": "No chat came over: the Grok Bot app isn't on this computer.",
+   "grokMove.history.noMatch": "No chat came over: the Grok Bot app on this computer has no Bot with this name.",
+diff --git a/src/locales/es.json b/src/locales/es.json
+index d93d0d9..f6d09b1 100644
+--- a/src/locales/es.json
++++ b/src/locales/es.json
+@@ -9397,6 +9397,7 @@
+   "grokMove.count.memories": "Recuerdos",
+   "grokMove.count.notes": "Rutinas guardadas como notas",
+   "grokMove.count.messages": "Mensajes del chat",
++  "grokMove.historyFromFile": "También se trae el chat de cada bot, con su forma y su color, desde el archivo que has elegido.",
+   "grokMove.historyPreview": "El chat de cada bot también se trae, desde la app Grok Bot de este ordenador.",
+   "grokMove.history.noApp": "No se ha traído ningún chat: la app Grok Bot no está en este ordenador.",
+   "grokMove.history.noMatch": "No se ha traído ningún chat: la app Grok Bot de este ordenador no tiene ningún bot con este nombre.",
