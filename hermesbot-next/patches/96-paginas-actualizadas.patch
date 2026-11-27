@@ -1,0 +1,204 @@
+diff -ruN a/packages/phone-protocol/src/app.ts b/packages/phone-protocol/src/app.ts
+--- a/packages/phone-protocol/src/app.ts	2026-11-27 10:49:57
++++ b/packages/phone-protocol/src/app.ts	2026-11-27 10:54:00
+@@ -128,6 +128,12 @@
+   blocked?: AppBlockedReason;
+   /** A page from a folder that reloads in place when a file in its folder changes (show_html `live`). */
+   live?: true;
++  /** OpenBot: when the page was last replaced (ms). The chat shows the card where that happened and leaves a note
++   * where the page first appeared. */
++  updatedAt?: number;
++  /** OpenBot, in the chat's own list only, never stored: this row stands where a page first appeared; the page itself
++   * (its row id, here) is drawn further down, where it was last updated. */
++  movedBelow?: string;
+ }
+ 
+ /** A user row an app's ui/message sent. */
+diff -ruN a/server/chat-apps.ts b/server/chat-apps.ts
+--- a/server/chat-apps.ts	2026-11-27 10:49:58
++++ b/server/chat-apps.ts	2026-11-27 10:54:00
+@@ -186,6 +186,8 @@
+     title: made.title,
+     doc: stored.ok ? stored.doc : "",
+     rev: (existing.app.rev ?? 0) + 1,
++    // OpenBot: the chat shows the card where the page was last updated.
++    updatedAt: Date.now(),
+     bytes: pageBytes(page),
+     border,
+     ...liveField,
+diff -ruN a/src/components/ChatMarkdown.tsx b/src/components/ChatMarkdown.tsx
+--- a/src/components/ChatMarkdown.tsx	2026-11-27 10:49:58
++++ b/src/components/ChatMarkdown.tsx	2026-11-27 10:54:00
+@@ -31,6 +31,9 @@
+ import { canRevealHostPath, revealHostPath, revealProblemText } from "@/lib/reveal-host-path";
+ import { ThreadLink, ThreadRefsContext, threadLinkFromProps, type ThreadRefsValue } from "./ThreadRefs";
+ import { MarkdownTable } from "./MarkdownTable";
++import { linkPageMentions, PAGE_MENTION_HREF, useThreadPages } from "@/lib/page-mentions";
++import { openPageCard } from "@/lib/updated-pages";
++import { PageMiniIcon } from "./app/AppChrome";
+ import { CodeBlock, CodePlate, codeHash } from "./CodeBlock";
+ export { CodeBlock, HIGHLIGHT_CACHE_MAX, HIGHLIGHT_CACHE_MAX_CHARS, HIGHLIGHT_MAX_CHARS, type CodeBlockProps } from "./CodeBlock";
+ import { FilePreviewButton } from "./FilePreviewButton";
+@@ -707,6 +710,15 @@
+   const { threads, currentBotId, message, delivered, originals } = useContext(MessageScopeContext);
+   const linkMenu = useThreadLinkMenu(href), openPage = usePageOpener({ beside: true });
+   if (!href) return <span className="break-words">{children}</span>;
++  if (href.startsWith(PAGE_MENTION_HREF)) {
++    const pageId = href.slice(PAGE_MENTION_HREF.length);
++    return (
++      <button type="button" data-page-mention={pageId} onClick={(event) => { event.stopPropagation(); openPageCard(pageId); }}
++        className="inline break-words text-start font-medium text-ink underline decoration-ink/25 decoration-1 underline-offset-[3px] hover:decoration-ink/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
++        <PageMiniIcon />{children}
++      </button>
++    );
++  }
+   if (isUseMyComputerUrl(href)) return <UseMyComputerLink>{children}</UseMyComputerLink>;
+   const address = parseThreadRefUrl(href);
+   const ref = address ? resolveThreadRefAddress(threads, address, currentBotId) : null;
+@@ -901,7 +913,10 @@
+   const { threads, currentBotId } = MAY_LINK_THREAD.test(text) ? use(ThreadRefsContext) : NO_THREAD_REFS;
+   const streaming = use(StreamingReplyContext);
+   // OpenBot: some models leak their search-citation markers ("cite turn0view1…", wrapped in private-use characters) into the reply.
+-  const shown = useMemo(() => text.replace(/[\uE200-\uE2FF]?cite(?:[\uE200-\uE2FF]?turn\d+[a-z]+\d+)+[\uE200-\uE2FF]?/g, "").replace(/[\uE200-\uE2FF]/g, ""), [text]);
++  const clean = useMemo(() => text.replace(/[\uE200-\uE2FF]?cite(?:[\uE200-\uE2FF]?turn\d+[a-z]+\d+)+[\uE200-\uE2FF]?/g, "").replace(/[\uE200-\uE2FF]/g, ""), [text]);
++  // OpenBot: a finished reply that names one of this conversation's pages links to it.
++  const threadPages = useThreadPages(message?.threadId);
++  const shown = useMemo(() => (streaming ? clean : linkPageMentions(clean, threadPages)), [clean, streaming, threadPages]);
+   const parts = useMemo(() => markdownParts(shown, streaming), [shown, streaming]);
+   // One answer for the whole text, as a finished message gets: a block alone may hold half of a pair.
+   const needsMath = useMemo(() => normalizedSourceHasMath(parts.length === 1 ? parts[0]!.source : parts.map((part) => part.source).join("")), [parts]);
+diff -ruN a/src/components/ChatView.tsx b/src/components/ChatView.tsx
+--- a/src/components/ChatView.tsx	2026-11-27 10:49:58
++++ b/src/components/ChatView.tsx	2026-11-27 10:54:00
+@@ -70,7 +70,7 @@
+ import { ThreadRefText } from "./ThreadRefs"; import { WatchScreenButton } from "./WatchScreenButton";
+ import { optionsCardRow } from "./OptionsCardRow";
+ import { MessageBoundary } from "./MessageBoundary";
+-import { RichMessageRow, UserLineNote, richRowKind } from "./RichMessageRow"; import { SetupOffer } from "./SetupOffer"; import { SavedStepsChip } from "./SavedStepsChip";
++import { placeUpdatedPages } from "@/lib/updated-pages"; import { setThreadPages } from "@/lib/page-mentions"; import { RichMessageRow, UserLineNote, richRowKind } from "./RichMessageRow"; import { SetupOffer } from "./SetupOffer"; import { SavedStepsChip } from "./SavedStepsChip";
+ import { Composer } from "./Composer";
+ import { ChatErrorBanner, ChatNotice } from "./ChatErrorBanner";
+ import { ThreadContextWarning } from "./ContextWarning";
+@@ -755,7 +755,9 @@
+   useChatFindShortcut(inForkPanel, state.forkPanelOpen, setFindOpen);
+ 
+   const { messages: allMessages, activeLeafId } = bot;
+-  const messages = useMemo(() => visibleMessages({ messages: allMessages, activeLeafId }), [allMessages, activeLeafId]), chatMessages = useMemo(() => chatActivityMessages(messages, advanced, activity, bot.pinnedMessageId), [advanced, activity, messages, bot.pinnedMessageId]);
++  const messages = useMemo(() => placeUpdatedPages(visibleMessages({ messages: allMessages, activeLeafId })), [allMessages, activeLeafId]), chatMessages = useMemo(() => chatActivityMessages(messages, advanced, activity, bot.pinnedMessageId), [advanced, activity, messages, bot.pinnedMessageId]);
++  // OpenBot: replies that name one of this conversation's pages link to it (src/lib/page-mentions.ts).
++  useEffect(() => { setThreadPages(bot.threadId, allMessages.flatMap((m) => (m.kind === "app" && m.app?.source === "html" && m.app.title ? [{ id: m.id, title: m.app.title }] : []))); }, [allMessages, bot.threadId]);
+   const pinnedSignIns = useMemo(() => messages.filter(isPinnedSignIn).map((m) => ({ message: m, botId: bot.id, botName: bot.name, color: bot.color, threadId: bot.threadId })), [messages, bot.id, bot.name, bot.color, bot.threadId]);
+   const pinnedSignInIds = useMemo(() => new Set(pinnedSignIns.map((card) => card.message.id)), [pinnedSignIns]);
+   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
+diff -ruN a/src/components/app/AppChrome.tsx b/src/components/app/AppChrome.tsx
+--- a/src/components/app/AppChrome.tsx	2026-11-27 10:49:58
++++ b/src/components/app/AppChrome.tsx	2026-11-27 10:54:00
+@@ -70,6 +70,53 @@
+   );
+ }
+ 
++/** OpenBot: a small sheet with two lines and a colour chart, so a page reads as a page at a glance. */
++export function PageIcon({ quiet = false }: { quiet?: boolean }) {
++  return (
++    <span data-page-icon aria-hidden="true" className={cn("flex h-[40px] w-[32px] shrink-0 flex-col justify-between rounded-[7px] bg-composer p-[5px] shadow-[0_1px_3px_rgba(0,0,0,0.10)] ring-1 ring-ink/[0.08]", quiet && "opacity-60")}>
++      <span className="flex flex-col gap-[3px]">
++        <span className="h-[3px] w-full rounded-full bg-ink/[0.14]" />
++        <span className="h-[3px] w-[55%] rounded-full bg-ink/[0.14]" />
++      </span>
++      <span className="flex h-[16px] items-end gap-[2px]">
++        <span className="h-[5px] flex-1 rounded-[1px] bg-[#ef6b5a]" />
++        <span className="h-[8px] flex-1 rounded-[1px] bg-[#f2a33a]" />
++        <span className="h-[12px] flex-1 rounded-[1px] bg-[#3fae6a]" />
++        <span className="h-[16px] flex-1 rounded-[1px] bg-[#3f7fe8]" />
++      </span>
++    </span>
++  );
++}
++
++/** OpenBot: the small tile of a page inside a line of text. */
++export function PageMiniIcon() {
++  return (
++    <span aria-hidden="true" className="me-1 inline-flex h-[15px] w-[13px] translate-y-[2px] flex-col justify-end rounded-[3px] bg-composer p-[2px] shadow-[0_0.5px_2px_rgba(0,0,0,0.14)] ring-[0.5px] ring-ink/[0.12]">
++      <span className="flex h-[8px] items-end gap-[1px]">
++        <span className="h-[3px] flex-1 rounded-[0.5px] bg-[#ef6b5a]" />
++        <span className="h-[5px] flex-1 rounded-[0.5px] bg-[#f2a33a]" />
++        <span className="h-[6.5px] flex-1 rounded-[0.5px] bg-[#3fae6a]" />
++        <span className="h-[8px] flex-1 rounded-[0.5px] bg-[#3f7fe8]" />
++      </span>
++    </span>
++  );
++}
++
++/** OpenBot: where a page first appeared, once it has been updated further down the conversation: a quiet row that
++ * takes the person to the page's card. */
++export function PageMovedCard({ title, onGo }: { title: string; onGo(): void }) {
++  return (
++    <button type="button" data-page-moved onClick={onGo}
++      className={cn(APP_SURFACE, "flex min-h-[68px] items-center gap-3 px-4 py-3 text-start transition-colors duration-[120ms] hover:bg-[color-mix(in_srgb,var(--color-composer),var(--color-ink)_3%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none")}>
++      <PageIcon quiet />
++      <span className="min-w-0 flex-1">
++        <span title={title} className="block truncate text-[14.5px] font-medium leading-5 text-ink-secondary"><bdi dir="auto">{title}</bdi></span>
++        <span className="block truncate text-[13px] leading-[18px] text-ink-tertiary">Actualizado más abajo</span>
++      </span>
++    </button>
++  );
++}
++
+ export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false, divided = false }: {
+   title: string;
+   /** OpenBot: a hairline above the footer when the card shows a preview of the page over it. */
+@@ -84,19 +131,7 @@
+ }) {
+   return (
+     <div data-page-footer className={cn("flex min-h-[68px] items-center gap-3 px-4 py-3", divided && "border-t border-ink/[0.07]")}>
+-      {/* OpenBot: a small sheet with two lines and a colour chart, so a page reads as a page at a glance. */}
+-      <span data-page-icon aria-hidden="true" className="flex h-[40px] w-[32px] shrink-0 flex-col justify-between rounded-[7px] bg-composer p-[5px] shadow-[0_1px_3px_rgba(0,0,0,0.10)] ring-1 ring-ink/[0.08]">
+-        <span className="flex flex-col gap-[3px]">
+-          <span className="h-[3px] w-full rounded-full bg-ink/[0.14]" />
+-          <span className="h-[3px] w-[55%] rounded-full bg-ink/[0.14]" />
+-        </span>
+-        <span className="flex h-[16px] items-end gap-[2px]">
+-          <span className="h-[5px] flex-1 rounded-[1px] bg-[#ef6b5a]" />
+-          <span className="h-[8px] flex-1 rounded-[1px] bg-[#f2a33a]" />
+-          <span className="h-[12px] flex-1 rounded-[1px] bg-[#3fae6a]" />
+-          <span className="h-[16px] flex-1 rounded-[1px] bg-[#3f7fe8]" />
+-        </span>
+-      </span>
++      <PageIcon />
+       <div className="min-w-0 flex-1">
+         <div title={title} className="truncate text-[14.5px] font-medium leading-5 text-ink"><bdi dir="auto">{title}</bdi></div>
+         <div className="truncate text-[13px] leading-[18px] text-ink-tertiary">{detail}</div>
+diff -ruN a/src/components/app/AppMessage.tsx b/src/components/app/AppMessage.tsx
+--- a/src/components/app/AppMessage.tsx	2026-11-27 10:49:58
++++ b/src/components/app/AppMessage.tsx	2026-11-27 10:54:00
+@@ -7,7 +7,8 @@
+ import { APP_FRAME_LIMITS } from "../../../shared/app-frame/bridge";
+ import { AppDocumentError, fetchAppDocument, type AppFetchFailure } from "./app-api";
+ import { APP_POOL_LIMITS, useAppPoolSlot, type AppPool } from "./app-pool";
+-import { AppDone, AppHeader, AppInfo, AppOpenButton, AppPlaceholder, AppStrip, APP_SURFACE, PageCardFooter } from "./AppChrome";
++import { AppDone, AppHeader, AppInfo, AppOpenButton, AppPlaceholder, AppStrip, APP_SURFACE, PageCardFooter, PageMovedCard } from "./AppChrome";
++import { showPageCard } from "@/lib/updated-pages";
+ import { AppFrame, type AppFrameHandle, type AppFrameProblem } from "./AppFrame";
+ import type { AppSelection } from "./app-frame-host";
+ import { PageCitationButton } from "../CitationUI";
+@@ -87,6 +88,11 @@
+     return message.text
+       ? <div className="chat-text w-fit max-w-[min(42rem,78%)] rounded-2xl bg-card px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-ink">{message.text}</div>
+       : null;
++  }
++  // OpenBot: where the page first appeared, after it was updated further down (src/lib/updated-pages.ts).
++  if (payload.movedBelow) {
++    const target = payload.movedBelow;
++    return <div data-app-moved={target} className={cn("w-full text-start", CARD_WIDTH)}><PageMovedCard title={payload.title} onGo={() => showPageCard(target)} /></div>;
+   }
+   return <AppRow botId={botId} botName={botName} threadId={threadId} message={message} payload={payload} pool={pool} room={room} />;
+ }
+diff -ruN a/src/styles.css b/src/styles.css
+--- a/src/styles.css	2026-11-27 10:51:48
++++ b/src/styles.css	2026-11-27 10:54:00
+@@ -4027,3 +4027,5 @@
+ :root[data-skin] .chat-column-dock .composer-shell {
+   box-shadow: 0 2px 10px -1px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04), 0 0 0 0.5px color-mix(in srgb, var(--color-ink) 10%, transparent);
+ }
++/* OpenBot: the page card someone was just taken to stands out for a moment. */
++[data-app][data-page-found] > div { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent), 0 1px 4px rgb(0 0 0 / 0.05); transition: box-shadow 200ms; }
