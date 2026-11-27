@@ -1,0 +1,51 @@
+diff --git a/src/components/Avatar.tsx b/src/components/Avatar.tsx
+index 7f6c8e2c2..cc85d713c 100644
+--- a/src/components/Avatar.tsx
++++ b/src/components/Avatar.tsx
+@@ -38,7 +38,7 @@ function mix(hex: string, toward: string, t: number): string {
+ const gradientFor = (color: MausColor, custom?: string): [string, string, string] => {
+   if (!custom && color === "chrome") return CHROME_GRADIENT;
+   const fill = custom ?? MAUS_COLORS[color] ?? MAUS_COLORS.green;
+-  return [mix(fill, "#ffffff", 0.2), fill, mix(fill, "#000000", 0.16)];
++  return [mix(fill, "#ffffff", 0.3), fill, mix(fill, "#000000", 0.24)];
+ };
+ 
+ /** A bot's own body colour when it picked one, else undefined. */
+diff --git a/src/components/CursorAvatar.tsx b/src/components/CursorAvatar.tsx
+index 78908b895..e2ce57cee 100644
+--- a/src/components/CursorAvatar.tsx
++++ b/src/components/CursorAvatar.tsx
+@@ -1008,6 +1008,21 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
+         aria-hidden={label ? undefined : true}
+       >
+         <defs>
++          {/* OpenBot: volume. A soft light from the top left, a shadow towards the bottom and a small shine. */}
++          <filter id={`${uid}-soft`} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5" /></filter>
++          <radialGradient id={`${uid}-light`} cx="0.32" cy="0.2" r="0.75">
++            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.42" />
++            <stop offset="45%" stopColor="#ffffff" stopOpacity="0.1" />
++            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
++          </radialGradient>
++          <linearGradient id={`${uid}-shade`} x1="0" y1="0" x2="0" y2="1">
++            <stop offset="45%" stopColor="#000000" stopOpacity="0" />
++            <stop offset="100%" stopColor="#000000" stopOpacity="0.26" />
++          </linearGradient>
++          <radialGradient id={`${uid}-shine`} cx="0.3" cy="0.16" r="0.16">
++            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.7" />
++            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
++          </radialGradient>
+           <linearGradient id={`${uid}-grad`} x1="1" y1="0" x2="0" y2="1">
+             <stop offset="0%" stopColor={gradient[0]} />
+             <stop offset="55%" stopColor={gradient[1]} />
+@@ -1027,7 +1042,11 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
+           <g ref={bodyGroup}>
+           <g ref={bodyContent}>
+           {picture ? <image href={picture} x="-15" y="-15" width={VIEW_SPAN} height={VIEW_SPAN} preserveAspectRatio="none" /> : <g mask={cutFace ? `url(#${uid}-face)` : undefined}>
++            <g className="omb-volume" transform="translate(0 7)" opacity="0.22" filter={`url(#${uid}-soft)`}><g transform={silhouette.fit || undefined} fill="#000000" dangerouslySetInnerHTML={clip} /></g>
+             <g transform={silhouette.fit || undefined} dangerouslySetInnerHTML={body} />
++            <g className="omb-volume" transform={silhouette.fit || undefined} fill={`url(#${uid}-shade)`} dangerouslySetInnerHTML={clip} />
++            <g className="omb-volume" transform={silhouette.fit || undefined} fill={`url(#${uid}-light)`} dangerouslySetInnerHTML={clip} />
++            <g className="omb-volume" transform={silhouette.fit || undefined} fill={`url(#${uid}-shine)`} dangerouslySetInnerHTML={clip} />
+           </g>}
+           {!cutFace && face}
+           </g>

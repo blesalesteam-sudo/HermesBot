@@ -93,6 +93,8 @@ color. Los dibujos son propios de OpenBot y todos llevan las antenas del logo.
 - `patches/92-bots-estilo-grok.patch`: colores, todas las formas con el dibujo del robot (antes las formas usaban
   otro motor sin antenas), el selector solo con formas y el estado del bot en el dibujo para encender las antenas.
   Los nombres en español los pone `rebrand.mjs`.
+- `patches/93-bots-volumen.patch`: volumen en cada bot (luz arriba a la izquierda, sombra abajo, un brillo y una
+  sombra suave debajo), dibujado dentro del propio SVG. No uses filtros CSS en el avatar: Chrome deja de pintar la cara.
 
 ## Grupos de Telegram y WhatsApp (oyente silencioso)
 
