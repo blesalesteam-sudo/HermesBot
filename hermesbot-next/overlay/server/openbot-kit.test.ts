@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { AppUse } from "../shared/app.ts";
+import { bundlePage } from "./chat-apps.ts";
 import { expandOpenbotKit, forgetOpenbotKit, withOpenbotKit } from "./openbot-kit.ts";
 
 type Page = { html: string; uses?: AppUse[] };
@@ -44,6 +45,16 @@ describe("a page that links the house kit", () => {
     expect(withOpenbotKit<Page>({ html, uses: ["data"] }).uses).toEqual(["data", "state"]);
     expect(withOpenbotKit<Page>({ html }, ["state"]).uses).toBeUndefined();
     expect(withOpenbotKit<Page>({ html }, ["data"]).uses).toEqual(["data", "state"]);
+  });
+
+  it("is written into a page shown from a folder too (show_html `path`), which then keeps its state", () => {
+    const index = { path: "index.html", data: Buffer.from('<link rel="stylesheet" href="kit.css"><main id="plantilla"></main><script src="plantilla.js"></script>') };
+    const made = bundlePage({ files: [index], source: "/work/tareas", skipped: [] } as never, "Tareas");
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    expect(made.page.html).toContain("body{color:red}");
+    expect(made.page.html).toContain("window.ran");
+    expect(made.page.uses).toEqual(["state"]);
   });
 
   it("leaves any other page untouched", () => {

@@ -128,6 +128,8 @@ La página es siempre esta, con tu descripción dentro. Hay dos completas para c
 </body></html>
 ```
 
+Muéstrala con `show_html` pasando la página en `html`, sin guardarla antes como archivo: es más rápido y no hace falta.
+
 **La descripción** (JSON):
 
 - `titulo` y `resumen` (una frase: para qué sirve y cómo se usa). `aviso` opcional: `{ "titulo", "texto" }`.

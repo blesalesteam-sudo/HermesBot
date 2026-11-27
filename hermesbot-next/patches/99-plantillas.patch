@@ -1,15 +1,34 @@
 diff -ruN a/server/chat-apps.ts b/server/chat-apps.ts
 --- a/server/chat-apps.ts	2026-11-27 12:45:57
-+++ b/server/chat-apps.ts	2026-11-27 12:56:22
++++ b/server/chat-apps.ts	2026-11-27 13:11:09
 @@ -11,6 +11,7 @@
  import { AppStates } from "./app-state.ts";
  import { speakerIn, type AgentCardResult, type AgentCardStore } from "./chat-widgets.ts";
  import { compileJsxPage } from "./jsx-compile.ts";
-+import { withOpenbotKit } from "./openbot-kit.ts";
++import { expandOpenbotKit, withOpenbotKit } from "./openbot-kit.ts";
  import { appDocRefs } from "./message-db.ts";
  import { createPageFiles, type PageFilesViewer } from "./page-files.ts";
  import { pageSignature, PageBundleError, readBotPageBundle, readPageBundle, skippedNote, stillReadable, type BotFolders, type PageBundle, type PageFile } from "./pages/bundle.ts";
-@@ -120,8 +121,10 @@
+@@ -66,14 +67,16 @@
+ export function bundlePage(bundle: PageBundle, title: string): MadePage | { ok: false; error: string } {
+   const index = bundle.files.find((file) => file.path === "index.html");
+   if (!index) return { ok: false, error: "path: needs an index.html at the top of the folder." };
+-  const html = index.data.toString("utf8");
++  // OpenBot: a page from a folder links the house kit the same way; it is written in here too.
++  const kit = expandOpenbotKit(index.data.toString("utf8"));
++  const html = kit.html;
+   if (utf8Bytes(html) > APP_LIMITS.htmlBytes) {
+     return { ok: false, error: `path: index.html is over the ${APP_LIMITS.htmlBytes}-byte limit; move data into files beside it.` };
+   }
+   const page = scrubbed(html, title);
+   const videos = bundle.videos && Object.keys(bundle.videos).length ? { videos: bundle.videos } : {};
+   const leftOut = skippedNote(bundle.skipped);
+-  return { ok: true, page: { html: page.html, files: bundle.files.filter((file) => file !== index), folder: bundle.source, ...videos }, title: page.title, masked: page.masked,
++  return { ok: true, page: { html: page.html, files: bundle.files.filter((file) => file !== index), folder: bundle.source, ...videos, ...(kit.template ? { uses: ["state" as const] } : {}) }, title: page.title, masked: page.masked,
+     ...(leftOut ? { leftOut } : {}) };
+ }
+ 
+@@ -120,12 +123,20 @@
    const existing = "appId" in parsed.value ? appRow(store, threadId, parsed.value.appId) : undefined;
    const title = parsed.value.title ?? existing?.app.title ?? "Page";
    if (parsed.value.path === undefined) {
@@ -22,3 +41,14 @@ diff -ruN a/server/chat-apps.ts b/server/chat-apps.ts
    }
    const folders = args.folders;
    if (!folders) return { ok: false, status: 400, error: "path: a page from a folder can't be shown here; send html instead." };
+-  return folderPage(parsed.value.path, title, folders).then((made) => (made.ok ? placePage(args, parsed.value, made) : made));
++  return folderPage(parsed.value.path, title, folders).then((made) => {
++    if (!made.ok) return made;
++    // OpenBot: a template keeps its state whatever else the bot says the page uses.
++    const asked = parsed.value.uses;
++    const value = made.page.uses?.includes("state") && asked && !asked.includes("state") ? { ...parsed.value, uses: [...asked, "state" as const] } : parsed.value;
++    return placePage(args, value, made);
++  });
+ }
+ 
+ function placePage(
