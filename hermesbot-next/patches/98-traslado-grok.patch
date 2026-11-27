@@ -279,10 +279,39 @@ index 6cdeb16..722a7b9 100644
    };
  }
 diff --git a/src/components/GrokMoveDialog.tsx b/src/components/GrokMoveDialog.tsx
-index 5abc7b8..df6be94 100644
+index 5abc7b8..4da99ad 100644
 --- a/src/components/GrokMoveDialog.tsx
 +++ b/src/components/GrokMoveDialog.tsx
-@@ -275,6 +275,9 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+@@ -118,8 +118,19 @@ function BringBack({ connect, local, look, found, reply, error, onReply, onFiles
+   const { state: copied, copy } = useCopyFeedback(GROK_EXPORT_PROMPT);
+   return (
+     <>
+-      <p className="text-[13px] leading-relaxed text-ink-secondary">{t("grokMove.intro")}</p>
++      {/* OpenBot: the quick way first. The Mac exporter (traslado-grok/exportar.mjs) writes every Bot, its look and its
++          chat into one file; the message for each Bot is only for what lives in Grok Bot's cloud. */}
++      <section data-grok-move-from-mac className="flex flex-col items-start gap-1.5 rounded-xl border border-accent/40 bg-accent/[0.06] px-3 py-3">
++        <h3 className="text-[14px] font-medium text-ink">{t("grokMove.fromMac.title")}</h3>
++        <p className="text-[13px] leading-relaxed text-ink-secondary">{t("grokMove.fromMac.hint")}</p>
++        <button type="button" data-grok-move-from-mac-file onClick={() => picker.current?.click()} className={cn(PRIMARY, "mt-1 inline-flex items-center gap-2")}><FileUp size={15} />{t("grokMove.fromMac.choose")}</button>
++        {error && <p role="alert" className="text-[13px] leading-relaxed text-danger">{error}</p>}
++      </section>
+       {connect}
++      <section className="flex flex-col gap-1 border-t border-hairline/40 pt-3">
++        <h3 className="text-[14px] font-medium text-ink">{t("grokMove.optional.title")}</h3>
++        <p className="text-[13px] leading-relaxed text-ink-secondary">{t("grokMove.optional.hint")}</p>
++      </section>
+       <section className="flex flex-col items-start gap-1.5">
+         <h3 className="text-[14px] font-medium text-ink">{t("grokMove.step1")}</h3>
+         <p className="text-[13px] leading-relaxed text-ink-secondary">{t("grokMove.step1Hint")}</p>
+@@ -142,7 +153,6 @@ function BringBack({ connect, local, look, found, reply, error, onReply, onFiles
+         <textarea value={reply} onChange={(event) => onReply(event.target.value)} rows={4}
+           aria-label={t("grokMove.replyLabel")} placeholder={t("grokMove.replyPlaceholder")}
+           className="mt-1 w-full resize-y rounded-xl border border-hairline/40 bg-inset px-3 py-2.5 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none" />
+-        {error && <p role="alert" className="text-[13px] leading-relaxed text-danger">{error}</p>}
+         <div>
+           <button type="button" onClick={() => picker.current?.click()} className={cn(SECONDARY, "inline-flex items-center gap-2")}><FileUp size={15} />{t("grokMove.chooseFile")}</button>
+           <input ref={picker} type="file" multiple accept=".json,.md,.txt,application/json,text/plain,text/markdown" className="hidden" onChange={(event) => { onFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+@@ -275,6 +285,9 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
      };
    }, [onStart]);
  
@@ -292,7 +321,7 @@ index 5abc7b8..df6be94 100644
    const start = async () => {
      if (!preview) return;
      setImporting(true);
-@@ -332,10 +335,10 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+@@ -332,10 +345,10 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
                  <BotCounts key={plan.packageId} heading={plan.addedAs} skills={plan.skills.length} routines={plan.routines} memories={plan.memories} notes={plan.notes}
                    skillsOff={plan.skills.filter((skill) => !skill.on).map((skill) => skill.name)} />
                ))}
@@ -306,7 +335,7 @@ index 5abc7b8..df6be94 100644
              </>
            ) : (
              <BringBack local={local} look={look} found={found} reply={reply} error={error} onReply={setReply}
-@@ -356,7 +359,7 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
+@@ -356,7 +369,7 @@ export function GrokMoveDialog({ onClose, inline = false }: { onClose: () => voi
            ) : preview ? (
              <>
                <button type="button" disabled={importing} onClick={() => setPreview(null)} className={SECONDARY}>{t("grokMove.back")}</button>
@@ -401,25 +430,35 @@ index 06c423b..fabff3f 100644
          ...(history ? { history } : {}) });
      } catch {
 diff --git a/src/locales/en.json b/src/locales/en.json
-index 07d8982..74e4a59 100644
+index 07d8982..6b346dd 100644
 --- a/src/locales/en.json
 +++ b/src/locales/en.json
-@@ -8541,6 +8541,7 @@
+@@ -8541,6 +8541,12 @@
    "grokMove.count.memories": "Memories",
    "grokMove.count.notes": "Routines saved as notes",
    "grokMove.count.messages": "Chat messages",
++  "grokMove.fromMac.title": "All your Bots at once, from your Mac",
++  "grokMove.fromMac.hint": "On the Mac where Grok Bot is installed, the OpenBot copier makes the file openbot-traslado-grok-bot.json in Downloads. It brings every Bot with its name, shape, colour, instructions and chats. Choose that file here. You don't need to send anything to Grok Bot.",
++  "grokMove.fromMac.choose": "Choose the file from your Mac",
++  "grokMove.optional.title": "Optional: skills, routines and memories",
++  "grokMove.optional.hint": "Grok Bot keeps these in its cloud, not on your Mac. Only if you want them: send this message to each Bot once. If you already did, there's no need to send it again.",
 +  "grokMove.historyFromFile": "Each Bot's chat comes over too, with its shape and colour, from the file you chose.",
    "grokMove.historyPreview": "Each Bot's chat comes over too, from the Grok Bot app on this computer.",
    "grokMove.history.noApp": "No chat came over: the Grok Bot app isn't on this computer.",
    "grokMove.history.noMatch": "No chat came over: the Grok Bot app on this computer has no Bot with this name.",
 diff --git a/src/locales/es.json b/src/locales/es.json
-index d93d0d9..f6d09b1 100644
+index d93d0d9..582d60e 100644
 --- a/src/locales/es.json
 +++ b/src/locales/es.json
-@@ -9397,6 +9397,7 @@
+@@ -9397,6 +9397,12 @@
    "grokMove.count.memories": "Recuerdos",
    "grokMove.count.notes": "Rutinas guardadas como notas",
    "grokMove.count.messages": "Mensajes del chat",
++  "grokMove.fromMac.title": "Todos tus bots de una vez, desde tu Mac",
++  "grokMove.fromMac.hint": "En el Mac donde está Grok Bot, el copiador de OpenBot deja el archivo openbot-traslado-grok-bot.json en Descargas. Trae todos los bots con su nombre, forma, color, instrucciones y conversaciones. Elige ese archivo aquí. No hace falta mandarle nada a Grok Bot.",
++  "grokMove.fromMac.choose": "Elegir el archivo de tu Mac",
++  "grokMove.optional.title": "Opcional: habilidades, rutinas y recuerdos",
++  "grokMove.optional.hint": "Grok Bot los guarda en su nube, no en tu Mac. Solo si los quieres: manda este mensaje a cada bot una vez. Si ya lo hiciste, no hace falta repetirlo.",
 +  "grokMove.historyFromFile": "También se trae el chat de cada bot, con su forma y su color, desde el archivo que has elegido.",
    "grokMove.historyPreview": "El chat de cada bot también se trae, desde la app Grok Bot de este ordenador.",
    "grokMove.history.noApp": "No se ha traído ningún chat: la app Grok Bot no está en este ordenador.",
