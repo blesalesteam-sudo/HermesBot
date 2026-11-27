@@ -108,9 +108,16 @@ function ClaveComposio() {
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
   const guardar = async () => {
+    const valor = clave.trim();
+    // Composio tiene varias claves; OpenBot necesita la del proyecto (ak_). Las demás se reconocen por su comienzo.
+    const otra = /^oak_/.test(valor) ? "de organización" : /^uak_/.test(valor) ? "de usuario" : /^ck_/.test(valor) ? "de consumidor" : null;
+    if (otra || !valor.startsWith("ak_")) {
+      setFallo(`${otra ? `Esa es tu clave ${otra} de Composio, no la del proyecto.` : "Esa no parece la clave del proyecto."} Busca la que empieza por «ak_»: en Composio, entra en tu proyecto → Settings → API Keys y pulsa «Create API Key» si no tienes ninguna.`);
+      return;
+    }
     setGuardando(true); setFallo(null);
     try {
-      await api("/api/config", { method: "PUT", body: JSON.stringify({ composio: { apiKey: clave.trim() } }) });
+      await api("/api/config", { method: "PUT", body: JSON.stringify({ composio: { apiKey: valor } }) });
       setClave("");
       const catalogo = await loadAppCatalog();
       if (!catalogo.configured) setFallo("La clave se guardó pero Composio no la acepta. Revisa que sea la clave del proyecto (API key) y vuelve a pegarla.");
@@ -120,12 +127,13 @@ function ClaveComposio() {
     <p className={nota}>OpenBot usa <b className="text-ink">Composio</b> para conectarse con Google de forma segura. Es gratis y solo se hace una vez: después sirve para Gmail, Calendar y cientos de apps más.</p>
     <ol className="flex flex-col gap-1.5 rounded-xl bg-control/40 p-3 text-[13px] leading-5 text-ink">
       <li>1. Crea una cuenta gratis en Composio.</li>
-      <li>2. En tu proyecto, ve a <b>Settings → API Keys</b> y copia la clave.</li>
+      <li>2. Entra en tu proyecto → <b>Settings → API Keys</b>. Si no hay ninguna, pulsa <b>Create API Key</b>.</li>
+      <li className="ps-4 text-ink-secondary">Copia la que empieza por <code className="rounded bg-app px-1 text-ink">ak_</code>. Las que empiezan por oak_, uak_ o ck_ no sirven aquí.</li>
       <li>3. Pégala aquí abajo.</li>
     </ol>
     <a href="https://app.composio.dev" target="_blank" rel="noreferrer" className={cn(boton, "self-start bg-control text-ink hover:bg-raised-hover")}>Abrir Composio <ExternalLink size={13} /></a>
     <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (clave.trim()) void guardar(); }}>
-      <input type="password" autoComplete="off" spellCheck={false} value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Pega aquí tu clave de Composio" aria-label="Clave de Composio"
+      <input type="password" autoComplete="off" spellCheck={false} value={clave} onChange={(e) => setClave(e.target.value)} placeholder="ak_… (clave del proyecto)" aria-label="Clave de Composio"
         className="h-9 min-w-0 flex-1 rounded-full bg-control/70 px-4 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-accent" />
       <button type="submit" disabled={guardando || !clave.trim()} className={cn(boton, "bg-ink text-app hover:opacity-90")}>
         {guardando && <Loader2 size={14} className="animate-spin" />}Guardar
