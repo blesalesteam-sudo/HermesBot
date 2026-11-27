@@ -45,6 +45,18 @@ lleva quién lo escribió y los bots lo saben: en cada mensaje reciben una nota 
   y escribe sus usuarios (uno por línea).
 - Por dentro, cada usuario es la dirección `<usuario>@openbot.local`; nunca se envía correo a ella.
 
+- **Entrar:** la pantalla pide solo usuario y contraseña (`overlay/src/components/openbot/OpenbotSignIn.tsx`). Tras varios
+  fallos seguidos hay que esperar antes de volver a probar. El código de emparejamiento sigue funcionando, escondido: con un
+  enlace que ya lo trae o abriendo `/pair#codigo`. Mientras no exista ninguna cuenta, la entrada sigue siendo por código.
+- **La cuenta del dueño:** quien entró con un código ve un aviso «Crea tu usuario y contraseña» (y lo mismo en Ajustes →
+  Cuenta). Su perfil sigue siendo el de siempre (`config.json` → profile), así que no pierde nada; sus aparatos siguen dentro.
+- **Invitar:** Ajustes → Personas → «Invitar» da un enlace `/pair?invitacion=…` de un solo uso que caduca en 7 días. Quien lo
+  abre pone su nombre, su usuario y su contraseña y entra como miembro. Se guarda solo el resumen (hash) del enlace.
+- **Perfil de cada persona** (Ajustes → Cuenta → Tu perfil): foto, nombre, a qué se dedica y «Sobre ti». Se guarda en
+  `/opt/data/.openmausbot/openbot-people/`. Los bots reciben la lista de personas con su perfil en sus instrucciones, y en
+  cada mensaje una nota con el perfil de quien escribe; lo que aprenden de alguien va a su «Sobre ti», no al de los demás.
+  Archivos: `overlay/server/openbot-people.ts`, `overlay/src/components/openbot/` y `patches/99z-entrar-y-perfiles.patch`.
+
 Archivos: `overlay/server/local-accounts.ts` (cuentas, contraseñas con scrypt),
 `overlay/server/routes/local-accounts.ts` (entrar y gestionar), `overlay/src/components/LocalAccountsSection.tsx`
 (Ajustes) y `patches/70-usuarios.patch` (conexión con la app, pantalla de entrada y visibilidad de bots).

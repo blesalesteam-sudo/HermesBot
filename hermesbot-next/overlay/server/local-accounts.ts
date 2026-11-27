@@ -21,6 +21,8 @@ interface StoredAccount {
   salt: string;
   hash: string;
   createdAt: number;
+  /** OpenBot: the owner of this OpenBot (their profile is the server's own, config.json → profile). */
+  owner?: boolean;
 }
 
 export interface LocalAccount {
@@ -29,6 +31,7 @@ export interface LocalAccount {
   role: LocalRole;
   email: string;
   createdAt: number;
+  owner?: boolean;
 }
 
 export const LOCAL_EMAIL_DOMAIN = "openbot.local";
@@ -52,7 +55,7 @@ function digest(password: string, salt: string): string {
   return scryptSync(password, salt, KEY_LENGTH).toString("base64");
 }
 
-export type AccountInput = { username: string; displayName?: string; role?: LocalRole; password?: string };
+export type AccountInput = { username: string; displayName?: string; role?: LocalRole; password?: string; owner?: boolean; createOnly?: boolean };
 export type AccountResult = { ok: true; account: LocalAccount } | { ok: false; error: string };
 
 export interface LocalAccounts {
@@ -87,6 +90,7 @@ export function createLocalAccounts(dataDir: string): LocalAccounts {
   };
   const shown = (stored: StoredAccount): LocalAccount => ({
     username: stored.username, displayName: stored.displayName, role: stored.role, email: localEmail(stored.username), createdAt: stored.createdAt,
+    ...(stored.owner ? { owner: true } : {}),
   });
   const find = (username: string) => read().find((account) => account.username === username.trim().toLowerCase());
 
@@ -126,13 +130,16 @@ export function createLocalAccounts(dataDir: string): LocalAccounts {
       const index = accounts.findIndex((account) => account.username === username);
       if (index < 0) {
         if (!input.password) return { ok: false, error: "Pon una contraseña para la cuenta nueva." };
+        if (input.owner && accounts.some((account) => account.owner)) return { ok: false, error: "Este OpenBot ya tiene dueño." };
         const salt = randomBytes(16).toString("base64");
-        const stored: StoredAccount = { username, displayName: displayName || username, role: input.role ?? "member", salt, hash: digest(input.password, salt), createdAt: Date.now() };
+        const stored: StoredAccount = { username, displayName: displayName || username, role: input.owner ? "admin" : input.role ?? "member", salt, hash: digest(input.password, salt), createdAt: Date.now(), ...(input.owner ? { owner: true } : {}) };
         accounts.push(stored);
         write(accounts);
         return { ok: true, account: shown(stored) };
       }
+      if (input.createOnly) return { ok: false, error: "Ese usuario ya existe. Elige otro." };
       const current = accounts[index];
+      if (current.owner && input.role === "member") return { ok: false, error: "El dueño siempre es administrador." };
       const nextRole = input.role ?? current.role;
       if (current.role === "admin" && nextRole !== "admin" && accounts.filter((account) => account.role === "admin").length === 1) {
         return { ok: false, error: "Tiene que quedar al menos un administrador." };
@@ -150,6 +157,7 @@ export function createLocalAccounts(dataDir: string): LocalAccounts {
       const accounts = read();
       const found = find(username);
       if (!found) return { ok: false, error: "No existe ese usuario." };
+      if (found.owner) return { ok: false, error: "La cuenta del dueño no se puede borrar." };
       if (found.role === "admin" && accounts.filter((account) => account.role === "admin").length === 1) {
         return { ok: false, error: "No se puede borrar el último administrador." };
       }
@@ -164,7 +172,7 @@ export function seedFirstAdmin(accounts: LocalAccounts, env: NodeJS.ProcessEnv =
   const username = env.OPENBOT_ADMIN_USER?.trim();
   const password = env.OPENBOT_ADMIN_PASSWORD;
   if (!username || !password || accounts.count() > 0) return null;
-  const made = accounts.save({ username, password, role: "admin", displayName: env.OPENBOT_ADMIN_NAME?.trim() || username });
+  const made = accounts.save({ username, password, role: "admin", owner: true, displayName: env.OPENBOT_ADMIN_NAME?.trim() || username });
   if (!made.ok) {
     console.warn(`OpenBot: no se pudo crear el primer administrador: ${made.error}`);
     return null;
