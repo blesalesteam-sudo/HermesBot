@@ -1,0 +1,136 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index bc89b0d8d..bdaf45332 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -7,6 +7,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
+ import { useWelcomeViewer, WelcomeGate } from "@/components/onboarding/WelcomeGate";
+ import { MausBotWelcome } from "@/components/MausBotWelcome";
+ import { NewBotNameHost } from "@/components/NewBotName";
++import { BotLookDialogHost } from "@/components/BotLookDialog";
+ import { MemberApps } from "@/components/MemberApps";
+ import { CloudTimeZoneSync } from "@/components/CloudTimeZone";
+ import { cloudSignInDue, noEnginesDue, spotlightsQuiet, workedEarlier, type WelcomeViewer } from "@/lib/onboarding";
+@@ -577,6 +578,7 @@ function Application() {
+         <WelcomeGate viewer={viewer} />
+         <MausBotWelcome viewer={viewer} />
+         <NewBotNameHost />
++        <BotLookDialogHost />
+         <CloudTimeZoneSync viewer={viewer} />
+         <GuidedTour />
+         <LiveCallHost />
+diff --git a/src/components/SidebarBotMenu.tsx b/src/components/SidebarBotMenu.tsx
+index 3953176c3..bf35af05b 100644
+--- a/src/components/SidebarBotMenu.tsx
++++ b/src/components/SidebarBotMenu.tsx
+@@ -28,6 +28,7 @@ import { departmentNames, moveBotsToSection, useMayMoveBots } from "./bot-sectio
+ import { openBotSettings } from "./bot-panel/panel-link";
+ import { ShortcutHint } from "./ShortcutHint";
+ import { isArchived } from "./SidebarThreadRow";
++import { askBotLook } from "./BotLookDialog";
+ 
+ type Flyout = "more" | "move";
+ 
+@@ -72,6 +73,13 @@ export function BotContextMenu({
+   const more = moreIntent.current;
+   const shown = motion.value;
+   const { state, dispatch } = useStore();
++  /** OpenBot: name, shape and colour in Grok Bot's panel; the change saves like any other profile edit. */
++  const editLook = (bot: Bot) => {
++    void askBotLook({ name: bot.name, color: bot.color, body: bot.mascotBody ?? "cursor", antennas: Boolean(bot.defaultBot) }, true).then((look) => {
++      if (!look) return;
++      dispatch({ type: "updateBot", botId: bot.id, patch: { name: look.name, color: look.color, mascotBody: look.body } });
++    });
++  };
+   const showThreads = useShowThreads();
+   const admin = useOwnerOrAdmin();
+   const member = admin === false;
+@@ -263,7 +271,7 @@ export function BotContextMenu({
+       </button>
+     );
+     const moveToSection = mayMove ? flyoutButton("move", moveRef, <FolderPlus size={16} className="text-ink-secondary" />, t("sidebar.bot.moveToSection")) : null;
+-    const rename = onRename && (team ? mayRename(bot, team) : !state.config?.team) && item(<SquarePen size={16} className="text-ink-secondary" />, t("sidebar.bot.rename"), () => onRename(bot.id));
++    const rename = onRename && (team ? mayRename(bot, team) : !state.config?.team) && item(<SquarePen size={16} className="text-ink-secondary" />, t("sidebar.bot.editLook"), () => editLook(bot));
+     const editProfile = item(<Pencil size={16} className="text-ink-secondary" />, t("sidebar.bot.simple.editProfile"), () => {
+       openForSettings();
+       if (!state.settingsOpen) dispatch({ type: "toggleSettings", open: true });
+@@ -442,6 +450,7 @@ export function BotContextMenu({
+           { disabled: readingBotId !== null || botUnreadThreadIds(bot).length === 0, keepOpen: true },
+         ),
+         divider("d1"),
++        item(<SquarePen size={16} className="text-ink-secondary" />, t("sidebar.bot.editLook"), () => editLook(bot)),
+         item(<Pencil size={16} className="text-ink-secondary" />, t("sidebar.bot.editProfile"), () => {
+           openForSettings();
+           if (!state.settingsOpen) dispatch({ type: "toggleSettings", open: true });
+diff --git a/src/lib/new-bot.ts b/src/lib/new-bot.ts
+index 723d98d15..ea02f6036 100644
+--- a/src/lib/new-bot.ts
++++ b/src/lib/new-bot.ts
+@@ -9,6 +9,7 @@ import { isBotLimitRefusal, showCreatedPaused } from "./bot-limit";
+ import { createConfiguredBot } from "./create-configured-bot";
+ import { t } from "./i18n";
+ import { botCreated } from "./product-events";
++import { askBotLook, hasBotLookPanel, type BotLook } from "@/components/BotLookDialog";
+ 
+ export interface BotDefaultsAnswer { defaults: NewBotDefaults; modelSelection: ModelSelection; suggestedName: string }
+ 
+@@ -55,18 +56,20 @@ export function setNewBotNameAsker(ask: (() => Promise<string | null>) | null):
+  * and what it may do are an admin's. A paired device may not read the host's New bot defaults: the host applies them to
+  * an empty request. Auto on this computer needs the person's own OK, so a bot whose defaults ask for it starts on Ask.
+  * `name`: the person's own choice, in place of a suggested one. */
+-async function createNewBot(section: string | undefined, bots: readonly Bot[], team: TeamPeople | null, request: typeof api, name?: string) {
++async function createNewBot(section: string | undefined, bots: readonly Bot[], team: TeamPeople | null, request: typeof api, name?: string, look?: BotLook) {
++  const chosen = look ? { color: look.color, mascotBody: look.body } : {};
+   if (team?.admin === false) {
+-    const { bot, paused } = await request<{ bot: Bot; paused?: true }>("/api/bots", { method: "POST", body: JSON.stringify(name ? { name } : {}) });
++    const { bot, paused } = await request<{ bot: Bot; paused?: true }>("/api/bots", { method: "POST", body: JSON.stringify(name ? { name, ...chosen } : chosen) });
+     return { bot, warnings: [] as string[], startsOnAsk: false, ...(paused ? { paused } : {}) };
+   }
+   if (typeof window !== "undefined" && window.ogb?.remoteClient?.active) {
+-    const { bot, paused } = await request<{ bot: Bot; paused?: true }>("/api/bots", { method: "POST", body: JSON.stringify({ ...(section === undefined ? {} : { section }), ...(name ? { name } : {}) }) });
++    const { bot, paused } = await request<{ bot: Bot; paused?: true }>("/api/bots", { method: "POST", body: JSON.stringify({ ...(section === undefined ? {} : { section }), ...(name ? { name } : {}), ...chosen }) });
+     return { bot, warnings: [] as string[], startsOnAsk: false, ...(paused ? { paused } : {}) };
+   }
+   const template = startingTemplate(await request<BotDefaultsAnswer>("/api/bot-defaults"), true);
+   template.profile.name = name ?? freeName(template.profile.name!, bots);
+   if (section !== undefined) template.profile.section = section;
++  if (look) { template.profile.color = look.color; template.profile.mascotBody = look.body; }
+   const draft = new BotCreationDraft(template, () => {}, request);
+   const startsOnAsk = draft.bot.approvalMode === "auto" && draft.bot.computer === "local";
+   if (startsOnAsk) draft.patch({ approvalMode: "ask" });
+@@ -84,7 +87,15 @@ export async function makeNewBot(action: Extract<Action, { type: "newBot" }>, bo
+   showThreads: boolean, request: typeof api = api): Promise<void> {
+   const team = currentTeamPeople();
+   let name: string | undefined;
+-  if (team && nameAsker) {
++  let look: BotLook | undefined;
++  if (hasBotLookPanel()) {
++    dispatch({ type: "botCreationPending", on: false });
++    const asked = await askBotLook();
++    if (!asked) return;
++    look = asked;
++    name = asked.name;
++    dispatch({ type: "botCreationPending", on: true });
++  } else if (team && nameAsker) {
+     dispatch({ type: "botCreationPending", on: false });
+     const asked = await nameAsker();
+     if (asked === null) return;
+@@ -93,7 +104,7 @@ export async function makeNewBot(action: Extract<Action, { type: "newBot" }>, bo
+   }
+   let made: Awaited<ReturnType<typeof createNewBot>>;
+   try {
+-    made = await createNewBot(action.section, bots, team, request, name);
++    made = await createNewBot(action.section, bots, team, request, name, look);
+   } catch (cause) {
+     if (isBotLimitRefusal(cause)) return;
+     const message = t("newBot.failed", { error: cause instanceof Error ? cause.message : String(cause) });
+@@ -101,6 +112,10 @@ export async function makeNewBot(action: Extract<Action, { type: "newBot" }>, bo
+     else dispatch({ type: "error", message });
+     return;
+   }
++  if (look && (made.bot.color !== look.color || made.bot.mascotBody !== look.body)) {
++    made = { ...made, bot: { ...made.bot, color: look.color, mascotBody: look.body } };
++    dispatch({ type: "updateBot", botId: made.bot.id, patch: { color: look.color, mascotBody: look.body } });
++  }
+   announceNewBot(dispatch, made.bot, made.warnings, { preserveSelection: action.preserveSelection, showThreads, source: "blank", paused: made.paused });
+   if (made.startsOnAsk) dispatch({ type: "notice", notice: { kind: "note", botName: null, text: t("newBot.startsOnAsk", { name: made.bot.name }) } });
+   action.onCreated?.(made.bot);

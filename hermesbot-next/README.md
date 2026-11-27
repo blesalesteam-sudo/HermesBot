@@ -97,6 +97,11 @@ el archivo generado trae cada forma dos veces, sin antenas (`MASCOT_BODIES`) y c
   otro motor sin antenas), ojos blancos sin boca, el selector solo con formas y el estado del bot en el dibujo para encender las antenas.
   Los nombres en español los pone `rebrand.mjs`.
 
+- Crear y editar un bot, como en Grok Bot: al pulsar "Bot nuevo" sale el panel "Crear nuevo Bot" (vista previa en
+  grande, nombre, 13 formas y 11 colores; Cancelar / Crear). En el menú de cada bot, "Editar Bot" abre el mismo
+  panel con su nombre, forma y color para cambiarlos. Panel: `overlay/src/components/BotLookDialog.tsx`;
+  conexión con la app: `patches/94-panel-crear-bot.patch`; textos en `rebrand.mjs`.
+
 ## Grupos de Telegram y WhatsApp (oyente silencioso)
 
 En **Ajustes → Funciones → Grupos de Telegram y WhatsApp**. Todo empieza apagado y sin conectar.

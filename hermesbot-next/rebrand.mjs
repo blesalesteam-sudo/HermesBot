@@ -52,6 +52,9 @@ const LABELS = {
     "mascotColor.pink": "Magenta", "mascotColor.cyan": "Sky", "mascotColor.teal": "Turquoise",
     "mascot.color.chrome": "black", "mascot.color.coral": "brown", "mascot.color.silver": "gray", "mascot.color.purple": "violet",
     "mascot.color.pink": "magenta", "mascot.color.cyan": "sky", "mascot.color.teal": "turquoise",
+    "botLook.createTitle": "Create new Bot", "botLook.editTitle": "Edit Bot", "botLook.namePlaceholder": "Name your Bot",
+    "botLook.nameLabel": "Bot name", "botLook.shapes": "Character shape", "botLook.shape": "Character shape {name}",
+    "botLook.colors": "Character color", "botLook.create": "Create", "botLook.save": "Save", "sidebar.bot.editLook": "Edit Bot",
   },
   es: {
     "mascot.body.cursor": "Robot", "mascot.body.blob": "Mancha", "mascot.body.pebble": "Guijarro", "mascot.body.bean": "Judía",
@@ -63,6 +66,9 @@ const LABELS = {
     "mascotColor.pink": "Magenta", "mascotColor.cyan": "Celeste", "mascotColor.teal": "Turquesa",
     "mascot.color.chrome": "negro", "mascot.color.coral": "marrón", "mascot.color.silver": "gris", "mascot.color.purple": "violeta",
     "mascot.color.pink": "magenta", "mascot.color.cyan": "celeste", "mascot.color.teal": "turquesa",
+    "botLook.createTitle": "Crear nuevo Bot", "botLook.editTitle": "Editar Bot", "botLook.namePlaceholder": "Ponle nombre a tu Bot",
+    "botLook.nameLabel": "Nombre del Bot", "botLook.shapes": "Forma del personaje", "botLook.shape": "Forma del personaje {name}",
+    "botLook.colors": "Color del personaje", "botLook.create": "Crear", "botLook.save": "Guardar", "sidebar.bot.editLook": "Editar Bot",
   },
 };
 for (const [lang, labels] of Object.entries(LABELS)) {
