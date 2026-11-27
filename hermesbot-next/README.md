@@ -74,6 +74,26 @@ Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis 
 El nombre "OpenMausBot", "MausBot" y su mascota son marca de sus autores: este producto
 usa nombre e imagen propios. Los avisos de licencia originales se conservan en `/app`.
 
+## El aspecto de los bots
+
+Los bots se crean con el mismo sistema que Grok Bot: eliges una forma de una cuadrícula de 5 columnas y un
+color. Los dibujos son propios de OpenBot y todos llevan las antenas del logo.
+
+- 27 formas (robot, mancha, guijarro, judía, huevo, cuadrado redondeado, tableta, cápsula, cilindro, hexágono,
+  gema, cristal, cuña, escudo, cúpula, arco, nube, gota, hoja, cuadrado, destello, trébol, flor, corazón,
+  casa, estrella y círculo). Salen de `overlay/scripts/gen-openbot-bodies.ts`, que escribe
+  `overlay/packages/phone-protocol/src/mascot-bodies.ts` y comprueba que la cara cabe en cada forma. Para
+  cambiar una forma: edita el script y ejecútalo dentro del código ya preparado
+  (`node --experimental-strip-types scripts/gen-openbot-bodies.ts`), y copia el archivo resultante al overlay.
+- 12 colores en el orden de Grok Bot: negro (negro de día, blanco de noche), marrón, rojo, naranja, amarillo,
+  verde, turquesa, celeste, azul, violeta, magenta y gris. Se guardan con los nombres de siempre, así que los
+  bots que ya existían conservan su color.
+- Mientras un bot piensa, busca o trabaja, las puntas de sus antenas se encienden y laten
+  (`overlay/public/openbot-theme.css`).
+- `patches/92-bots-estilo-grok.patch`: colores, todas las formas con el dibujo del robot (antes las formas usaban
+  otro motor sin antenas), el selector solo con formas y el estado del bot en el dibujo para encender las antenas.
+  Los nombres en español los pone `rebrand.mjs`.
+
 ## Grupos de Telegram y WhatsApp (oyente silencioso)
 
 En **Ajustes → Funciones → Grupos de Telegram y WhatsApp**. Todo empieza apagado y sin conectar.

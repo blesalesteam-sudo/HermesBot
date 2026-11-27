@@ -1,0 +1,150 @@
+diff --git a/packages/phone-protocol/src/bot-body.ts b/packages/phone-protocol/src/bot-body.ts
+index 9e967614e..c5a1fb822 100644
+--- a/packages/phone-protocol/src/bot-body.ts
++++ b/packages/phone-protocol/src/bot-body.ts
+@@ -12,7 +12,7 @@ export const BOT_BODY_IDS = [...MASCOT_BODY_IDS, ...CARVED_BODY_IDS, ...OBJECT_B
+ export type BotBodyId = (typeof BOT_BODY_IDS)[number];
+ 
+ /** The bodies a look picker always offers, in its order: the shapes, then the objects. */
+-export const EVERYDAY_BODY_IDS = [...MASCOT_BODY_IDS, ...OBJECT_BODY_IDS] as const;
++export const EVERYDAY_BODY_IDS = [...MASCOT_BODY_IDS] as const;
+ 
+ export const botBodySchema = z.enum(BOT_BODY_IDS);
+ 
+diff --git a/packages/phone-protocol/src/object-bodies.ts b/packages/phone-protocol/src/object-bodies.ts
+index e987b0c5d..aeaf22994 100644
+--- a/packages/phone-protocol/src/object-bodies.ts
++++ b/packages/phone-protocol/src/object-bodies.ts
+@@ -142,7 +142,7 @@ export const OBJECT_BODIES = Object.fromEntries(
+ const shape = (id: string, name: string, path: string, eyes: AvatarDefinition["eyes"]): AvatarDefinition => ({ version: 1, id, name, body: { path }, eyes });
+ 
+ /** Our shapes, drawn for the same engine; Shield and Star are Open Bot Avatar's own. The cursor keeps its own renderer. */
+-export const SHAPE_BODIES: Record<Exclude<MascotBodyId, "cursor">, AvatarDefinition> = {
++export const SHAPE_BODIES: Partial<Record<Exclude<MascotBodyId, "cursor">, AvatarDefinition>> = {
+   blob: shape("blob", "Blob", "M48 10C64 8 78 16 85 30C92 44 90 62 80 75C70 88 52 93 36 87C20 81 9 66 10 49C11 30 30 12 48 10Z", { x: 50, y: 48, spacing: 18, scale: 1.15 }),
+   circle: shape("circle", "Circle", "M50 10A40 40 0 1 1 50 90A40 40 0 1 1 50 10Z", { x: 50, y: 48, spacing: 18, scale: 1.15 }),
+   squircle: shape("squircle", "Squircle", "M50 12C78 12 88 22 88 50C88 78 78 88 50 88C22 88 12 78 12 50C12 22 22 12 50 12Z", { x: 50, y: 48, spacing: 18, scale: 1.15 }),
+@@ -157,6 +157,7 @@ export const SHAPE_BODIES: Record<Exclude<MascotBodyId, "cursor">, AvatarDefinit
+ /** The engine definition a body is drawn from, or undefined for the cursor and the festival bodies. */
+ export function engineBody(id: unknown): AvatarDefinition | undefined {
+   if (typeof id !== "string") return undefined;
+-  for (const table of [OBJECT_BODIES, SHAPE_BODIES] as Record<string, AvatarDefinition>[]) if (Object.hasOwn(table, id)) return table[id];
++  // OpenBot: the shapes wear the robot's antennas, so they draw with the gradient mascot, not this engine.
++  for (const table of [OBJECT_BODIES] as Record<string, AvatarDefinition>[]) if (Object.hasOwn(table, id)) return table[id];
+   return undefined;
+ }
+diff --git a/packages/phone-protocol/src/wire.ts b/packages/phone-protocol/src/wire.ts
+index ac5a80039..db007344f 100644
+--- a/packages/phone-protocol/src/wire.ts
++++ b/packages/phone-protocol/src/wire.ts
+@@ -68,9 +68,10 @@ export type CloudBackend = "box" | "vps";
+ /** A place a bot can act. `cloud` covers both cloud backends. */
+ export type Surface = "cloud" | "vm" | "local" | "browser";
+ 
++// OpenBot: in the order of Grok Bot's colour picker (black, brown, the rainbow, gray).
+ export const MAUS_COLOR_NAMES = [
+-  "green", "blue", "red", "orange", "purple", "cyan", "pink",
+-  "yellow", "teal", "coral", "silver", "chrome",
++  "chrome", "coral", "red", "orange", "yellow", "green", "teal",
++  "cyan", "blue", "purple", "pink", "silver",
+ ] as const;
+ export type MausColor = (typeof MAUS_COLOR_NAMES)[number];
+ 
+diff --git a/src/components/Avatar.tsx b/src/components/Avatar.tsx
+index 8ac62313b..7f6c8e2c2 100644
+--- a/src/components/Avatar.tsx
++++ b/src/components/Avatar.tsx
+@@ -28,10 +28,17 @@ export const MOUTH_WEIGHT = 11;
+ 
+ const POINTER_GAZE = { forward: 1, authored: 0.25 };
+ 
++function mix(hex: string, toward: string, t: number): string {
++  const a = Number.parseInt(hex.slice(1), 16);
++  const b = Number.parseInt(toward.slice(1), 16);
++  const channel = (shift: number) => Math.round(((a >> shift) & 0xff) + (((b >> shift) & 0xff) - ((a >> shift) & 0xff)) * t);
++  return `#${[channel(16), channel(8), channel(0)].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
++}
++
+ const gradientFor = (color: MausColor, custom?: string): [string, string, string] => {
+   if (!custom && color === "chrome") return CHROME_GRADIENT;
+   const fill = custom ?? MAUS_COLORS[color] ?? MAUS_COLORS.green;
+-  return [fill, fill, fill];
++  return [mix(fill, "#ffffff", 0.2), fill, mix(fill, "#000000", 0.16)];
+ };
+ 
+ /** A bot's own body colour when it picked one, else undefined. */
+@@ -44,7 +51,7 @@ export function roomAvatarGradient(color: MausColor): [string, string, string] {
+   let gradient = roomGradients.get(color);
+   if (!gradient) {
+     const fill = `var(--identity-${color})`;
+-    roomGradients.set(color, (gradient = [fill, fill, fill]));
++    roomGradients.set(color, (gradient = [`color-mix(in srgb, ${fill} 80%, #ffffff)`, fill, `color-mix(in srgb, ${fill} 84%, #000000)`]));
+   }
+   return gradient;
+ }
+diff --git a/src/components/CursorAvatar.tsx b/src/components/CursorAvatar.tsx
+index df4a138c3..78908b895 100644
+--- a/src/components/CursorAvatar.tsx
++++ b/src/components/CursorAvatar.tsx
+@@ -1002,6 +1002,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
+         height={dimension}
+         className={className}
+         style={style}
++        data-mascot-state={state}
+         role={label ? 'img' : undefined}
+         aria-label={label ?? undefined}
+         aria-hidden={label ? undefined : true}
+diff --git a/src/lib/mascot.ts b/src/lib/mascot.ts
+index f62af5826..f2186c899 100644
+--- a/src/lib/mascot.ts
++++ b/src/lib/mascot.ts
+@@ -49,18 +49,18 @@ export const STATE_GROUPS = {
+ } satisfies Record<string, MausState[]>;
+ 
+ export const MAUS_COLORS = {
+-  green: "#009957",
+-  blue: "#377FE6",
+-  red: "#D94B52",
+-  orange: "#E78531",
+-  purple: "#8057C8",
+-  cyan: "#0EA5C6",
+-  pink: "#D84F8B",
+-  yellow: "#D8A729",
+-  teal: "#01A492",
+-  coral: "#E5634E",
+-  silver: "#A8ADB4",
+-  chrome: "#B3BAC4",
++  green: "#12B76A",
++  blue: "#2F7CF6",
++  red: "#F03E4F",
++  orange: "#F7731A",
++  purple: "#8B5CF6",
++  cyan: "#2BA9F0",
++  pink: "#EC4899",
++  yellow: "#F5A524",
++  teal: "#14B8A6",
++  coral: "#9C6B45",
++  silver: "#8E8E93",
++  chrome: "#1C1C1F",
+ } satisfies Record<MausColor, string>;
+ 
+ export const MAUS_COLOR_LABEL = {
+@@ -70,13 +70,14 @@ export const MAUS_COLOR_LABEL = {
+   chrome: "mascotColor.chrome",
+ } as const satisfies Record<MausColor, LocaleKey>;
+ 
+-export const CHROME_GRADIENT: [string, string, string] = ["#5B6470", "#5B6470", "#5B6470"];
+-export const CHROME_EYES = "#FFFFFF";
++// OpenBot: "chrome" is the black bot. Black by day, white by night, like the logo (see openbot-theme.css).
++export const CHROME_GRADIENT: [string, string, string] = ["var(--omb-black-1)", "var(--omb-black-2)", "var(--omb-black-3)"];
++export const CHROME_EYES = "var(--omb-black-eyes)";
+ 
+ export function colorSwatch(color: MausColor): string {
+   if (color !== "chrome") return MAUS_COLORS[color];
+-  const [light, mid, edge] = CHROME_GRADIENT;
+-  return mid || light || edge;
++  const [light, , edge] = CHROME_GRADIENT;
++  return `linear-gradient(135deg, ${light}, ${edge})`;
+ }
+ 
+ export const MAUS_MOTIONS = [

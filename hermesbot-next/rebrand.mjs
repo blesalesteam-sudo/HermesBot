@@ -40,6 +40,37 @@ const VISIBLE = [
 ];
 for (const [file, from, to] of VISIBLE) replaceExact(file, from, to);
 
+// Nombres de las formas y los colores de los bots (sistema de Grok Bot), en inglés y en español.
+const LABELS = {
+  en: {
+    "mascot.body.cursor": "Robot", "mascot.body.pebble": "Pebble", "mascot.body.bean": "Bean", "mascot.body.egg": "Egg",
+    "mascot.body.tablet": "Tablet", "mascot.body.cylinder": "Cylinder", "mascot.body.diamond": "Gem", "mascot.body.crystal": "Crystal",
+    "mascot.body.wedge": "Wedge", "mascot.body.dome": "Dome", "mascot.body.arch": "Arch", "mascot.body.cloud": "Cloud",
+    "mascot.body.leaf": "Leaf", "mascot.body.square": "Square", "mascot.body.sparkle": "Sparkle", "mascot.body.clover": "Clover",
+    "mascot.body.flower": "Flower", "mascot.body.heart": "Heart", "mascot.body.house": "House",
+    "mascotColor.chrome": "Black", "mascotColor.coral": "Brown", "mascotColor.silver": "Gray", "mascotColor.purple": "Violet",
+    "mascotColor.pink": "Magenta", "mascotColor.cyan": "Sky", "mascotColor.teal": "Turquoise",
+    "mascot.color.chrome": "black", "mascot.color.coral": "brown", "mascot.color.silver": "gray", "mascot.color.purple": "violet",
+    "mascot.color.pink": "magenta", "mascot.color.cyan": "sky", "mascot.color.teal": "turquoise",
+  },
+  es: {
+    "mascot.body.cursor": "Robot", "mascot.body.blob": "Mancha", "mascot.body.pebble": "Guijarro", "mascot.body.bean": "Judía",
+    "mascot.body.egg": "Huevo", "mascot.body.tablet": "Tableta", "mascot.body.cylinder": "Cilindro", "mascot.body.diamond": "Gema",
+    "mascot.body.crystal": "Cristal", "mascot.body.wedge": "Cuña", "mascot.body.dome": "Cúpula", "mascot.body.arch": "Arco",
+    "mascot.body.cloud": "Nube", "mascot.body.leaf": "Hoja", "mascot.body.square": "Cuadrado", "mascot.body.sparkle": "Destello",
+    "mascot.body.clover": "Trébol", "mascot.body.flower": "Flor", "mascot.body.heart": "Corazón", "mascot.body.house": "Casa",
+    "mascotColor.chrome": "Negro", "mascotColor.coral": "Marrón", "mascotColor.silver": "Gris", "mascotColor.purple": "Violeta",
+    "mascotColor.pink": "Magenta", "mascotColor.cyan": "Celeste", "mascotColor.teal": "Turquesa",
+    "mascot.color.chrome": "negro", "mascot.color.coral": "marrón", "mascot.color.silver": "gris", "mascot.color.purple": "violeta",
+    "mascot.color.pink": "magenta", "mascot.color.cyan": "celeste", "mascot.color.teal": "turquesa",
+  },
+};
+for (const [lang, labels] of Object.entries(LABELS)) {
+  const file = join("src/locales", `${lang}.json`);
+  const strings = JSON.parse(readFileSync(file, "utf8"));
+  writeFileSync(file, JSON.stringify({ ...strings, ...labels }, null, 2) + "\n");
+}
+
 // Textos de la interfaz, en todos los idiomas.
 const KEEP = /OpenMausBot|MausBot Cloud|Milind|Omkar/;
 let changed = 0;

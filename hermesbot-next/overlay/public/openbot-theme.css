@@ -64,3 +64,51 @@
 :root[data-skin="midnight"] .bg-accent > .bg-white {
   background-color: var(--color-accent-ink);
 }
+
+/* ---- Los bots, con el sistema de Grok Bot: 11 familias de color, cada una con su tono de día y de noche. ----
+   "chrome" es el bot negro: negro de día y blanco de noche, como el logo. */
+:root {
+  --omb-black-1: #48484e;
+  --omb-black-2: #1c1c1f;
+  --omb-black-3: #050506;
+  --omb-black-eyes: #ffffff;
+  --omb-tip-on: #ffcf3f;
+}
+[data-skin="midnight"][data-skin="midnight"] {
+  --omb-black-1: #ffffff;
+  --omb-black-2: #ececee;
+  --omb-black-3: #c9c9cf;
+  --omb-black-eyes: #111214;
+}
+[data-skin="daylight"][data-skin="daylight"],
+[data-skin="midnight"][data-skin="midnight"] {
+  --identity-green: #12b76a;
+  --identity-blue: #2f7cf6;
+  --identity-red: #f03e4f;
+  --identity-orange: #f7731a;
+  --identity-purple: #8b5cf6;
+  --identity-cyan: #2ba9f0;
+  --identity-pink: #ec4899;
+  --identity-yellow: #f5a524;
+  --identity-teal: #14b8a6;
+  --identity-coral: #9c6b45;
+  --identity-silver: #8e8e93;
+  --identity-chrome: var(--omb-black-2);
+}
+
+/* Las antenas se encienden mientras el bot piensa, busca o trabaja. */
+@keyframes omb-tip-glow {
+  0%, 100% { fill: var(--omb-tip-on); filter: drop-shadow(0 0 2px var(--omb-tip-on)); opacity: 0.55; }
+  50% { fill: var(--omb-tip-on); filter: drop-shadow(0 0 9px var(--omb-tip-on)); opacity: 1; }
+}
+svg:is([data-mascot-state="thinking"], [data-mascot-state="working"], [data-mascot-state="searching"]) .omb-tip {
+  fill: var(--omb-tip-on);
+  animation: omb-tip-glow 1.2s ease-in-out infinite;
+}
+svg[data-mascot-state] .omb-tip-b { animation-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) {
+  svg:is([data-mascot-state="thinking"], [data-mascot-state="working"], [data-mascot-state="searching"]) .omb-tip {
+    animation: none;
+    opacity: 1;
+  }
+}
