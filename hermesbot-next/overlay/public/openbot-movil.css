@@ -35,6 +35,11 @@
     to { transform: translateY(0); }
   }
   @keyframes ob-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  /* Entrar "hacia dentro" (perfil del bot): la pantalla llega desde la derecha, como al navegar en el iPhone. */
+  @keyframes ob-push-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
 
   /* ================= Base de toda la app en el móvil =================
      La app está dibujada para ordenador (letra de 12 a 14, controles de 28 a 32 px, bordes finos). En el móvil
@@ -293,8 +298,12 @@
     .popover-surface[role="menu"].animate-pop-out { animation: ob-bubble-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
 
     /* ================= Hojas que suben desde abajo ================= */
-    aside[role="dialog"].animate-sheet-in { animation: ob-sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
-    .glass-popup.animate-pop-in { animation: ob-sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
+    /* El perfil del bot se abre desde la pastilla de arriba y es una pantalla "hacia dentro": entra desde la derecha.
+       Lo que se abre con una X (ajustes, crear bot, documento) es una hoja y sube desde abajo. */
+    aside[role="dialog"].animate-sheet-in { animation: ob-push-in 0.42s cubic-bezier(0.32, 0.72, 0, 1) both; }
+    .glass-popup.animate-pop-in,
+    [data-inbox-panel].animate-pop-in,
+    .rounded-t-2xl.animate-pop-in { animation: ob-sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
     div.fixed.inset-0:has(> form[data-bot-look][role="dialog"]) { align-items: flex-end; padding: calc(var(--u) * 18); padding-bottom: calc(var(--u) * 18); animation: ob-fade-in 0.25s ease-out both; }
     form[data-bot-look][role="dialog"] { animation: ob-sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
 
