@@ -4,8 +4,8 @@ index f6694e5..44b608b 100644
 +++ b/index.html
 @@ -14,6 +14,7 @@
      <link rel="stylesheet" href="/openbot-theme.css" />
-     <link rel="stylesheet" href="/openbot-movil.css?v=2" />
-     <script defer src="/openbot-movil.js?v=2"></script>
+     <link rel="stylesheet" href="/openbot-movil.css?v=3" />
+     <script defer src="/openbot-movil.js?v=3"></script>
 +    <link rel="stylesheet" href="/openbot-escritorio.css?v=1" />
      <title>OpenBot</title>
    </head>
