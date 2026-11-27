@@ -578,6 +578,7 @@
     var parts = [];
     if (spec.titulo || spec.resumen) parts.push(el("header", { class: "cover" }, [spec.titulo ? el("h1", { text: spec.titulo }) : null, spec.resumen ? el("p", { class: "lead", text: spec.resumen }) : null]));
     if (spec.aviso) parts.push(el("div", { class: "callout" }, [spec.aviso.titulo ? el("b", { text: spec.aviso.titulo }) : null, String(spec.aviso.texto || spec.aviso)]));
+    var mainSeen = false;
     blocks.forEach(function (block, index) {
       if (!block || !block.tipo) return;
       var key = "b" + index;
@@ -593,6 +594,11 @@
         else if (block.tipo === "notas") part = notepad(block);
         else if (block.tipo === "texto") part = el("section", {}, [heading(block), el("div", { html: String(block.html || "") })]);
       } catch (error) { part = el("div", { class: "callout" }, [el("b", { text: "Este bloque no se puede dibujar" }), String(error && error.message)]); }
+      if (part && part.classList) {
+        part.classList.add("tp-b", "tp-b-" + block.tipo);
+        // La vista principal: en la tarjeta del chat es lo que se enseña, justo debajo del título y las cifras.
+        if (!mainSeen && /^(lista|tablero|cuadricula|tabla)$/.test(block.tipo)) { mainSeen = true; part.classList.add("tp-main-view"); }
+      }
       if (part) parts.push(part);
     });
     root.replaceChildren.apply(root, parts);

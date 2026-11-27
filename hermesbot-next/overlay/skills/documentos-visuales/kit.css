@@ -124,3 +124,15 @@ select.tp-chip:focus-visible,.tp-date:focus-within,.tp-check:focus-visible,.tp-p
 .tp-cell .tp-main{font-size:14px;line-height:1.35}.tp-cell .tp-text{overflow-wrap:break-word;hyphens:auto}
 .tp-cell .tp-x{position:absolute;top:3px;right:3px;width:22px;height:22px;background:var(--card);box-shadow:0 0 0 1px var(--line)}
 @media (hover:none){.tp-cell .tp-x{opacity:0}.tp-cell .tp-item:focus-within .tp-x{opacity:1}}
+/* En la tarjeta del chat la plantilla es una miniatura de sí misma: título, cifras y su vista principal, sin lo que
+   solo sirve al trabajar en ella (añadir, filtrar, mover, borrar). */
+:root[data-openbot-card] #plantilla{display:flex;flex-direction:column;padding-top:24px}
+:root[data-openbot-card] #plantilla>*{order:4}
+:root[data-openbot-card] #plantilla>.cover{order:0;margin:0 0 10px;padding:0;border:0}:root[data-openbot-card] #plantilla>.cover h1{font-size:25px;margin:0}
+:root[data-openbot-card] #plantilla>.cover .lead,:root[data-openbot-card] #plantilla>.callout{display:none}
+:root[data-openbot-card] #plantilla>.tp-b-cifras{order:1}:root[data-openbot-card] #plantilla>.tp-b-progreso{order:2}:root[data-openbot-card] #plantilla>.tp-main-view{order:3}
+:root[data-openbot-card] .tp-b-cifras>h2,:root[data-openbot-card] .tp-main-view>h2{display:none}
+:root[data-openbot-card] .kpis{margin:2px 0 14px;gap:14px}:root[data-openbot-card] .tp-progress{margin:0 0 14px}
+:root[data-openbot-card] .tp-add,:root[data-openbot-card] .tp-bar,:root[data-openbot-card] .tp-move,:root[data-openbot-card] .tp-x,:root[data-openbot-card] .tp-th-x,:root[data-openbot-card] .tp-td-x{display:none}
+:root[data-openbot-card] .tp-board,:root[data-openbot-card] .tp-grid,:root[data-openbot-card] .tp-main-view .tp-card{margin-top:0}
+:root[data-openbot-card] .tp-col{min-height:0}:root[data-openbot-card] .tp-cell{min-height:64px}

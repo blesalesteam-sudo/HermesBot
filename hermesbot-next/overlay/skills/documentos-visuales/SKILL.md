@@ -165,6 +165,11 @@ con fecha"), eso manda. Si falta un dato para acertar (qué estados, qué áreas
 opciones; si no, elige lo razonable y dilo en una línea. Rellénala con sus datos reales si los tienes; si pones
 ejemplos, avisa y que sean pocos.
 
+**Cómo se ve en el chat.** La tarjeta enseña en pequeño el título, las cifras y la primera vista de la
+plantilla (la primera `lista`, `tablero`, `cuadricula` o `tabla`), sin el resumen ni el aviso. Pon primero la vista
+que mejor la represente: el tablero en un seguimiento por fases, la cuadrícula en un planificador, la lista en unas
+tareas; la tabla para editar va después.
+
 **Cómo se trabaja con ella.**
 
 - Lo que la persona cambia a mano se guarda en la página. Con su siguiente mensaje te llega una nota ("cambios

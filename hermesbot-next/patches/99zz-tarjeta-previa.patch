@@ -1,0 +1,64 @@
+diff -ruN a/shared/app-frame/helper.ts b/shared/app-frame/helper.ts
+--- a/shared/app-frame/helper.ts	2026-11-27 16:42:49
++++ b/shared/app-frame/helper.ts	2026-11-27 16:43:00
+@@ -112,6 +112,8 @@
+       root.style.colorScheme = context.theme;
+       root.setAttribute("data-theme", context.theme);
+     }
++    // OpenBot: on a chat card the page is a small preview of itself; the house kit lays a template out for that.
++    if (context.openbotCard === true) root.setAttribute("data-openbot-card", "");
+     var vars = context.styles && context.styles.variables;
+     if (vars && typeof vars === "object") {
+       Object.keys(vars).forEach(function (key) {
+diff -ruN a/src/components/app/AppFrame.tsx b/src/components/app/AppFrame.tsx
+--- a/src/components/app/AppFrame.tsx	2026-11-27 16:42:49
++++ b/src/components/app/AppFrame.tsx	2026-11-27 16:43:24
+@@ -39,6 +39,9 @@
+   onHeading?(heading: boolean | null): void;
+   /** Takes the page's message instead of sending it. */
+   onDraft?(text: string): void;
++  /** OpenBot: the frame is the small preview on a chat card, not the open page; the page is told, so it can show
++   * its main view first (a template's board or list) instead of its opening lines. */
++  card?: boolean;
+ }
+ 
+ const refusal = (message: string): JsonRpcError => ({ code: RPC_HOST_REFUSED, message });
+@@ -49,7 +52,7 @@
+   // Callbacks change every render; the frame lives across renders.
+   const latest = useRef({ ...props, flushBotPatches });
+   latest.current = { ...props, flushBotPatches };
+-  const { doc, botId, threadId, fill } = props;
++  const { doc, botId, threadId, fill, card } = props;
+ 
+   useLayoutEffect(() => {
+     const container = box.current;
+@@ -62,7 +65,7 @@
+       doc,
+       title: latest.current.title,
+       height: latest.current.height,
+-      hostContext: appHostContext({ width: container.clientWidth || 600, maxHeight }),
++      hostContext: { ...appHostContext({ width: container.clientWidth || 600, maxHeight }), ...(card ? { openbotCard: true } : {}) },
+       hostVersion: appVersion(),
+       ...(import.meta.env?.DEV ? { log: (params: unknown) => console.info("[app]", params) } : {}),
+       ...(fill ? { fill: true } : {}),
+@@ -124,7 +127,7 @@
+       host.retire();
+     };
+     // A new document is a new frame; nothing else remounts it.
+-  }, [doc, botId, threadId, fill]);
++  }, [doc, botId, threadId, fill, card]);
+ 
+   return <div ref={box} data-app-frame-box className={fill ? "h-full w-full" : "w-full"} />;
+ }
+diff -ruN a/src/components/app/AppMessage.tsx b/src/components/app/AppMessage.tsx
+--- a/src/components/app/AppMessage.tsx	2026-11-27 16:42:49
++++ b/src/components/app/AppMessage.tsx	2026-11-27 16:43:00
+@@ -315,7 +315,7 @@
+           height={height}
+           handle={frame}
+           onHeight={onHeight}
+-          {...(compact ? { onHeading } : {})}
++          {...(compact ? { onHeading, card: true } : {})}
+           onProblem={setProblem}
+           onTeardownRequested={onTeardownRequested}
+           {...(page ? { maxHeight: PAGE_HEIGHT.cap } : {})}
