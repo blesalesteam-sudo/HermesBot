@@ -16,7 +16,7 @@ export interface Recomendado { id: string; nombre: string; frase: string; detall
 
 /** Composio Connect (claves ck_): un servidor MCP con todas las apps que la persona conecte en su cuenta de Composio. */
 const CONNECT_URL = "https://connect.composio.dev/mcp";
-const CONNECT_NAME = "composio";
+const CONNECT_NAME = "composio-connect"; // "composio" lo reserva la base para su propia conexión.
 
 const APPS: readonly Recomendado[] = [
   { id: "gmail", slug: "gmail", nombre: "Gmail", frase: "Lee y redacta correos", icono: Mail, color: "#EA4335", tipo: "composio",
