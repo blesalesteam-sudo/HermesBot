@@ -2,16 +2,18 @@
 // Todo se conecta aquí mismo, sin mandar a la persona a Ajustes. Aspecto de Grok Bot: tarjetas blancas con borde fino y
 // sombra suave, todo en tinta y gris, el color de cada app solo en su icono. Textos en español: esta parte es solo de OpenBot.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, AudioLines, Blocks, BrainCircuit, CalendarDays, Check, ChevronRight, Clapperboard, ExternalLink, Loader2, Mail, MessageCircle, NotebookText, Plug, Plus, Send, X, type LucideIcon } from "lucide-react";
+import { ArrowLeft, AudioLines, Blocks, BrainCircuit, GitBranch, TrainFront, CalendarDays, Check, ChevronRight, Clapperboard, ExternalLink, Loader2, Mail, MessageCircle, NotebookText, Plug, Plus, Send, X, type LucideIcon } from "lucide-react";
 import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { loadAppCatalog } from "@/lib/app-catalog-cache";
 import { McpServersPanel } from "../McpServersPanel";
 import { GruposSettings } from "../settings/GruposSettings";
 import { EnginesSettings } from "../EnginesSettings";
+import { GithubAppCard } from "../github/GithubAppCard";
+import { useGithubShown } from "@/lib/github-sign-in";
 import type { HostedConnections } from "@/lib/hosted-mcp-apps";
 
-type Tipo = "composio" | "mcp" | "grupos" | "propio" | "puente" | "modelos";
+type Tipo = "composio" | "mcp" | "grupos" | "propio" | "puente" | "modelos" | "github";
 export interface Recomendado { id: string; nombre: string; frase: string; detalle: string; icono: LucideIcon; color: string; tipo: Tipo; slug?: string }
 
 /** Composio Connect (claves ck_): un servidor MCP con todas las apps que la persona conecte en su cuenta de Composio. */
@@ -36,6 +38,12 @@ const MENSAJERIA: readonly Recomendado[] = [
   { id: "whatsapp", nombre: "WhatsApp", frase: "Tus bots en tus grupos", icono: MessageCircle, color: "#25D366", tipo: "grupos",
     detalle: "El bot entra en tus grupos de WhatsApp, guarda lo importante y, si quieres, responde cuando lo mencionan." },
 ];
+const DESARROLLO: readonly Recomendado[] = [
+  { id: "github", nombre: "GitHub", frase: "Repositorios, issues y PR", icono: GitBranch, color: "currentColor", tipo: "github",
+    detalle: "Tus bots podrán leer tus repositorios, abrir issues y preparar cambios y pull requests en tu cuenta de GitHub." },
+  { id: "railway", nombre: "Railway", frase: "Despliegues y registros", icono: TrainFront, color: "#853BCE", tipo: "mcp",
+    detalle: "Tus bots podrán ver tus proyectos de Railway, revisar despliegues y registros y cambiar variables." },
+];
 const MODELOS: Recomendado = { id: "modelos", nombre: "Modelos de IA", frase: "Hermes, ChatGPT, Claude…", icono: BrainCircuit, color: "currentColor", tipo: "modelos",
   detalle: "El cerebro de tus bots. Conecta tu cuenta de ChatGPT, Claude u otro proveedor y elige qué modelo usa Hermes." };
 const PUENTE: Recomendado = { id: "composio", nombre: "Composio", frase: "Puente a más de 500 apps", icono: Blocks, color: "currentColor", tipo: "puente",
@@ -43,7 +51,7 @@ const PUENTE: Recomendado = { id: "composio", nombre: "Composio", frase: "Puente
 const PROPIO: Recomendado = { id: "propio", nombre: "Mi propia app", frase: "Cualquier servidor MCP", icono: Plus, color: "currentColor", tipo: "propio",
   detalle: "Conecta tus propias aplicaciones o cualquier servicio con servidor MCP: solo necesitas su dirección y, si la pide, una clave o iniciar sesión." };
 
-export const RECOMENDADOS: readonly Recomendado[] = [MODELOS, PUENTE, ...APPS, ...MENSAJERIA, PROPIO];
+export const RECOMENDADOS: readonly Recomendado[] = [MODELOS, PUENTE, ...APPS, ...DESARROLLO, ...MENSAJERIA, PROPIO];
 
 /** Cualquier app del catálogo, cuando aún falta Composio: la misma hoja, con su nombre. */
 export function deCatalogo(slug: string, nombre: string): Recomendado {
@@ -118,7 +126,8 @@ export function ConectarInicio({ conectado, onAbrir, onCatalogo }: { conectado: 
   return (
     <div data-openbot-inicio className="flex flex-col gap-7 pt-1">
       <Seccion titulo="Lo esencial"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{[MODELOS, PUENTE].map(fila)}</div></Seccion>
-      <Seccion titulo="Apps"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{APPS.map(fila)}{fila(PROPIO)}</div></Seccion>
+      <Seccion titulo="Apps"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{APPS.map(fila)}</div></Seccion>
+      <Seccion titulo="Desarrollo"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{DESARROLLO.map(fila)}{fila(PROPIO)}</div></Seccion>
       <Seccion titulo="Mensajería"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{MENSAJERIA.map(fila)}</div></Seccion>
       <button type="button" onClick={onCatalogo} className={cn(secundario, "self-center")}>Ver todas las apps</button>
     </div>
@@ -272,6 +281,8 @@ export function HojaConexion({ item, conectado, clavePuesta, connectPuesto, remo
             </ol>
           )}
 
+          {item.tipo === "github" && <HojaGithub conectado={conectado} listo={listo()} />}
+
           {item.tipo === "modelos" && (
             <div className="flex flex-col gap-4">
               <p className={cn(tarjeta, "p-4 text-[14px] leading-6 text-ink")}>Elige con qué cuenta piensan tus bots. Lo más fácil: <b>conectar tu suscripción de ChatGPT</b> (sin clave, solo iniciar sesión). También puedes usar Claude, una clave de API u otro proveedor.</p>
@@ -302,6 +313,21 @@ export function HojaConexion({ item, conectado, clavePuesta, connectPuesto, remo
   );
 }
 
+/** GitHub tiene su propio inicio de sesión en la base; esta hoja lo pone en pasos. */
+function HojaGithub({ conectado, listo }: { conectado: boolean; listo: ReactNode }) {
+  const disponible = useGithubShown();
+  if (!disponible) return <p className={cn(tarjeta, "p-4 text-[14px] leading-6 text-ink")}>GitHub no está disponible en esta instalación. Puedes conectarlo igualmente con su servidor MCP en «Mi propia app».</p>;
+  return (
+    <ol>
+      <Paso n={1} titulo="Inicia sesión con tu cuenta de GitHub" hecho={conectado} activo={!conectado}>
+        <p className={nota}>Pulsa «Conectar» y sigue los pasos que te pida GitHub. Después vuelve aquí.</p>
+        <div className={cn(tarjeta, "grid grid-cols-1 p-2")}><GithubAppCard /></div>
+      </Paso>
+      <Paso n={2} ultimo titulo="Listo para usar" hecho={conectado} activo={conectado}>{listo}</Paso>
+    </ol>
+  );
+}
+
 function ejemplo(id: string): string {
   switch (id) {
     case "gmail": return "resúmeme los correos importantes de hoy";
@@ -309,6 +335,8 @@ function ejemplo(id: string): string {
     case "notion": return "apunta esta idea en mi página de Notion";
     case "higgsfield": return "crea una imagen de portada para mi post";
     case "elevenlabs": return "lee este texto con una voz cálida";
+    case "github": return "revisa los issues abiertos de mi repositorio";
+    case "railway": return "¿por qué ha fallado el último despliegue?";
     default: return "ayúdame con esto";
   }
 }

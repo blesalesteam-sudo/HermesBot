@@ -1,5 +1,5 @@
 diff --git a/src/components/PluginsPanel.tsx b/src/components/PluginsPanel.tsx
-index 8392795..d760512 100644
+index 8392795..eb74b18 100644
 --- a/src/components/PluginsPanel.tsx
 +++ b/src/components/PluginsPanel.tsx
 @@ -46,6 +46,7 @@ import { AppGrantPrompt, botsForApps, useAppGrants } from "./AppGrantPrompt";
@@ -39,7 +39,7 @@ index 8392795..d760512 100644
      const launch = reserveConnectionPage();
      opening.current = launch;
      statusGenerations.current.set(slug, (statusGenerations.current.get(slug) ?? 0) + 1);
-@@ -486,6 +495,13 @@ export function PluginsPanel() {
+@@ -486,6 +495,14 @@ export function PluginsPanel() {
      ? "bg-ink text-app"
      : "bg-control/70 text-ink-secondary hover:bg-raised-hover hover:text-ink";
  
@@ -47,13 +47,14 @@ index 8392795..d760512 100644
 +  const conectado = (item: Recomendado) => item.tipo === "composio" ? hasActiveConnection(status[item.slug ?? item.id])
 +    : item.tipo === "mcp" ? hostedConnected?.[item.id as keyof HostedConnections] === true
 +    : item.tipo === "puente" ? configured || composioConnect.puesto
++    : item.tipo === "github" ? githubSignedIn === true
 +    : item.tipo === "modelos" ? instances.some((instance) => instance.snapshot.state === "available" && instance.snapshot.authenticated !== false)
 +    : false;
 +
    return (
      <div
        className="glass-popup-frame"
-@@ -501,7 +517,7 @@ export function PluginsPanel() {
+@@ -501,7 +518,7 @@ export function PluginsPanel() {
          aria-modal="true"
          aria-labelledby="plugins-title"
          tabIndex={-1}
@@ -62,7 +63,7 @@ index 8392795..d760512 100644
        >
          <header className="flex flex-col gap-4 px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
            <div>
-@@ -564,7 +580,7 @@ export function PluginsPanel() {
+@@ -564,7 +581,7 @@ export function PluginsPanel() {
                />
              </label>
            </div>
@@ -71,7 +72,7 @@ index 8392795..d760512 100644
              <button
                type="button"
                data-apps-filter="all"
-@@ -612,6 +628,16 @@ export function PluginsPanel() {
+@@ -612,6 +629,16 @@ export function PluginsPanel() {
          </header>
  
          <div ref={tileWindow.scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 sm:px-7">
@@ -88,7 +89,7 @@ index 8392795..d760512 100644
            {stale ? (
              <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-[13px] text-warning">
                <TriangleAlert size={14} className="mt-px shrink-0" />
-@@ -759,7 +785,16 @@ export function PluginsPanel() {
+@@ -759,7 +786,16 @@ export function PluginsPanel() {
                <McpServersPanel embedded hideHosted={filter === "all"} />
              </div>
            )}
@@ -106,16 +107,16 @@ index 8392795..d760512 100644
            body={disconnecting ? disconnectAccountConfirmation(disconnecting.label, disconnecting.account) : ""} onCancel={() => setDisconnecting(null)}
            onConfirm={() => { if (disconnecting) disconnectAccount(disconnecting.slug, disconnecting.account.id); setDisconnecting(null); }} />
 diff --git a/src/lib/hosted-mcp-apps.ts b/src/lib/hosted-mcp-apps.ts
-index cd86688..bc008e1 100644
+index cd86688..26375ce 100644
 --- a/src/lib/hosted-mcp-apps.ts
 +++ b/src/lib/hosted-mcp-apps.ts
 @@ -1,4 +1,4 @@
 -import { Clapperboard, CreditCard, Mail, PhoneCall, RadioTower, Smartphone, type LucideIcon } from "lucide-react";
-+import { AudioLines, Clapperboard, CreditCard, NotebookText, Mail, PhoneCall, RadioTower, Smartphone, type LucideIcon } from "lucide-react";
++import { AudioLines, Clapperboard, CreditCard, NotebookText, TrainFront, Mail, PhoneCall, RadioTower, Smartphone, type LucideIcon } from "lucide-react";
  
  import bubblavLogo from "@/assets/bubblav/logo.png";
  import whopLogo from "@/assets/whop/logo.png";
-@@ -104,6 +104,25 @@ export const HOSTED_MCP_APPS = [
+@@ -104,6 +104,34 @@ export const HOSTED_MCP_APPS = [
      notice: "higgsfield.notice",
      keywords: "higgsfield ai image video generate generation picture clip film soul kling seedance",
    },
@@ -138,14 +139,23 @@ index cd86688..bc008e1 100644
 +    notice: "openbot.elevenlabs.notice",
 +    keywords: "elevenlabs eleven labs voice voz audio speech text to speech tts sound música music",
 +  },
++  {
++    id: "railway",
++    label: "Railway",
++    url: "https://mcp.railway.com",
++    icon: { glyph: TrainFront },
++    description: "openbot.railway.description",
++    notice: "openbot.railway.notice",
++    keywords: "railway deploy despliegue servidor hosting logs variables proyectos servicios",
++  },
  ] as const satisfies readonly HostedMcpApp[];
  
  /** A row of the table, with its own literal id. */
 diff --git a/src/locales/en.json b/src/locales/en.json
-index 361a917..a531ec9 100644
+index 361a917..07d8982 100644
 --- a/src/locales/en.json
 +++ b/src/locales/en.json
-@@ -12267,5 +12267,9 @@
+@@ -12267,5 +12267,11 @@
    "settings.features.openbot.updates": "Update notices",
    "settings.features.openbot.updatesLine": "Version and update checks in Settings. Your server updates on its own.",
    "settings.features.openbot.themes": "All colour themes",
@@ -154,13 +164,15 @@ index 361a917..a531ec9 100644
 +  "openbot.notion.description": "Your bots read and write your Notion pages and databases.",
 +  "openbot.notion.notice": "Sign in with your Notion account and choose which pages to share. No key needed. Choose which bots use it in Bot access.",
 +  "openbot.elevenlabs.description": "Your bots make voices, audio and sound effects with ElevenLabs, on your own account.",
-+  "openbot.elevenlabs.notice": "Sign in with your ElevenLabs account. What your bots generate spends your account's credits, so choose which bots have it in Bot access."
++  "openbot.elevenlabs.notice": "Sign in with your ElevenLabs account. What your bots generate spends your account's credits, so choose which bots have it in Bot access.",
++  "openbot.railway.description": "Your bots look into your Railway projects: services, deploys, logs and variables.",
++  "openbot.railway.notice": "Sign in with your Railway account. A bot with access can deploy or change your services, so choose which bots have it in Bot access."
  }
 diff --git a/src/locales/es.json b/src/locales/es.json
-index fe5707a..5edc9f3 100644
+index fe5707a..d93d0d9 100644
 --- a/src/locales/es.json
 +++ b/src/locales/es.json
-@@ -12267,5 +12267,9 @@
+@@ -12267,5 +12267,11 @@
    "settings.features.openbot.updates": "Avisos de actualización",
    "settings.features.openbot.updatesLine": "La versión y la búsqueda de actualizaciones en Ajustes. Vuestro servidor se actualiza solo.",
    "settings.features.openbot.themes": "Todos los temas de colores",
@@ -169,5 +181,7 @@ index fe5707a..5edc9f3 100644
 +  "openbot.notion.description": "Tus bots leen y escriben en tus páginas y bases de datos de Notion.",
 +  "openbot.notion.notice": "Inicia sesión con tu cuenta de Notion y elige qué páginas compartes. No hace falta clave. Elige qué bots lo usan en Acceso de los bots.",
 +  "openbot.elevenlabs.description": "Tus bots crean voces, audios y efectos de sonido con ElevenLabs, en tu propia cuenta.",
-+  "openbot.elevenlabs.notice": "Inicia sesión con tu cuenta de ElevenLabs. Lo que generen tus bots gasta créditos de tu cuenta, así que elige qué bots lo tienen en Acceso de los bots."
++  "openbot.elevenlabs.notice": "Inicia sesión con tu cuenta de ElevenLabs. Lo que generen tus bots gasta créditos de tu cuenta, así que elige qué bots lo tienen en Acceso de los bots.",
++  "openbot.railway.description": "Tus bots consultan tus proyectos de Railway: servicios, despliegues, registros y variables.",
++  "openbot.railway.notice": "Inicia sesión con tu cuenta de Railway. Un bot con acceso puede desplegar o cambiar tus servicios, así que elige qué bots lo tienen en Acceso de los bots."
  }
