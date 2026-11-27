@@ -91,3 +91,26 @@ for (const name of readdirSync("src/locales").filter((f) => f.endsWith(".json") 
   writeFileSync(file, JSON.stringify(strings, null, 2) + "\n");
 }
 console.log(`rebrand: ${NAME} en ${changed} textos de la interfaz`);
+
+// El nombre hacia fuera y en lo que escriben los bots: los servicios a los que se conecta OpenBot (Notion, Railway,
+// Composio… al iniciar sesión por MCP), las cabeceras User-Agent, los avisos que el servidor da a los bots y que
+// acaban en el chat, y el icono instalable. Se cambia "OpenMausBot" como palabra suelta en el código (no en
+// identificadores, claves de texto ni rutas de archivo). Los avisos de licencia (LICENSE, NOTICE) no se tocan.
+const SKIP_FILE = /\.(test|e2e\.test|dom\.test|spec)\.tsx?$|\/(service-unit|service-cli)\.ts$/;
+const WORD = /(?<![\w.\/-])OpenMausBot(?!\w|\.app|\.js|\/)/g;
+function walk(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) { if (entry.name !== "node_modules" && entry.name !== "locales") walk(path, out); }
+    else if (/\.(ts|tsx|mjs)$/.test(entry.name) && !SKIP_FILE.test(path)) out.push(path);
+  }
+  return out;
+}
+let outward = 0;
+const roots = ["server", "shared", "src", ...readdirSync("packages").map((p) => join("packages", p, "src"))].filter((dir) => { try { return readdirSync(dir) && true; } catch { return false; } });
+for (const file of [...roots.flatMap((dir) => walk(dir)), "public/app-icon.svg"]) {
+  const text = readFileSync(file, "utf8");
+  const next = text.replace(WORD, () => { outward++; return NAME; });
+  if (next !== text) writeFileSync(file, next);
+}
+console.log(`rebrand: ${NAME} en ${outward} sitios del código (nombre hacia fuera y avisos)`);
