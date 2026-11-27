@@ -74,6 +74,14 @@ Para probarlo: en un chat con un bot de Hermes, pide "hazme un análisis de mis 
 El nombre "OpenMausBot", "MausBot" y su mascota son marca de sus autores: este producto
 usa nombre e imagen propios. Los avisos de licencia originales se conservan en `/app`.
 
+## El logo
+
+El logo es un primer plano del robot de antenas, blanco sobre negro, que llena el icono de borde a borde, con el mismo
+tipo de volumen que el icono de Grok Bot (negro plano, blanco que se agrisa hacia abajo, ojos hundidos, filo blanco).
+Lo dibuja `overlay/scripts/logo/gen-openbot-logo.mjs` (escribe `logo5-full.svg`, `logo5-square.svg` y `logo5-mac.svg`);
+los PNG de `overlay/public/openbot-logo-*` y `favicon.ico` salen de esos SVG. Los nombres de archivo cambian con cada
+logo nuevo para que navegadores y móviles no sigan enseñando el viejo.
+
 ## El aspecto de los bots
 
 Los bots se crean con el mismo sistema que Grok Bot: eliges una forma de una cuadrícula de 5 columnas y un

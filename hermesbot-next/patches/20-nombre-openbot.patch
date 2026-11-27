@@ -36,9 +36,9 @@
 -    <link rel="icon" type="image/svg+xml" href="/app-icon.svg" />
 -    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 +    <meta name="apple-mobile-web-app-title" content="OpenBot" />
-+    <link rel="icon" type="image/svg+xml" href="/openbot-icon.svg" />
-+    <link rel="alternate icon" sizes="32x32" href="/favicon.ico" />
-+    <link rel="apple-touch-icon" sizes="180x180" href="/openbot-touch-icon.png" />
++    <link rel="icon" type="image/svg+xml" href="/openbot-logo.svg" />
++    <link rel="alternate icon" sizes="32x32" href="/favicon.ico?v=3" />
++    <link rel="apple-touch-icon" sizes="180x180" href="/openbot-logo-touch.png" />
      <link rel="manifest" href="/manifest.webmanifest" />
 +    <link rel="stylesheet" href="/openbot-theme.css" />
 -    <title>MausBot</title>
@@ -64,9 +64,9 @@
    "icons": [
 -    { "src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
 -    { "src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
-+    { "src": "/openbot-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-+    { "src": "/openbot-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-+    { "src": "/openbot-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-+    { "src": "/openbot-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
++    { "src": "/openbot-logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
++    { "src": "/openbot-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
++    { "src": "/openbot-logo-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
++    { "src": "/openbot-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
    ]
  }
