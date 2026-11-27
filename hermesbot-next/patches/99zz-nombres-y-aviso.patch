@@ -1,0 +1,102 @@
+diff --git a/server/grok-history.ts b/server/grok-history.ts
+index 281bff8..e0b7f17 100644
+--- a/server/grok-history.ts
++++ b/server/grok-history.ts
+@@ -4,7 +4,9 @@ import { readGrokChat } from "./grok-local.ts";
+ import type { SetupMachine } from "./setup-import.ts";
+ import type { Message, Store } from "./store.ts";
+ 
+-export const GROK_HISTORY_TITLE = "Chat from Grok Bot";
++export const GROK_HISTORY_TITLE = "Chat de Grok Bot";
++/** OpenBot: the title this thread had before; a chat brought under it is still that thread. */
++const GROK_HISTORY_TITLES: readonly string[] = [GROK_HISTORY_TITLE, "Chat from Grok Bot"];
+ export type GrokHistoryStore = Pick<Store, "bot" | "createTask" | "importTranscript" | "messagesFor">;
+ 
+ type Entry = Record<string, unknown>;
+@@ -73,7 +75,7 @@ export function grokChatMessages(entries: readonly unknown[]): Message[] {
+ export function importGrokHistory(store: GrokHistoryStore, machine: SetupMachine, botId: string, grokName: string): GrokHistoryAnswer | null {
+   const bot = store.bot(botId);
+   if (!bot) return null;
+-  const earlier = bot.tasks?.find((task) => task.title === GROK_HISTORY_TITLE);
++  const earlier = bot.tasks?.find((task) => GROK_HISTORY_TITLES.includes(task.title));
+   const kept = earlier ? store.messagesFor(earlier.threadId).length : 0;
+   if (kept) return { messages: kept };
+   const chat = readGrokChat(machine, grokName);
+@@ -92,7 +94,7 @@ export function importGrokHistory(store: GrokHistoryStore, machine: SetupMachine
+ export function importGrokChatLines(store: GrokHistoryStore, botId: string, lines: readonly GrokChatLine[]): GrokHistoryAnswer | null {
+   const bot = store.bot(botId);
+   if (!bot) return null;
+-  const earlier = bot.tasks?.find((task) => task.title === GROK_HISTORY_TITLE);
++  const earlier = bot.tasks?.find((task) => GROK_HISTORY_TITLES.includes(task.title));
+   const kept = earlier ? store.messagesFor(earlier.threadId).length : 0;
+   if (kept) return { messages: kept };
+   const messages: Message[] = [];
+diff --git a/server/routes/setup-import.test.ts b/server/routes/setup-import.test.ts
+index 5725df4..4646365 100644
+--- a/server/routes/setup-import.test.ts
++++ b/server/routes/setup-import.test.ts
+@@ -205,7 +205,7 @@ describe("the setup import routes", () => {
+ 
+ describe("a moved Bot's chat from the Grok Bot app", () => {
+   const HISTORY = "/api/setup-import/grok/history";
+-  const TITLE = "Chat from Grok Bot";
++  const TITLE = "Chat de Grok Bot";
+   const at = (minute: number) => Date.UTC(2026, 7, 11, 9, minute);
+   function grokHome(rows = [{ id: "d0bdfa13-0000-4000-8000-000000000003", name: "Drew" }]) {
+     const home = fixtureHome();
+diff --git a/src/components/settings/account-summary.ts b/src/components/settings/account-summary.ts
+index 6c8a00a..83a8275 100644
+--- a/src/components/settings/account-summary.ts
++++ b/src/components/settings/account-summary.ts
+@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n";
+ import { profileForSession, type SessionState } from "@/lib/session";
+ import { readSharedSessionState } from "@/lib/shared-session";
+ import { useStoreSelector } from "@/state/store-select";
++import { useMyProfile } from "../openbot/people-api"; // OpenBot
+ 
+ export interface AccountSummary {
+   /** read from the account bridge, the plan bridge or the server session; null until it answers */
+@@ -54,6 +55,7 @@ export function useAccountSummary(): AccountSummary {
+ /** The name and photo the chrome shows for you, and the server session they came from. */
+ export function useYou(): { profile: { name?: string; email?: string; avatarUrl?: string } | undefined; session: SessionState | null } {
+   const profile = useStoreSelector((state) => state.config?.profile);
++  useMyProfile(); // OpenBot: draws again when «Tu perfil» loads or changes
+   const [session, setSession] = useState<SessionState | null>(null);
+   useEffect(() => {
+     let alive = true;
+diff --git a/src/components/settings/settings-place.ts b/src/components/settings/settings-place.ts
+index a050381..aea4678 100644
+--- a/src/components/settings/settings-place.ts
++++ b/src/components/settings/settings-place.ts
+@@ -1,4 +1,5 @@
+ import { pageIsThisComputer } from "@/lib/companion-bridge";
++import { PRODUCT_NAME } from "@/lib/brand";
+ import { t } from "@/lib/i18n";
+ import { useStoreSelector } from "@/state/store-select";
+ import { useWindowPlace, windowPlaceName } from "../WindowPlaceTitle";
+@@ -26,7 +27,8 @@ export function useSettingsPlace(): SettingsPlace {
+     const name = place ? windowPlaceName(place, team) : team || t("cloudSetup.myCloud");
+     return { name, kind: team ? "team" : "cloud", color: place?.color ?? null, named: true };
+   }
+-  const name = place?.name || (typeof location === "undefined" ? "" : location.host) || t("rail.thisComputer");
++  // OpenBot: a hosted place with no name of its own is called by the app's name, never by its web address.
++  const name = place?.name || PRODUCT_NAME;
+   return { name, kind: "server", color: place?.color ?? null, named: true };
+ }
+ 
+diff --git a/src/lib/session.ts b/src/lib/session.ts
+index d7d7b6f..b8bfe59 100644
+--- a/src/lib/session.ts
++++ b/src/lib/session.ts
+@@ -33,6 +33,11 @@ export function profileForSession(profile: SessionProfile | undefined, sessionSt
+     const mine = myProfile();
+     return mine ? { name: mine.name || mine.username, email: mine.username ? `@${mine.username}` : undefined, ...(mine.hasPhoto ? { avatarUrl: photoUrl(mine.key) } : {}) } : { name: sessionState.email!.replace(/@openbot\.local$/i, "") };
+   }
++  // OpenBot: someone who came in with a code and has no name in the base's profile shows the one from «Tu perfil».
++  if (!profile?.name?.trim() && !profile?.email?.trim()) {
++    const mine = myProfile();
++    if (mine && (mine.name || mine.username)) return { name: mine.name || mine.username, ...(mine.hasPhoto ? { avatarUrl: photoUrl(mine.key) } : {}) };
++  }
+   if (sessionState.team || sessionState.scopes.includes("admin")) return profile;
+   const email = sessionState.email;
+   if (!email?.trim()) return undefined;

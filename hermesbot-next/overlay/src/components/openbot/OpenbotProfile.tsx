@@ -1,7 +1,7 @@
 // OpenBot: «Tu perfil» en Ajustes (foto, nombre, a qué te dedicas, «Sobre ti» y contraseña), el aviso para que el dueño
 // elija usuario y contraseña la primera vez, y la foto o inicial de cada persona.
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Loader2, X } from "lucide-react";
+import { Camera, Check, Loader2 } from "lucide-react";
 import { call, initials, loadMyProfile, personColor, photoUrl, saveMyProfile, shrinkPhoto, useMyProfile, type MyProfile } from "./people-api";
 
 export const obField = "h-11 w-full rounded-xl border border-transparent bg-inset px-3.5 text-[15px] text-ink outline-none transition-colors placeholder:text-ink-tertiary focus:border-hairline focus:bg-app";
@@ -54,38 +54,60 @@ function ClaimForm({ me, onDone }: { me: MyProfile; onDone(): void }) {
 }
 
 const NUDGE_LATER = "openbot.claim-later";
+const NUDGE_REST_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The owner, on a device paired with a code: a card that asks once per visit for the username and password to use from now on. */
+function nudgeResting(): boolean {
+  try {
+    const at = Number(localStorage.getItem(NUDGE_LATER));
+    return Number.isFinite(at) && at > 0 && Date.now() - at < NUDGE_REST_MS;
+  } catch { return false; }
+}
+
+/** The owner, on a device paired with a code: one window in the middle of the screen that asks for the username and
+ * password to use from now on. «Más tarde» puts it away for a week on this browser, so it never sits over the chat;
+ * the same form stays in Ajustes → Tu cuenta. */
 export function OpenbotAccountNudge() {
   const me = useMyProfile();
-  const [later, setLater] = useState(() => { try { return sessionStorage.getItem(NUDGE_LATER) === "1"; } catch { return false; } });
+  const [later, setLater] = useState(nudgeResting);
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
+  const putAway = () => { try { localStorage.setItem(NUDGE_LATER, String(Date.now())); } catch {} setLater(true); };
+  const asking = Boolean(me?.needsAccount) && !later && !done;
+  useEffect(() => {
+    if (!done) return;
+    const timer = setTimeout(() => setDone(false), 5000);
+    return () => clearTimeout(timer);
+  }, [done]);
+  useEffect(() => {
+    if (!asking) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") putAway(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [asking]);
   if (done) {
     return (
-      <div data-openbot-nudge role="status" className="fixed bottom-[max(16px,env(safe-area-inset-bottom))] right-4 left-4 z-[60] mx-auto flex max-w-[380px] items-center gap-3 rounded-2xl bg-accent px-4 py-3 text-accent-ink shadow-lg sm:left-auto sm:mx-0">
-        <Check size={18} /> <span className="flex-1 text-[14px]">Listo. Desde ahora entras con tu usuario y tu contraseña.</span>
-        <button type="button" aria-label="Cerrar" onClick={() => setDone(false)} className="opacity-70 hover:opacity-100"><X size={16} /></button>
+      <div data-openbot-nudge="done" role="status" className="pointer-events-none fixed inset-x-4 top-[max(16px,env(safe-area-inset-top))] z-[60] flex justify-center">
+        <div className="flex max-w-[420px] items-center gap-2.5 rounded-full bg-accent px-4 py-2.5 text-accent-ink shadow-lg">
+          <Check size={16} /> <span className="text-[14px]">Listo. Desde ahora entras con tu usuario y tu contraseña.</span>
+        </div>
       </div>
     );
   }
-  if (!me?.needsAccount || later) return null;
+  if (!me || !asking) return null;
   return (
-    <div data-openbot-nudge className="fixed bottom-[max(16px,env(safe-area-inset-bottom))] right-4 left-4 z-[60] mx-auto max-w-[380px] rounded-2xl border border-hairline/40 bg-app p-4 text-ink shadow-xl sm:left-auto sm:mx-0">
-      <div className="flex items-start gap-3">
-        <img src="/openbot-logo.svg" alt="" width={36} height={36} className="size-9 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold">Crea tu usuario y contraseña</p>
-          <p className="mt-0.5 text-[13px] text-ink-secondary">Así entras desde cualquier sitio sin códigos. No pierdes nada de lo que tienes.</p>
-        </div>
-        <button type="button" aria-label="Más tarde" onClick={() => { try { sessionStorage.setItem(NUDGE_LATER, "1"); } catch {} setLater(true); }} className="text-ink-secondary hover:text-ink"><X size={16} /></button>
+    <div data-openbot-nudge className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) putAway(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="openbot-nudge-title" className="w-full max-w-[400px] rounded-3xl border border-hairline/30 bg-app p-6 text-center text-ink shadow-2xl">
+        <img src="/openbot-logo.svg" alt="" width={52} height={52} className="mx-auto size-[52px]" />
+        <p id="openbot-nudge-title" className="mt-4 text-[18px] font-semibold tracking-[-0.01em]">Crea tu usuario y contraseña</p>
+        <p className="mx-auto mt-1.5 max-w-[320px] text-[14px] leading-5 text-ink-secondary">Así entras desde cualquier sitio sin códigos. No pierdes nada de lo que tienes.</p>
+        {open ? <div className="mt-5 text-left"><ClaimForm me={me} onDone={() => setDone(true)} /></div> : (
+          <div className="mt-5 flex flex-col gap-2">
+            <button type="button" autoFocus className={obPrimary} onClick={() => setOpen(true)}>Crear ahora</button>
+            <button type="button" className={obQuiet} onClick={putAway}>Más tarde</button>
+          </div>
+        )}
+        <p className="mt-4 text-[12px] text-ink-tertiary">{open ? <button type="button" className="underline" onClick={putAway}>Ahora no</button> : "Lo tienes siempre en Ajustes → Tu cuenta."}</p>
       </div>
-      {open ? <div className="mt-3"><ClaimForm me={me} onDone={() => setDone(true)} /></div> : (
-        <div className="mt-3 flex gap-2">
-          <button type="button" className={`${obPrimary} flex-1`} onClick={() => setOpen(true)}>Crear ahora</button>
-          <button type="button" className={obQuiet} onClick={() => { try { sessionStorage.setItem(NUDGE_LATER, "1"); } catch {} setLater(true); }}>Más tarde</button>
-        </div>
-      )}
     </div>
   );
 }
