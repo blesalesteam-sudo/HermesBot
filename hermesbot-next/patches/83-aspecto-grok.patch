@@ -1,0 +1,375 @@
+diff -ruN -x node_modules -x skills a/src/components/ChatMarkdown.tsx b/src/components/ChatMarkdown.tsx
+--- a/src/components/ChatMarkdown.tsx	2026-11-27 09:28:28
++++ b/src/components/ChatMarkdown.tsx	2026-11-27 09:30:13
+@@ -8,7 +8,7 @@
+ import { useCopyFeedback } from "@/lib/copy-text";
+ import { t } from "@/lib/i18n";
+ import { cn } from "@/lib/cn";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import { remarkMentions, sameMentionPerson, type MentionPeer, type MentionPerson } from "@/lib/mentions";
+ import { createMarkdownRenderCache } from "@/lib/markdown-render-cache";
+ import { closedFence, mayHoldMath, openFence, splitMarkdownBlocks, splitStreamPieces, type StreamPieces } from "@/lib/markdown-stream-blocks";
+@@ -232,7 +232,7 @@
+   const [error, setError] = useState<string | null>(null);
+   const [showSource, setShowSource] = useState(false);
+   const { state: copied, copy } = useCopyFeedback(code);
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+ 
+   useEffect(() => {
+     if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
+diff -ruN -x node_modules -x skills a/src/components/ChatView.tsx b/src/components/ChatView.tsx
+--- a/src/components/ChatView.tsx	2026-11-27 09:28:26
++++ b/src/components/ChatView.tsx	2026-11-27 09:30:13
+@@ -1,5 +1,5 @@
+ import { memo, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
+ import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
+ import { useShowThreads } from "@/lib/thread-preferences";
+@@ -808,7 +808,7 @@
+   const reactor = useReactor();
+   const speakerViewer = reactor !== "user" ? reactor : null;
+   const rows = useMemo<ChatRows>(
+-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, botColor: bot.color, voiceId: bot.voice, tts, localVoice, hasMore, bots, mentionPeers, mentionPerson: { profileName: state.config?.profile?.name }, focus, showToolCalls, locale, dispatch, onBranch, bubbleStyle, conversational: isConversational(bot.replyStyle), simple: !advanced, canReact: mayWrite, openedAt, speakerViewer, phone }),
++    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, botColor: bot.color, voiceId: bot.voice, tts, localVoice, hasMore, bots, mentionPeers, mentionPerson: { profileName: state.config?.profile?.name }, focus, showToolCalls, locale, dispatch, onBranch, bubbleStyle, conversational: isConversational(bot.replyStyle), simple: !advanced || SIMPLE_CHAT_LOOK, canReact: mayWrite, openedAt, speakerViewer, phone }),
+     [bot.id, bot.threadId, bot.name, bot.color, bot.voice, tts, localVoice, hasMore, bots, mentionPeers, state.config?.profile?.name, focus, showToolCalls, locale, dispatch, onBranch, bubbleStyle, bot.replyStyle, advanced, mayWrite, openedAt, speakerViewer, phone],
+   );
+   const currentTask = bot.tasks?.find((task) => task.threadId === bot.threadId), place = effectivePlace(bot, currentTask), team = state.config?.team, privateChat = Boolean(team) && (currentTask?.private === true || isNewChatThread(bot.threadId) || (ownChatStarted(bot.threadId) && !currentTask?.shared)), ownHelper = Boolean(team) && !privateChat && Boolean(bot.defaultBot?.person), sharedChat = Boolean(team) && !privateChat && !ownHelper;
+diff -ruN -x node_modules -x skills a/src/components/CodeBlock.tsx b/src/components/CodeBlock.tsx
+--- a/src/components/CodeBlock.tsx	2026-11-27 09:28:26
++++ b/src/components/CodeBlock.tsx	2026-11-27 09:30:13
+@@ -6,7 +6,7 @@
+ import { cn } from "@/lib/cn";
+ import { useCopyFeedback } from "@/lib/copy-text";
+ import { t } from "@/lib/i18n";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import { useNearScreen } from "@/lib/on-screen";
+ import { countLines, downloadSnippetFile, formatLineCount, getLanguageDisplayName, getSnippetFileName } from "../lib/code-block";
+ import { SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
+@@ -199,7 +199,7 @@
+ }
+ 
+ export function CodeBlock({ code, lang, initialWrap = false, open = false }: CodeBlockProps) {
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+   const frame = useRef<HTMLDivElement>(null);
+   // A long chat can hold dozens of blocks: coloured ones are thousands of spans to style and lay out on every switch,
+   // so a block is coloured only once it comes near the screen.
+diff -ruN -x node_modules -x skills a/src/components/MessageBoundary.tsx b/src/components/MessageBoundary.tsx
+--- a/src/components/MessageBoundary.tsx	2026-11-27 09:28:25
++++ b/src/components/MessageBoundary.tsx	2026-11-27 09:30:13
+@@ -1,10 +1,10 @@
+ import { Component, type ReactNode } from "react";
+ 
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import { plainBotBubble } from "./chat-bubble";
+ 
+ function FallbackBubble({ text }: { text: string }) {
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+   return <div data-chat-bubble={simple ? "simple" : ""} className={plainBotBubble(simple)}>{text}</div>;
+ }
+ 
+diff -ruN -x node_modules -x skills a/src/components/RichTable.tsx b/src/components/RichTable.tsx
+--- a/src/components/RichTable.tsx	2026-11-27 09:28:26
++++ b/src/components/RichTable.tsx	2026-11-27 09:30:13
+@@ -7,7 +7,7 @@
+ import { copyText } from "@/lib/copy-text";
+ import { columnMinimums, fitsColumns } from "@/lib/table-fit";
+ import { cn } from "@/lib/cn";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ 
+ export interface TableCell { text: string; content?: ReactNode; align?: TableAlign; vAlign?: "top" | "middle" | "bottom" }
+ export type TableAlign = "left" | "center" | "right" | "start" | "end";
+@@ -53,7 +53,7 @@
+ const TABLE_CARD = "group/table relative w-fit min-w-[min(100%,20rem)] max-w-full overflow-hidden rounded-[18px] bg-card text-ink touch:pt-11";
+ 
+ export function RichTable({ columns, rows, name = t("table.title"), expanded = false, direction = "ltr", headless = false, card: asCard = true }: RichTableProps) {
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+   const [query, setQuery] = useState("");
+   const deferredQuery = useDeferredValue(query);
+   const [sort, setSort] = useState<TableSort>(null);
+diff -ruN -x node_modules -x skills a/src/components/RoomTextMessage.tsx b/src/components/RoomTextMessage.tsx
+--- a/src/components/RoomTextMessage.tsx	2026-11-27 09:28:26
++++ b/src/components/RoomTextMessage.tsx	2026-11-27 09:30:13
+@@ -4,7 +4,7 @@
+ import { useReactor } from "@/lib/cloud-guest";
+ import { otherSpeaker } from "@/lib/own-profile";
+ import { sameDrawnBots } from "@/lib/drawn-bots";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import { useSpeech } from "@/lib/tts/useSpeech";
+ import { splitTranscriptAttachments } from "@/lib/composer-attachments";
+ import { splitTranscriptCitations, type CitationAttachment } from "@/lib/citations";
+@@ -107,7 +107,7 @@
+   const focusedSearch = focusNonce !== null;
+   const collapsible = user && !expanded && (display.length > USER_COLLAPSE_CHARS || display.split("\n").length > USER_COLLAPSE_LINES);
+   useEffect(() => { if (focusedSearch && collapsible) setExpanded(true); }, [focusedSearch, collapsible, focusNonce]);
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+   const speakerBot = members.find((member) => member.id === m.from?.botId);
+   const botText = rawText; const teammates = useTeammates(); const peers = useMemo(() => [...members, ...teammates.peers], [members, teammates]);
+   const pin = roomPin({ id: groupId, pinnedMessageId: pinned ? m.id : undefined }, m, dispatch);
+diff -ruN -x node_modules -x skills a/src/components/app/AppChrome.tsx b/src/components/app/AppChrome.tsx
+--- a/src/components/app/AppChrome.tsx	2026-11-27 09:28:28
++++ b/src/components/app/AppChrome.tsx	2026-11-27 09:30:59
+@@ -6,7 +6,7 @@
+ import type { AppDoneState, AppNetwork } from "../../../shared/app";
+ import { ASK_CHIP, ASK_CHIP_IDLE, ASK_QUIET_BUTTON } from "../AskCard";
+ 
+-export const APP_SURFACE = "w-full overflow-hidden rounded-2xl bg-composer ring-1 ring-composer-ring";
++export const APP_SURFACE = "w-full overflow-hidden rounded-[20px] bg-composer ring-1 ring-composer-ring shadow-[0_1px_4px_rgba(0,0,0,0.05)]";
+ const ICON_BUTTON =
+   "flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40";
+ 
+@@ -70,10 +70,10 @@
+   );
+ }
+ 
+-export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false, panel = false }: {
++export function PageCardFooter({ title, detail, updated, infoId, infoOpen, onInfo, onReload, reloading = false, divided = false }: {
+   title: string;
+-  /** OpenBot: a page with charts shows a chart on its icon, a document shows lines of text. */
+-  panel?: boolean;
++  /** OpenBot: a hairline above the footer when the card shows a preview of the page over it. */
++  divided?: boolean;
+   detail: string;
+   updated: boolean;
+   infoId: string;
+@@ -83,28 +83,23 @@
+   reloading?: boolean;
+ }) {
+   return (
+-    <div data-page-footer className="flex min-h-18 items-center gap-3.5 px-4 py-3.5">
+-      {/* OpenBot: a small sheet with a chart, so a page reads as a document at a glance. */}
+-      <span data-page-icon={panel ? "panel" : "document"} aria-hidden="true" className="flex h-[46px] w-[38px] shrink-0 flex-col justify-end gap-[3px] rounded-lg bg-app p-[7px] ring-1 ring-ink/[0.10]">
+-        {panel ? <>
+-          <span className="mb-[2px] h-[3px] w-[55%] rounded-full bg-ink/[0.14]" />
+-          <span className="flex h-[20px] items-end gap-[3px]">
+-            <span className="h-[8px] w-[5px] rounded-[1px] bg-ink/[0.30]" />
+-            <span className="h-[13px] w-[5px] rounded-[1px] bg-ink/[0.50]" />
+-            <span className="h-[20px] w-[5px] rounded-[1px] bg-ink" />
+-            <span className="h-[11px] w-[5px] rounded-[1px] bg-ink/[0.40]" />
+-          </span>
+-        </> : <>
+-          <span className="h-[4px] w-[60%] rounded-full bg-ink" />
+-          <span className="mt-[2px] h-[3px] w-full rounded-full bg-ink/[0.16]" />
+-          <span className="h-[3px] w-full rounded-full bg-ink/[0.16]" />
+-          <span className="h-[3px] w-[85%] rounded-full bg-ink/[0.16]" />
+-          <span className="h-[3px] w-[50%] rounded-full bg-ink/[0.16]" />
+-        </>}
++    <div data-page-footer className={cn("flex min-h-[68px] items-center gap-3 px-4 py-3", divided && "border-t border-ink/[0.07]")}>
++      {/* OpenBot: a small sheet with two lines and a colour chart, so a page reads as a page at a glance. */}
++      <span data-page-icon aria-hidden="true" className="flex h-[40px] w-[32px] shrink-0 flex-col justify-between rounded-[7px] bg-composer p-[5px] shadow-[0_1px_3px_rgba(0,0,0,0.10)] ring-1 ring-ink/[0.08]">
++        <span className="flex flex-col gap-[3px]">
++          <span className="h-[3px] w-full rounded-full bg-ink/[0.14]" />
++          <span className="h-[3px] w-[55%] rounded-full bg-ink/[0.14]" />
++        </span>
++        <span className="flex h-[16px] items-end gap-[2px]">
++          <span className="h-[5px] flex-1 rounded-[1px] bg-[#ef6b5a]" />
++          <span className="h-[8px] flex-1 rounded-[1px] bg-[#f2a33a]" />
++          <span className="h-[12px] flex-1 rounded-[1px] bg-[#3fae6a]" />
++          <span className="h-[16px] flex-1 rounded-[1px] bg-[#3f7fe8]" />
++        </span>
+       </span>
+       <div className="min-w-0 flex-1">
+-        <div title={title} className="truncate text-[15px] font-medium leading-5 text-ink"><bdi dir="auto">{title}</bdi></div>
+-        <div className="truncate text-[13px] leading-[18px] text-ink-secondary">{detail}</div>
++        <div title={title} className="truncate text-[14.5px] font-medium leading-5 text-ink"><bdi dir="auto">{title}</bdi></div>
++        <div className="truncate text-[13px] leading-[18px] text-ink-tertiary">{detail}</div>
+       </div>
+       {updated && <span role="status" data-page-updated className="shrink-0 rounded-full bg-accent/15 px-2 py-px text-[13px] font-medium text-accent-text">{t("chat.preview.updated")}</span>}
+       <div className={cn(
+diff -ruN -x node_modules -x skills a/src/components/app/AppMessage.tsx b/src/components/app/AppMessage.tsx
+--- a/src/components/app/AppMessage.tsx	2026-11-27 09:28:28
++++ b/src/components/app/AppMessage.tsx	2026-11-27 09:30:59
+@@ -22,6 +22,8 @@
+ const CARD_TITLE = "truncate px-5 pt-5 text-[17px] font-semibold leading-6 text-ink";
+ const CARD_TITLE_HEIGHT = 44;
+ const DOC_REUSE_MS = 60_000;
++/** OpenBot: the card shows the top of the page drawn smaller, as a preview of the real thing. */
++const PREVIEW_SCALE = 0.64;
+ 
+ const heights = new Map<string, number>();
+ /** Whether a page opens with a heading of its own, as it last said: by message id and version. */
+@@ -276,10 +278,9 @@
+   // The title stays while the frame is away (the pool took its slot), so the card keeps its height.
+   const titled = compact && opens === false;
+   // The compact card clips the page at its natural size, so it reads as a preview of the real thing.
+-  const previewHeight = height + (titled ? CARD_TITLE_HEIGHT : 0);
+-  // OpenBot: in the chat a page is one compact row (icon, title, kind), with no preview: it opens beside the chat.
+-  // The frame stays mounted at no height, so the page is ready the moment the card is opened.
+-  const boxHeight = compact ? 0 : height;
++  // OpenBot: the page is drawn at PREVIEW_SCALE in a wider box, so the card shows more of it, like a thumbnail.
++  const previewHeight = Math.round(height * PREVIEW_SCALE) + (titled ? CARD_TITLE_HEIGHT : 0);
++  const boxHeight = compact ? Math.min(previewHeight, PAGE_PREVIEW_HEIGHT) : height;
+   const body = collapsed ? null : fullScreen && current ? (
+     <div data-app-box className={cn("relative w-full", compact && "overflow-hidden", bordered && !compact && "border-t border-ink/[0.08]")} style={{ height: boxHeight }}>
+       {compact
+@@ -295,6 +296,7 @@
+       style={{ height: boxHeight }}>
+       {titled && <div data-page-title title={payload.title} className={CARD_TITLE}><bdi dir="auto">{payload.title}</bdi></div>}
+       {current ? (
++        <div data-page-scale style={compact ? { width: `${100 / PREVIEW_SCALE}%`, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: "top left" } : undefined}>
+         <AppFrame
+           key={loaded!.key}
+           doc={current}
+@@ -311,17 +313,17 @@
+           {...(!room ? { onSelection: setSelection } : {})}
+           {...onDraft}
+         />
++        </div>
+       ) : (
+-        // OpenBot: the card shows the page's title while the page loads, never an empty box.
+-        <AppPlaceholder height={boxHeight - (titled ? CARD_TITLE_HEIGHT : 0)} loading={slot.live} open={slot.live ? undefined : reloadNow}>{compact && !titled ? <span data-page-loading-title className="line-clamp-2 max-w-full text-[15px] font-medium text-ink"><bdi dir="auto">{payload.title}</bdi></span> : null}</AppPlaceholder>
++        <AppPlaceholder height={boxHeight - (titled ? CARD_TITLE_HEIGHT : 0)} loading={slot.live} open={slot.live ? undefined : reloadNow} />
+       )}
+       {undecided && (
+         <div data-page-settling className="absolute inset-0 bg-composer">
+-          <AppPlaceholder height={boxHeight} loading><span data-page-loading-title className="line-clamp-2 max-w-full text-[15px] font-medium text-ink"><bdi dir="auto">{payload.title}</bdi></span></AppPlaceholder>
++          <AppPlaceholder height={boxHeight} loading />
+         </div>
+       )}
+       {compact && current && !undecided && previewHeight > PAGE_PREVIEW_HEIGHT && (
+-        <div data-page-fade aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-composer to-transparent" />
++        <div data-page-fade aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-composer to-transparent" />
+       )}
+     </div>
+   );
+@@ -331,9 +333,7 @@
+       <AppOpenButton label={t("app.openAgain")} onClick={reloadNow} />
+     </div>
+   );
+-  // OpenBot: a page with charts is a "Panel", any other a "Documento"; until it has loaded, just a page.
+-  const panel = current ? /class="[^"]*\b(?:kpis|vbars|donut|spark|mini|chart)\b|<canvas|echarts/i.test(current.srcdoc) : undefined;
+-  const kind = panel === undefined ? t("chat.preview.kind") : panel ? "Panel" : "Documento";
++  const kind = t("chat.preview.kind");
+ 
+   return (
+     <div
+@@ -354,7 +354,7 @@
+             {body}
+             <PageCardFooter
+               title={payload.title}
+-              panel={panel === true}
++              divided={!collapsed && boxHeight > 0 && !noPage}
+               detail={version.last > 0 ? `${kind} · ${t("chat.preview.version", { n: version.rev + 1 })}` : kind}
+               updated={version.flash}
+               infoId={infoId}
+diff -ruN -x node_modules -x skills a/src/components/app/PageTools.tsx b/src/components/app/PageTools.tsx
+--- a/src/components/app/PageTools.tsx	2026-11-27 09:28:28
++++ b/src/components/app/PageTools.tsx	2026-11-27 09:30:59
+@@ -231,7 +231,7 @@
+       <div className="ms-auto flex flex-wrap items-center gap-1">
+         <button type="button" aria-pressed={point.pointing} onClick={point.toggle} disabled={!ready} title={t("chat.preview.pointHint")}
+           className={cn(ASK_CHIP, point.pointing ? ASK_CHIP_PICKED : ASK_CHIP_IDLE)}>
+-          <Crosshair size={14} />{t("chat.preview.point")}
++          <Crosshair size={14} />{lead === undefined ? t("chat.preview.point") : <span className="sr-only">{t("chat.preview.point")}</span>}
+         </button>
+         {!room && <>
+           <button type="button" onClick={() => void share.run(version.rev)} disabled={busy} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>
+@@ -319,7 +319,7 @@
+ 
+ /** How tall the preview on a page's compact card is, at most. */
+ // OpenBot: a shorter preview that reads as the page's cover (documentos-visuales skill), like a card, not a crop.
+-export const PAGE_PREVIEW_HEIGHT = 180;
++export const PAGE_PREVIEW_HEIGHT = 276;
+ 
+ function typing(target: EventTarget | null): boolean {
+   return target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
+@@ -358,8 +358,8 @@
+       aria-label={props.title} data-page-fullscreen={props.doc.messageId}
+       className={cn(pane ? "absolute inset-x-0 top-0 z-[1] bottom-[var(--page-pane-bottom,0px)] pt-[var(--glass-top,0px)]" : "fixed inset-0 z-50",
+         "flex flex-col bg-panel")}>
+-      <div ref={closer} className="flex flex-col gap-2 border-b border-hairline/40 px-4 pb-3 pt-3">
+-        <PageToolbar {...props} lead={<div data-page-open-title className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink" title={props.title}><bdi dir="auto">{props.title}</bdi></div>} />
++      <div ref={closer} className="flex flex-col gap-2 bg-app px-4 pb-2 pt-2.5">
++        <PageToolbar {...props} lead={<div className="flex min-w-0 flex-1 justify-center"><div data-page-open-title className="max-w-full truncate rounded-full bg-composer px-4 py-1.5 text-[14px] font-medium text-ink shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-composer-ring" title={props.title}><bdi dir="auto">{props.title}</bdi></div></div>} />
+         <PageNotes version={props.version} point={point} share={props.share} save={props.save} room={props.room} />
+       </div>
+       <div className={cn("relative min-h-0 flex-1 bg-app", point.pointing && "ring-2 ring-inset ring-accent/60")}>
+diff -ruN -x node_modules -x skills a/src/components/widget/WidgetMessage.tsx b/src/components/widget/WidgetMessage.tsx
+--- a/src/components/widget/WidgetMessage.tsx	2026-11-27 09:28:28
++++ b/src/components/widget/WidgetMessage.tsx	2026-11-27 09:30:13
+@@ -9,7 +9,7 @@
+ import { cn } from "@/lib/cn";
+ import { activeLocale, t } from "@/lib/i18n";
+ import { localizedCard } from "@/lib/widget-text";
+-import { useAdvancedMode } from "@/lib/interface-mode";
++import { useAdvancedMode, SIMPLE_CHAT_LOOK } from "@/lib/interface-mode";
+ import {
+   PHONE_PAIRING_ACTION, widgetActions, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetField, type WidgetNode, type WidgetOther, type WidgetPayload,
+   type WidgetSettled, type WidgetValues,
+@@ -39,7 +39,7 @@
+ 
+ /** `viewOnly`: shown in a room, where a press would speak for everyone; links and thread jumps still open. */
+ export function WidgetMessage({ botId, threadId, message, viewOnly }: { botId: string; threadId?: string; message: Message; viewOnly?: boolean }) {
+-  const simple = !useAdvancedMode();
++  const simple = !useAdvancedMode() || SIMPLE_CHAT_LOOK;
+   const serverCard = (message as { serverCard?: true }).serverCard === true;
+   const locale = activeLocale();
+   const payload = useMemo(() => (message.widget?.root ? localizedCard(message.widget, serverCard, locale) : message.widget), [message.widget, serverCard, locale]);
+diff -ruN -x node_modules -x skills a/src/components/widget/WidgetNodes.tsx b/src/components/widget/WidgetNodes.tsx
+--- a/src/components/widget/WidgetNodes.tsx	2026-11-27 09:28:25
++++ b/src/components/widget/WidgetNodes.tsx	2026-11-27 09:31:34
+@@ -109,6 +109,28 @@
+   return children.length > 1 && children.every((child) => FLOWS.has(child.type));
+ }
+ 
++function isChoiceRow(node: WidgetNode, shown: WidgetNode[]): boolean {
++  return node.type === "Row" && shown.length >= 2 && shown.length <= 6 && shown.every((child) => {
++    const look = widgetString(child, "style");
++    return child.type === "Button" && Boolean(widgetString(child, "label")) && child.submit !== true && look !== "primary" && look !== "danger";
++  });
++}
++
++function WidgetChoice({ node, letter }: { node: WidgetNode; letter: string }) {
++  const form = useWidgetForm();
++  const entry = form.actions.get(node.id);
++  const pending = form.pendingRef === node.id;
++  const sent = form.sentRef === node.id;
++  return (
++    <button type="button" data-widget-ref={node.id} disabled={node.disabled === true || !widgetCanPress(form, entry)} aria-busy={pending || undefined}
++      onClick={(event) => { event.stopPropagation(); form.press(node.id); }}
++      className="flex min-h-[38px] w-full min-w-0 items-center gap-3 rounded-xl px-1.5 py-1.5 text-start text-[14.5px] leading-5 text-ink transition-colors enabled:hover:bg-ink/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-55 aria-busy:opacity-100">
++      <span aria-hidden="true" data-letter={letter} className={cn("flex size-[22px] shrink-0 items-center justify-center rounded-md text-[12px] font-medium before:content-[attr(data-letter)]", sent || pending ? "bg-accent text-accent-ink" : "bg-ink/[0.06] text-ink-secondary")} />
++      <span dir="auto" className="min-w-0 flex-1 [overflow-wrap:anywhere]">{widgetString(node, "label")}</span>
++    </button>
++  );
++}
++
+ function Layout({ node, where }: { node: WidgetNode; where: WidgetWhere }) {
+   const form = useWidgetForm();
+   const stacked = form.compact && node.type === "Row" && pairsField(node);
+@@ -127,6 +149,10 @@
+     where.card && node.type === "Row" && (stacked ? "py-2.5" : "min-h-[44px]"),
+   );
+   const style: CSSProperties = { gap, ...boxStyle(node) };
++  // OpenBot: a row of plain option buttons reads as a lettered list (A, B, C), one option per line.
++  if (isChoiceRow(node, shown) && !where.form) {
++    return <div data-widget-choices className="flex min-w-0 flex-col gap-0.5">{shown.map((child, index) => <WidgetChoice key={child.id} node={child} letter={String.fromCharCode(65 + index)} />)}</div>;
++  }
+   const children = <WidgetChildren nodes={shown} where={{ axis, gap, item: where.item, form: where.form || isForm, room: gap > 0 ? [0, 0] : [8, 8] }} />;
+   if (!isForm || where.form) return <div className={className} style={style}>{children}</div>;
+   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+diff -ruN -x node_modules -x skills a/src/lib/interface-mode.ts b/src/lib/interface-mode.ts
+--- a/src/lib/interface-mode.ts	2026-11-27 09:28:28
++++ b/src/lib/interface-mode.ts	2026-11-27 09:30:13
+@@ -5,6 +5,10 @@
+ 
+ export const ADVANCED_MODE_KEY = "omb-advanced-mode";
+ 
++/** OpenBot: the chat itself (bubbles, reply cards, tables, code) always draws its simple look, in either mode;
++ * Advanced only adds controls around it. */
++export const SIMPLE_CHAT_LOOK = true;
++
+ let sessionChoice: boolean | undefined;
+ const listeners = new Set<() => void>();
+ 

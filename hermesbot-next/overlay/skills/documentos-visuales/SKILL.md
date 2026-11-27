@@ -18,8 +18,10 @@ Hazte estas preguntas, en orden, y quédate con la primera que encaje:
 
 1. **¿Cabe en unas líneas?** Una respuesta, un dato, una confirmación, una conversación normal: texto.
    La mayoría de los mensajes son así. No conviertas una charla en una tarjeta.
-2. **¿Tiene que elegir o confirmar algo?** Entre varias opciones, una hora, un día: una tarjeta con botones
-   (`show_widget`). Una sola pregunta por tarjeta, como mucho seis opciones. Un sí o no se pregunta en el texto.
+2. **¿Tiene que elegir o confirmar algo?** Entre varias opciones, una hora, un día: una tarjeta (`show_widget`)
+   con la pregunta como título y una fila de botones, uno por opción (se ven como una lista A, B, C). Cada botón
+   lleva la opción completa en pocas palabras ("1.497 € o 3 cuotas de 529 €"), sin estilo primario. Una sola
+   pregunta por tarjeta, como mucho seis opciones. Un sí o no se pregunta en el texto.
 3. **¿Faltan datos o hay algo que rellenar o cambiar?** Un formulario (`show_widget`) ya rellenado con lo que
    sepas. El botón de enviar va **dentro** de la misma tarjeta, al final, nunca suelto debajo.
 4. **¿Son unos pocos datos en filas y columnas?** Una tabla markdown en el mensaje.
@@ -48,18 +50,17 @@ Reglas que no cambian:
 
 ## El título y la portada (lo que se ve en el chat)
 
-En el chat, cada página se ve como una tarjeta compacta con su **título**; al abrirla, lo primero que se ve
-es la portada. Por eso:
+En el chat, cada página se ve como una tarjeta con una **vista previa** de su parte de arriba y, debajo, su
+**título**. Lo primero de la página es lo que se ve en esa vista previa. Por eso:
 
 - **`title`** es el nombre de la cosa, corto y concreto: "Competencia: análisis a fondo", "Ventas de noviembre".
   Nunca etiquetas ni tipos ("Documento visual ·", "Panel ·", "Demo ·", "Página de…").
-- **Toda página empieza con una portada** (`<header class="cover">`):
-  - `.chip` con el tipo y el momento: "Análisis", "Plan", "Propuesta", "Panel · actualizado 27 nov, 9:00".
+- **Toda página empieza con una portada** (`<header class="cover">`), sobria, solo dos cosas:
   - `h1` con el mismo título.
-  - `.lead`: la conclusión en una frase, no una descripción ("Dos competidores te ganan en precio…").
-  - En un **panel**, añade `.mini` (un minigráfico de 5-8 barras con la forma real de los datos, la más alta `.hi`),
-    para que se distinga a primera vista de un documento.
-- No pongas la tabla de contenidos ni cifras sueltas antes de la portada.
+  - `.lead`: una o dos frases con la conclusión, no una descripción ("Dos competidores te ganan en precio…").
+- Justo después, lo más valioso: las cifras clave (`.stats` o `.kpis`) o el aviso `.callout` si hay algo que
+  advertir (por ejemplo, que los datos son de ejemplo). Sin etiquetas, chips ni adornos encima del título.
+- No pongas la tabla de contenidos antes de la portada.
 
 ## Documento
 
@@ -94,9 +95,11 @@ Un panel es para mirar cifras de un vistazo: tiene que llevar **al menos un grá
 - `.chart` con un `h4` y dentro:
   - `.vbars` (columnas `.col` con su valor y `<i style="height:…%">`; la más alta al 100 %, la importante `.hi`)
     más `.vlabels` debajo: comparar periodos o categorías.
-  - `svg.spark` con `polyline` (y `polygon` para el relleno) en un `viewBox` de 300×100: una evolución en el tiempo.
+  - `svg.spark` con `polyline` (y `polygon` para el relleno) en un `viewBox` de 300×100 y
+    `preserveAspectRatio="none"`, para que ocupe todo el ancho: una evolución en el tiempo.
   - `.donut` con `conic-gradient` y `.legend`: un reparto (máximo 5 partes).
   - `.progress` para avanzar hacia un objetivo.
+- Dos gráficos que se leen juntos van lado a lado: `.cols` con dos `.chart` dentro.
 - Calcula las alturas y puntos a partir de los datos reales; no inventes formas.
 - Si hacen falta gráficos interactivos o muchos datos, puedes usar echarts o Chart en `jsx`, con la misma portada.
 
