@@ -1,0 +1,29 @@
+--- a/src/components/Composer.tsx	2026-11-27 09:03:21
++++ b/src/components/Composer.tsx	2026-11-27 09:03:21
+@@ -1,6 +1,7 @@
+ import { directMessageSent, roomMessageSent } from "@/lib/product-events";
+ import { TeamAudienceLabel } from "./TeamSideSwitch";
+ import { useComposerDictation } from "@/lib/use-composer-dictation";
++import { DictationMeter } from "./DictationMeter";
+ import { ComposerForkError, useComposerFork } from "./ComposerFork";
+ import { isNewChatThread } from "@/state/new-chat";
+ import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+@@ -965,14 +966,13 @@
+             aria-label={recording ? t("composer.dictation.stop") : t("composer.dictation.start")}
+             className={cn(
+               "flex shrink-0 items-center justify-center rounded-full",
+-              simpleDock ? "size-7" : "size-8",
+-              recording
+-                ? "animate-pulse bg-danger/20 text-danger"
+-                : advanced || singleRow ? "text-ink-secondary hover:bg-raised hover:text-ink" : SIMPLE_CONTROL,
++              // OpenBot: while it records the button becomes a pill with the live sound bars, the time and a stop square.
++              recording ? "animate-fade-in motion-reduce:animate-none" : simpleDock ? "size-7" : "size-8",
++              !recording && (advanced || singleRow ? "text-ink-secondary hover:bg-raised hover:text-ink" : SIMPLE_CONTROL),
+             )}
+             title={recording ? t("composer.dictation.stopHint") : t("composer.dictation.hintKey", { keys: isMacPlatform() ? "⌘D" : "Ctrl+D" })}
+           >
+-            <Mic size={16} className="[&_rect]:fill-current" />
++            {recording ? <DictationMeter /> : <Mic size={16} className="[&_rect]:fill-current" />}
+           </button>
+         )}
+         {callShown && bot && !group && <CallButton bot={bot} placement="composer" fill={advanced || singleRow ? undefined : slot.fill} ink={slot.ink} inverse={singleRow} modeMenu={!stacked} />}
