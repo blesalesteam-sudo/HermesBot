@@ -35,6 +35,9 @@
     to { transform: translateY(0); }
   }
   @keyframes ob-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ob-veil-out { to { background-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; } }
+  @keyframes ob-sheet-down { to { transform: translateY(100%); } }
+  @keyframes ob-push-out { to { transform: translateX(100%); } }
   /* Entrar "hacia dentro" (perfil del bot): la pantalla llega desde la derecha, como al navegar en el iPhone. */
   @keyframes ob-push-in {
     from { transform: translateX(100%); }
@@ -88,6 +91,45 @@
     .rounded-2xl, .rounded-\[16px\], .rounded-\[18px\] { border-radius: calc(var(--u) * 46); }
     .rounded-t-2xl, .rounded-t-\[16px\] { border-top-left-radius: calc(var(--u) * 84); border-top-right-radius: calc(var(--u) * 84); }
   }
+
+  /* ================= Navegación como en el iPhone =================
+     La lista de bots es la pantalla de fondo. Abrir un chat lo trae desde la derecha por encima de la lista, que se
+     retira un poco hacia la izquierda; salir del chat lo devuelve a la derecha y la lista vuelve a su sitio. La app
+     base hacía lo contrario: la lista era un cajón que entraba desde la izquierda por encima del chat.
+     [data-sidebar-root] es la marca de la base para "se está viendo la lista". */
+  html:root {
+    [data-look="sidebar"] {
+      z-index: 1; translate: -28% 0; transition: translate 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    [data-look="sidebar"][data-sidebar-root] { translate: none; }
+    main[data-look="chat"] {
+      z-index: 2; translate: none; transition: translate 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: calc(var(--u) * -20) 0 calc(var(--u) * 90) rgb(0 0 0 / 0.10);
+    }
+    [data-look="sidebar"][data-sidebar-root] ~ main[data-look="chat"] { translate: 100% 0; }
+    /* La base oscurecía el chat por detrás del cajón; con la lista como pantalla propia ese velo sobra (y taparía la lista). */
+    [data-look="app"] div.absolute.inset-0.z-30[aria-hidden="true"][class*="bg-black"] { display: none; }
+    /* El botón de volver vive fuera del chat: viaja con él. */
+    [data-look="app"] button:is([aria-label="Abrir la lista de bots"], [aria-label="Open the bot list"]) {
+      translate: none; transition: translate 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    [data-look="app"] button:is([aria-label="Abrir la lista de bots"], [aria-label="Open the bot list"])[aria-expanded="true"] { translate: 100vw 0; }
+  }
+  /* Mientras se arrastra el dedo desde el borde izquierdo para volver (openbot-movil.js), el chat sigue al dedo. */
+  html:root.ob-drag {
+    main[data-look="chat"],
+    [data-look="app"] button:is([aria-label="Abrir la lista de bots"], [aria-label="Open the bot list"]) {
+      transition: none; translate: var(--ob-drag, 0px) 0;
+    }
+    [data-look="sidebar"] { transition: none; translate: calc(-28% + var(--ob-drag, 0px) * 0.28) 0; }
+  }
+  /* Copia que se queda un instante para animar el cierre de una hoja o un panel (openbot-movil.js). */
+  .ob-exit { position: fixed; z-index: 80; pointer-events: none; overflow: hidden; }
+  .ob-exit > * { position: absolute !important; inset: 0 !important; margin: 0 !important; width: auto !important; height: auto !important; max-height: none !important; translate: none !important; animation: none !important; }
+  .ob-exit [data-ob-exit="down"] { animation: ob-sheet-down 0.36s cubic-bezier(0.4, 0, 0.7, 0.2) both !important; }
+  .ob-exit [data-ob-exit="right"] { animation: ob-push-out 0.36s cubic-bezier(0.4, 0, 0.7, 0.2) both !important; }
+  /* Lo que envuelve a la hoja (su velo oscuro) se aclara mientras la hoja baja; la hoja no se transparenta. */
+  .ob-exit [data-ob-veil] { animation: ob-veil-out 0.36s ease-in both !important; }
 
   html:root {
     /* ================= Botones redondos de arriba (lista y chat) ================= */
