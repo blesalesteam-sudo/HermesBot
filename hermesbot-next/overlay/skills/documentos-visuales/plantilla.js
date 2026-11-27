@@ -503,7 +503,7 @@
       });
     });
     return el("section", {}, [heading(block), el("div", { class: "wrapx" }, [
-      el("div", { class: "tp-grid", style: "grid-template-columns:max-content repeat(" + xs.length + ",minmax(128px,1fr))" }, cells)])]);
+      el("div", { class: "tp-grid", style: "grid-template-columns:max-content repeat(" + xs.length + ",minmax(116px,1fr))" }, cells)])]);
   }
 
   function board(block, key) {
