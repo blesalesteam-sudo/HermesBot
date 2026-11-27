@@ -1,0 +1,229 @@
+/* OpenBot · versión de móvil al estilo de Grok Bot.
+   Solo para pantallas estrechas (la misma frontera que usa la app para su "phone layout": 767.98px).
+   Medidas sacadas de capturas de Grok Bot en un iPhone (402 pt de ancho): botones redondos blancos de
+   40 pt con sombra suave, letra de 17 pt en chat, lista y menús, caja de mensaje con el "+" dentro.
+   Los selectores van doblados ([x][x]) para ganar a las clases de la base sin depender del orden en que
+   carguen las hojas de estilo. Los colores salen de las variables del tema, así el modo noche sigue valiendo. */
+
+@media (max-width: 767.98px) {
+  :root {
+    --ob-m-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 14px rgb(0 0 0 / 0.08);
+    --ob-m-button: var(--color-composer);
+    --ob-m-soft: color-mix(in srgb, var(--color-ink) 6%, var(--color-composer));
+    --ob-m-muted: color-mix(in srgb, var(--color-ink) 45%, transparent);
+    --ob-m-faint: color-mix(in srgb, var(--color-ink) 32%, transparent);
+  }
+
+  /* ---------- Botones redondos de arriba (lista y chat) ---------- */
+  [data-look="app"] button[aria-label="Abrir la lista de bots"][aria-label],
+  [data-look="app"] button[aria-label="Open the bot list"][aria-label] {
+    width: 40px; height: 40px; left: 14px; top: 10px;
+    border: 0; background: var(--ob-m-button); box-shadow: var(--ob-m-shadow);
+  }
+  [data-look="app"] [data-sidebar-top-buttons] button[aria-label][aria-label],
+  [data-testid="chat-more"][data-testid="chat-more"] {
+    width: 40px; height: 40px; border: 0; background: var(--ob-m-button); box-shadow: var(--ob-m-shadow);
+  }
+  [data-testid="chat-more"][data-testid="chat-more"] { --tw-ring-shadow: 0 0 #0000; }
+  [data-look="app"] [data-sidebar-top-row][data-sidebar-top-row] { padding-left: 14px; padding-right: 14px; }
+  [data-look="app"] [data-sidebar-top-row] button[aria-label] > span.size-10 {
+    border: 0; background: var(--ob-m-soft); box-shadow: 0 0 0 2px var(--ob-m-button), var(--ob-m-shadow);
+  }
+
+  /* ---------- Cabecera del chat ---------- */
+  [data-look="chat-header"][data-look="chat-header"] { padding-top: 10px; padding-left: 62px; padding-right: 14px; }
+  [data-chathead-pill][data-chathead-pill] {
+    height: 40px; padding: 6px 16px 6px 7px; gap: 8px;
+    background: var(--ob-m-button); box-shadow: var(--ob-m-shadow);
+  }
+  [data-chathead-pill] [data-avatar][data-avatar] { width: 26px; height: 26px; }
+  [data-chathead-pill] [data-avatar] > * { width: 26px; height: 26px; }
+  [data-chathead-pill][data-chathead-pill] > span.truncate { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  /* "Nuevo hilo" sigue en el menú "…"; en el móvil Grok Bot solo deja el botón "…" a la derecha. */
+  [data-chathead-controls] button[data-new-thread][data-new-thread] { display: none; }
+
+  /* ---------- Mensajes ---------- */
+  [data-chat-bubble][data-chat-bubble] {
+    font-size: 17px; line-height: 24px; border-radius: 22px; padding: 10px 15px;
+    max-width: calc(100% - 36px);
+  }
+  [data-look="message-bot"] [data-chat-bubble][data-chat-bubble] { max-width: calc(100% - 36px); }
+  /* La hora y los botones del mensaje van al lado de la burbuja y le quitaban sitio (unos 100 px):
+     la hora solo sale al pasar el ratón, y el botón de acciones queda pegado al borde derecho. */
+  [data-message-row] > div.flex.w-full[class] { position: relative; }
+  [data-message-row] > div.flex.w-full > span.tabular-nums[class] { display: none; }
+  [data-message-row] [data-testid="message-actions"][data-testid] { position: absolute; right: 0; bottom: 0; }
+  [data-message-row] [data-testid="message-actions"] > span.size-7 { display: none; }
+  [data-chat-bubble] .chat-md li::marker { color: var(--ob-m-faint); }
+  [data-chat-bubble] .chat-md ul[class], [data-chat-bubble] .chat-md ol[class] { padding-left: 22px; }
+  [data-look="bot-bubble"][data-look="bot-bubble"] { background: var(--ob-m-soft); }
+  [data-chat-bubble] .chat-md[class] { font-size: 17px; line-height: 24px; }
+  [data-chat-bubble] .chat-md li + li { margin-top: 6px; }
+  .glass-scroller[class][class] { padding-left: 14px; padding-right: 14px; }
+
+  /* ---------- Caja de mensaje: el "+" va dentro, como en Grok Bot ---------- */
+  .chat-column-dock .pointer-events-none.relative[class] { padding-left: 24px; padding-right: 24px; padding-bottom: 16px; }
+  [data-look="composer"][data-look="composer"] { position: relative; gap: 0; }
+  [data-look="composer"] > div.shrink-0:first-child {
+    position: absolute; left: 6px; bottom: 6px; z-index: 2;
+  }
+  [data-composer-plus][data-composer-plus] {
+    width: 34px; height: 34px; background: var(--ob-m-soft); box-shadow: none;
+    --tw-ring-shadow: 0 0 #0000; color: var(--ob-m-muted);
+  }
+  [data-look="composer"] > div.shrink-0:first-child button[aria-label] { width: 34px; height: 34px; }
+  [data-look="composer"] > div.rounded-\[26px\][class] {
+    min-height: 46px; padding: 6px 6px 6px 46px; border-radius: 26px;
+    box-shadow: var(--ob-m-shadow); --tw-ring-shadow: 0 0 #0000;
+  }
+  [data-look="composer"] textarea[class] { font-size: 17px; line-height: 24px; }
+  [data-look="composer"] .mention-editor-mirror[class] { font-size: 17px; line-height: 24px; }
+  [data-composer-context][data-composer-context] { display: none; }
+  [data-composer-actions] button[aria-label][aria-label] {
+    width: 32px; height: 32px; background: var(--ob-m-soft); color: var(--ob-m-muted);
+  }
+
+  /* ---------- Lista de bots ---------- */
+  [data-look="sidebar"] [data-sidebar-hero] [data-avatar="mascot"][data-avatar] { width: 80px; height: 80px; }
+  [data-look="sidebar"] [data-sidebar-hero] > span.text-\[17px\] { font-size: 16px; font-weight: 500; }
+  [data-look="sidebar-bot"][data-look="sidebar-bot"] {
+    background: transparent; gap: 14px; padding: 13px 6px 13px 8px; border-radius: 18px;
+  }
+  [data-look="sidebar-bot"] > span.shrink-0 { margin: 0; }
+  [data-look="sidebar-bot"] [data-avatar][data-avatar] { width: 44px; height: 44px; }
+  [data-look="sidebar-bot"] span.text-\[14px\][class] { font-size: 17px; line-height: 24px; font-weight: 500; letter-spacing: -0.01em; }
+  [data-look="sidebar-bot"] span.text-\[14px\] span[class] { font-size: 17px; }
+  [data-look="sidebar-bot"] span.text-\[12px\][class] { font-size: 14px; color: var(--ob-m-faint); }
+  [data-look="sidebar-bot"] span.text-\[13px\][class] { font-size: 15px; line-height: 21px; color: var(--ob-m-muted); }
+  [data-look="sidebar-bot"] [data-testid="model-badge"][data-testid] { display: none; }
+  [data-look="sidebar"] [data-sidebar-section-id][data-sidebar-section-id] { gap: 0; }
+
+  /* Barra de abajo de la lista: botón de herramientas y búsqueda, blancos y con sombra. */
+  [data-sidebar-phone-bar] span.size-11[class],
+  [data-sidebar-phone-bar] div.h-11[class] {
+    border: 0; background: var(--ob-m-button); box-shadow: var(--ob-m-shadow);
+  }
+  [data-sidebar-phone-bar] div.h-11[class] { height: 46px; padding-left: 16px; }
+  [data-sidebar-phone-bar] span.size-11[class] { width: 46px; height: 46px; }
+  [data-sidebar-phone-bar] input[class] { font-size: 17px; }
+
+  /* ---------- "Crear nuevo Bot": hoja que sube desde abajo, como en Grok Bot ---------- */
+  div.fixed.inset-0:has(> form[data-bot-look][role="dialog"]) { align-items: flex-end; padding: 8px; }
+  form[data-bot-look][role="dialog"][role] {
+    max-width: none; height: calc(100dvh - 72px); max-height: calc(100dvh - 72px);
+    border-radius: 34px; background: var(--color-panel); box-shadow: 0 -4px 30px rgb(0 0 0 / 0.12);
+  }
+  form[data-bot-look][role="dialog"] > div:first-child[class] {
+    position: relative; justify-content: center; border: 0; padding: 18px 16px 6px; min-height: 64px;
+  }
+  form[data-bot-look][role="dialog"] > div:first-child h2[class] { font-size: 17px; font-weight: 500; }
+  form[data-bot-look][role="dialog"] > div:first-child button[aria-label][aria-label] {
+    position: absolute; left: 14px; top: 14px; width: 38px; height: 38px;
+    background: var(--ob-m-soft); color: var(--color-ink);
+  }
+  form[data-bot-look][role="dialog"] > div:nth-child(2)[class] { gap: 18px; padding: 8px 20px 16px; justify-content: center; flex: 1; overflow-x: hidden; scrollbar-width: none; }
+  form[data-bot-look][role="dialog"] > div:nth-child(2) > span.inline-flex:first-child { transform: scale(1.15); margin: 8px 0 6px; }
+  form[data-bot-look][role="dialog"] input[aria-label][class] {
+    height: 54px; border: 0; border-radius: 18px; background: var(--color-composer);
+    font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+  }
+  form[data-bot-look][role="dialog"] [role="group"][role][class] { width: 320px; gap: 10px 13px; }
+  form[data-bot-look][role="dialog"] [role="group"] + [role="group"][class] { width: 320px; gap: 16px 18px; margin-top: 4px; }
+  form[data-bot-look][role="dialog"] [role="group"] button[class*="size-[45px]"] { width: 50px; height: 50px; }
+  form[data-bot-look][role="dialog"] [role="group"] button[class*="size-[30px]"] { width: 34px; height: 34px; }
+  form[data-bot-look][role="dialog"] [role="group"] button[class*="size-[30px]"] > span[class] { width: 28px; height: 28px; }
+  form[data-bot-look][role="dialog"] > div:last-child[class] { border: 0; padding: 8px 20px 22px; }
+  /* Grok Bot solo tiene "Crear", ancho; se cierra con la X de arriba. */
+  form[data-bot-look][role="dialog"] > div:last-child > button:first-child:not(:last-child) { display: none; }
+  form[data-bot-look][role="dialog"] > div:last-child > button:last-child[class] {
+    flex: 1; height: 50px; font-size: 17px; font-weight: 500;
+  }
+
+  /* ---------- Perfil del bot: opciones en tarjetas blancas, letra de 17 ---------- */
+  aside[role="dialog"]:has([data-panel-card]) button[aria-label][class*="size-[34px]"],
+  aside[role="dialog"] [data-panel-share][data-panel-share] {
+    width: 40px; height: 40px; --tw-ring-shadow: 0 0 #0000; box-shadow: var(--ob-m-shadow);
+  }
+  aside[role="dialog"] [data-panel-avatar] [data-avatar] > svg { width: 84px; height: 84px; }
+  aside[role="dialog"] [data-panel-avatar][data-panel-avatar] { margin-top: 6px; }
+  aside[role="dialog"] [data-panel-rename][data-panel-rename] { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.02em; }
+  aside[role="dialog"] [data-panel-name-row][data-panel-name-row] { margin-top: 14px; }
+  aside[role="dialog"] [role="tablist"][aria-label][class] { background: var(--color-panel); margin-top: 18px; }
+  aside[role="dialog"] [role="tablist"] button[role="tab"][class] { height: 32px; font-size: 15px; padding: 0 16px; }
+  aside[role="dialog"] [role="tablist"] > div[class] { padding: 4px; }
+
+  aside[role="dialog"] section[data-panel-card="model"][data-panel-card],
+  aside[role="dialog"] section[data-panel-card="keeps"][data-panel-card] {
+    background: var(--color-composer); border-radius: 20px; overflow: hidden; padding: 0; margin-top: 12px;
+  }
+  aside[role="dialog"] section[data-panel-card] > :is(div, label, button):not(:first-child)[class*="min-h-[46px]"] {
+    box-shadow: inset 0 0.5px 0 0 var(--color-edge);
+  }
+  aside[role="dialog"] section[data-panel-card] > :is(div, label, button)[class*="min-h-[46px]"],
+  aside[role="dialog"] section[data-panel-card] > button[data-panel-item] {
+    min-height: 54px; padding: 8px 16px; gap: 14px;
+  }
+  aside[role="dialog"] section[data-panel-card] .text-\[14px\][class] { font-size: 17px; font-weight: 400; line-height: 22px; }
+  aside[role="dialog"] section[data-panel-card] .text-\[13px\][class] { font-size: 15px; line-height: 20px; }
+  aside[role="dialog"] section[data-panel-card] span.size-4.text-ink-secondary[class] {
+    width: 24px; height: 24px; background: transparent; border-radius: 0;
+  }
+  aside[role="dialog"] section[data-panel-card] span.size-4.text-ink-secondary svg { width: 21px; height: 21px; }
+  /* Grupos con título ("Conversaciones", "Esta conversación"): título gris y filas en tarjeta blanca. */
+  aside[role="dialog"] section[data-panel-card] > div.mx-3\.5[class] { font-size: 15px; font-weight: 400; margin: 26px 16px 8px; }
+  aside[role="dialog"] section[data-panel-card] > :is(button, div.flex.items-center.gap-2):not(:first-child) {
+    background: var(--color-composer);
+  }
+  aside[role="dialog"] section[data-panel-card][data-panel-card] > :is(button, div):not(:first-child) { border-radius: 0; }
+  aside[role="dialog"] section[data-panel-card][data-panel-card] > div.mx-3\.5 + :is(button, div) { border-top-left-radius: 20px; border-top-right-radius: 20px; }
+  aside[role="dialog"] section[data-panel-card][data-panel-card]:has(> div.mx-3\.5) > :is(button, div):last-child { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+  aside[role="dialog"] section[data-panel-card] > button[data-panel-item] + button[data-panel-item] { box-shadow: inset 0 0.5px 0 0 var(--color-edge); }
+  aside[role="dialog"] [data-conversations-new][class] { height: 54px; padding: 0 16px; font-size: 17px; font-weight: 400; background: transparent; }
+  aside[role="dialog"] section[data-panel-card] kbd { display: none; }
+
+  /* ---------- Ajustes: grupos en tarjetas blancas, filas de 17 ---------- */
+  nav[aria-label]:has([data-settings-group]) { background: var(--color-panel); }
+  [data-settings-group][data-settings-group] {
+    background: var(--color-composer); border-radius: 20px; padding: 2px 0; gap: 0; margin-top: 14px;
+  }
+  [data-settings-group] > div.flex.flex-col[class] { margin-top: 0; gap: 0; }
+  [data-settings-group] button[data-settings-page][class] {
+    height: auto; min-height: 52px; padding: 8px 16px; gap: 14px; border-radius: 0; font-size: 17px; line-height: 22px;
+  }
+  [data-settings-group] > div > button[data-settings-page] { box-shadow: inset 0 0.5px 0 0 var(--color-edge); }
+  [data-settings-group] button[data-settings-page] .text-\[14px\][class] { font-size: 17px; line-height: 22px; font-weight: 400; }
+  [data-settings-group] button[data-settings-page] .text-\[12px\][class] { font-size: 14px; line-height: 18px; }
+  [data-settings-group] button[data-settings-page] > span.size-6[class] { width: 28px; height: 28px; }
+  [data-settings-group] button[data-settings-page] > span.w-6 svg { width: 20px; height: 20px; }
+  .settings-scroll[class] { padding-left: 14px; padding-right: 14px; }
+  nav[aria-label] input[data-settings-search][class] { font-size: 16px; }
+  nav[aria-label] div:has(> input[data-settings-search])[class] {
+    height: 40px; border: 0; border-radius: 12px; background: var(--ob-m-soft);
+  }
+  nav[aria-label] div:has(> input[data-settings-search]) > kbd { display: none; }
+
+  /* ---------- Menús ("…", "+", cuenta, nuevo): letra y filas de Grok Bot ---------- */
+  .popover-surface[data-sidebar-popover-menu][class] {
+    border-radius: 24px; padding: 8px; border-color: transparent;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.06), 0 12px 36px rgb(0 0 0 / 0.14);
+  }
+  .popover-surface[data-sidebar-popover-menu] button[data-menu-key][class] {
+    min-height: 44px; font-size: 17px; line-height: 22px; gap: 14px; padding: 9px 12px; border-radius: 14px;
+  }
+  .popover-surface[data-sidebar-popover-menu] button[data-menu-key] > span:first-child[class] { width: 20px; height: 20px; }
+  .popover-surface[data-sidebar-popover-menu] button[data-menu-key] > span:first-child > svg { width: 20px; height: 20px; }
+  .popover-surface[data-sidebar-popover-menu] button[data-menu-key] .text-\[12px\][class],
+  .popover-surface[data-sidebar-popover-menu] button[data-menu-key] .text-\[13px\][class] { font-size: 14px; line-height: 18px; }
+  /* Atajos de teclado: en el móvil no hay teclado. */
+  .popover-surface[data-sidebar-popover-menu] kbd { display: none; }
+  /* Opciones de ordenador que no aparecen en el móvil de Grok Bot (siguen en el ordenador). */
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="computer"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="set-main"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="copy"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="download"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="activity"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key="inspector"]),
+  .popover-surface[data-sidebar-popover-menu] > div:has(> button[data-menu-key^="call:"]) { display: none; }
+  /* Títulos de sección pequeños dentro de los menús ("Hilos", "Compartir"). */
+  .popover-surface[data-sidebar-popover-menu] > div > div:not(.h-px):not(:has(*)) { display: none; }
+}
