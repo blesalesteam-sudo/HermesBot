@@ -674,8 +674,8 @@ diff -ruN -x node_modules -x skills a/src/lib/interface-mode.ts b/src/lib/interf
  
 diff -ruN -x node_modules -x skills a/src/styles.css b/src/styles.css
 --- a/src/styles.css	2026-11-27 09:28:27
-+++ b/src/styles.css	2026-11-27 09:51:47
-@@ -4003,3 +4003,20 @@
++++ b/src/styles.css	2026-11-27 10:24:39
+@@ -4003,3 +4003,27 @@
    --shadow-2xl: 0 0 0 1px color-mix(in srgb, var(--color-ink) 14%, transparent);
  }
  :root[data-skin] .composer-shell, :root[data-skin] .popover-surface { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-ink) 12%, transparent); }
@@ -696,3 +696,10 @@ diff -ruN -x node_modules -x skills a/src/styles.css b/src/styles.css
 +/* A voice note on its own is just its pill, with no bubble around it; beside words it is a darker pill in their bubble. */
 +[data-chat-bubble="simple"]:has([data-test-voice-note]):not(:has(.chat-md)) { background: transparent; padding: 0; box-shadow: none; }
 +[data-chat-bubble]:has(.chat-md) [data-audio-pill] { background: color-mix(in srgb, var(--color-ink) 6%, transparent); }
++/* OpenBot: what floats over the chat (the message box, the bot's name pill and the header's buttons) lifts off it with a
++   soft shadow over its hairline, so the conversation reads as passing behind it; other surfaces stay flat. */
++[data-look="chat-header"] { --shadow-float: 0 2px 8px -1px rgb(0 0 0 / 0.07), 0 1px 2px rgb(0 0 0 / 0.04); }
++:root .chat-column-dock .composer-shell,
++:root[data-skin] .chat-column-dock .composer-shell {
++  box-shadow: 0 2px 10px -1px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04), 0 0 0 0.5px color-mix(in srgb, var(--color-ink) 10%, transparent);
++}
