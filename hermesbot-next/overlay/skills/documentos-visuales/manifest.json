@@ -1,7 +1,7 @@
 {
   "id": "documentos-visuales",
   "name": "Documentos visuales",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Criterio y kit para enseñar las cosas en el chat de forma visual: texto, tarjetas, formularios, documentos, paneles, plantillas e imágenes, según lo que pida cada momento.",
   "defaultEnabled": true,
   "triggerTerms": ["*"],

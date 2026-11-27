@@ -116,8 +116,9 @@ mano; tú la creas y la vas actualizando. No programes nada: describe la plantil
 con buen diseño, guarda lo que ella cambia y te lo cuenta.
 
 La página es siempre esta, con tu descripción dentro. Hay dos completas para copiar como base:
-`ejemplo-plantilla.html` (tareas: cifras, progreso, lista agrupada y notas) y `ejemplo-plantilla-seguimiento.html`
-(clientes por fases: tablero y tabla con totales).
+`ejemplo-plantilla.html` (tareas: cifras, progreso, lista agrupada y notas), `ejemplo-plantilla-seguimiento.html`
+(clientes por fases: tablero y tabla con totales) y `ejemplo-plantilla-semana.html` (planificador de la semana:
+cuadrícula de días por bloques, con horas).
 
 ```html
 <!doctype html><html lang="es"><head><meta charset="utf-8"><title>Tareas de la semana</title>
@@ -136,7 +137,11 @@ Muéstrala con `show_html` pasando la página en `html`, sin guardarla antes com
 - `colecciones`: los datos. Cada una tiene `nombre` en singular ("tarea", "cliente"), `campos` y `filas`.
   - Un campo: `{ "id", "nombre", "tipo" }` con tipo `texto`, `casilla`, `opcion` (con `opciones`), `fecha`
     (`AAAA-MM-DD`), `numero` o `moneda`. En `opcion` puedes fijar `colores`: `{ "Alta": "rojo" }` (rojo, ambar,
-    verde, azul, morado, gris); si no, se eligen solos.
+    verde, azul, morado, gris); si no, se eligen solos. En `numero`, `unidad` (`"h"`, `"kg"`, `"%"`) la escribe
+    detrás de cada valor y de cada suma: no la pongas en los nombres.
+  - Una fecha pasada sale en rojo mientras la fila siga abierta. Se da por cerrada con la casilla marcada o en un
+    estado final (Hecho, Publicado, Ganado, Perdido, Pagado, Cancelado…); si tus estados finales se llaman de otra
+    forma, dilos en el campo: `"final": ["Emitida"]`. Si la fecha no es un plazo, ponle `"vence": false`.
   - Una fila: un objeto con un `id` corto y **estable** (`"t1"`, `"c7"`) y un valor por campo.
 - `bloques`: lo que se ve, en orden. Cada bloque lleva `tipo`, casi siempre `de` (la colección) y `titulo`:
   - `cifras`: contadores que se calculan solos. `cifras: [{ "nombre": "Abiertas", "donde": { "hecho": false } }]`;
@@ -145,6 +150,10 @@ Muéstrala con `show_html` pasando la página en `html`, sin guardarla antes com
   - `lista`: filas con casilla para marcar. `detalles` (campos que salen como etiquetas a la derecha), `agrupar`
     (un campo `opcion`), `filtros` (campos `opcion` por los que filtrar), `ocultarHechas`.
   - `tablero`: columnas por los valores de un campo `opcion` (`"columnas": "estado"`); las tarjetas se arrastran.
+  - `cuadricula`: un campo `opcion` reparte las columnas y otro las filas (`"columnas": "dia", "filas": "bloque"`):
+    la semana por días y mañana/tarde, un menú por día y comida, una matriz urgente/importante. `detalles` como en
+    la lista; con `"suma": "horas"` cada columna enseña su total. Es la vista para planificar; no uses una tabla
+    para eso.
   - `tabla`: filas y columnas editables; `columnas` (campos a mostrar), `suma` (campos que se totalizan).
   - `notas`: un cuadro de texto libre que se guarda (`id`, `ayuda`).
   - `texto`: una sección tuya con `html` y las piezas del kit (para explicar, enlazar o añadir un gráfico).

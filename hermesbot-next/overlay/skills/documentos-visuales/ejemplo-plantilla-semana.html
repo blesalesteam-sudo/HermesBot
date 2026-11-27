@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi semana</title>
+<link rel="stylesheet" href="kit.css">
+</head><body>
+<main class="doc" id="plantilla"></main>
+<script type="application/json" id="datos">
+{
+  "titulo": "Mi semana",
+  "resumen": "Qué hago cada mañana y cada tarde. Arrastra un bloque a otro hueco para moverlo; las horas se suman solas.",
+  "aviso": { "titulo": "Semana de ejemplo", "texto": "Actividades y horas inventadas para enseñar la plantilla." },
+  "colecciones": {
+    "bloques": {
+      "nombre": "bloque",
+      "campos": [
+        { "id": "actividad", "nombre": "Actividad", "tipo": "texto" },
+        { "id": "dia", "nombre": "Día", "tipo": "opcion", "opciones": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"], "colores": { "Lunes": "gris", "Martes": "gris", "Miércoles": "gris", "Jueves": "gris", "Viernes": "gris" } },
+        { "id": "turno", "nombre": "Bloque", "tipo": "opcion", "opciones": ["Mañana", "Tarde"], "colores": { "Mañana": "ambar", "Tarde": "morado" } },
+        { "id": "horas", "nombre": "Horas", "tipo": "numero", "unidad": "h" },
+        { "id": "tipo", "nombre": "Tipo", "tipo": "opcion", "opciones": ["Trabajo profundo", "Reuniones"], "colores": { "Trabajo profundo": "azul", "Reuniones": "verde" } }
+      ],
+      "filas": [
+        { "id": "b1", "actividad": "Redactar la propuesta", "dia": "Lunes", "turno": "Mañana", "horas": 3, "tipo": "Trabajo profundo" },
+        { "id": "b2", "actividad": "Revisarla con el socio", "dia": "Lunes", "turno": "Tarde", "horas": 2, "tipo": "Reuniones" },
+        { "id": "b3", "actividad": "Preparar el caso práctico", "dia": "Martes", "turno": "Mañana", "horas": 3, "tipo": "Trabajo profundo" },
+        { "id": "b4", "actividad": "Llamadas de seguimiento", "dia": "Miércoles", "turno": "Mañana", "horas": 2, "tipo": "Reuniones" },
+        { "id": "b5", "actividad": "Grabar el vídeo corto", "dia": "Miércoles", "turno": "Tarde", "horas": 3, "tipo": "Trabajo profundo" },
+        { "id": "b6", "actividad": "Revisar los ejercicios", "dia": "Jueves", "turno": "Mañana", "horas": 3, "tipo": "Trabajo profundo" },
+        { "id": "b7", "actividad": "Cerrar la semana", "dia": "Viernes", "turno": "Tarde", "horas": 1, "tipo": "Reuniones" }
+      ]
+    }
+  },
+  "bloques": [
+    { "tipo": "cifras", "de": "bloques", "cifras": [
+      { "nombre": "Trabajo profundo", "donde": { "tipo": "Trabajo profundo" }, "suma": "horas" },
+      { "nombre": "Reuniones", "donde": { "tipo": "Reuniones" }, "suma": "horas" },
+      { "nombre": "Total", "suma": "horas" }
+    ] },
+    { "tipo": "cuadricula", "de": "bloques", "titulo": "La semana", "columnas": "dia", "filas": "turno", "texto": "actividad", "detalles": ["horas", "tipo"], "suma": "horas" }
+  ]
+}
+</script>
+<script src="plantilla.js"></script>
+</body></html>

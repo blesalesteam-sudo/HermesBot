@@ -1,5 +1,5 @@
 /* Motor de plantillas de OpenBot. Lee la descripción de la plantilla (JSON en <script id="datos">) y la dibuja en
-   <main id="plantilla"> con las piezas del kit: cifras, progreso, lista con casillas, tablero, tabla y notas.
+   <main id="plantilla"> con las piezas del kit: cifras, progreso, lista con casillas, tablero, cuadrícula, tabla y notas.
    Lo que la persona cambia a mano se guarda en la página y se le cuenta al bot; cuando el bot reescribe la plantilla,
    sus cambios y los de la persona se combinan campo a campo, sin pisarse. */
 (function () {
@@ -229,10 +229,15 @@
   function shown(f, value) {
     if (blank(value)) return "";
     if (f.tipo === "moneda") return money(value, f);
-    if (f.tipo === "numero") return plain(value);
+    if (f.tipo === "numero") return plain(value) + (f.unidad ? " " + f.unidad : "");
     if (f.tipo === "fecha") return shortDate(value);
     if (f.tipo === "casilla") return value ? "Sí" : "No";
     return String(value);
+  }
+  /* La suma de un campo en unas filas, escrita como ese campo (euros, o con su unidad). */
+  function total(f, rows) {
+    var sum = rows.reduce(function (acc, row) { return acc + (Number(row[f.id]) || 0); }, 0);
+    return shown(f.tipo === "moneda" || f.tipo === "numero" ? f : { tipo: "numero" }, sum);
   }
   function matches(row, where) {
     for (var key in where || {}) {
@@ -252,6 +257,18 @@
     if (block && block.texto && typeof block.texto === "string" && field(col, block.texto).tipo) return block.texto;
     for (var i = 0; i < col.fields.length; i++) if (!col.fields[i].tipo || col.fields[i].tipo === "texto") return col.fields[i].id;
     return col.fields[0] ? col.fields[0].id : "texto";
+  }
+  /* Una fila terminada (casilla marcada, o en un estado final como «Publicado» o «Ganado») ya no va con retraso. */
+  var CLOSED = /^(hech|complet|termin|finaliz|ganad|perdid|pagad|cobrad|publicad|cerrad|cancelad|archivad|entregad|descartad)/i;
+  function closed(col, row) {
+    var done = doneField(col);
+    if (done && row[done]) return true;
+    for (var i = 0; i < col.fields.length; i++) {
+      var f = col.fields[i], value = row[f.id];
+      if (f.tipo !== "opcion" || blank(value)) continue;
+      if (Array.isArray(f.final) ? f.final.indexOf(value) >= 0 : CLOSED.test(String(value))) return true;
+    }
+    return false;
   }
   function newId() { return "u" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); }
 
@@ -273,7 +290,7 @@
       return select;
     }
     if (f.tipo === "fecha") {
-      var done = doneField(col), late = !blank(value) && overdue(value) && !(done && row[done]);
+      var late = f.vence !== false && !blank(value) && overdue(value) && !closed(col, row);
       var input = el("input", { type: "date", value: blank(value) ? "" : String(value).slice(0, 10), "aria-label": f.nombre || f.id, onchange: function () { setValue(col, row, f.id, input.value); } });
       return el("label", { class: "tp-chip tp-date" + (blank(value) ? " tp-empty" : late ? " tp-rojo" : "") }, [el("span", { text: blank(value) ? (f.nombre || "Fecha") : shortDate(value) }), input]);
     }
@@ -333,7 +350,7 @@
         var rows = col.rows.filter(function (row) { return matches(row, figure.donde); });
         if (figure.suma) {
           f = field(col, figure.suma);
-          value = shown(f.tipo === "moneda" ? f : { tipo: "numero" }, rows.reduce(function (sum, row) { return sum + (Number(row[figure.suma]) || 0); }, 0));
+          value = total(f, rows);
         } else if (blank(value)) value = String(rows.length);
       }
       return el("div", { class: "kpi" }, [el("div", { class: "n", text: blank(value) ? "0" : String(value) }), el("div", { class: "l", text: figure.nombre || "" }), figure.detalle ? el("div", { class: "d", text: figure.detalle }) : null]);
@@ -421,14 +438,80 @@
     return select;
   }
 
+  function card(col, row, textId, details, done, extra) {
+    return el("div", { class: "tp-item" + (done && row[done] ? " done" : ""), draggable: "true", ondragstart: function (event) { event.dataTransfer.setData("text/plain", row.id); } }, [
+      el("div", { class: "tp-item-top" }, [done ? checkbox(col, row, done) : null, el("div", { class: "tp-main" }, [editor(col, row, field(col, textId))]), removeButton(col, row)]),
+      el("div", { class: "tp-meta" }, details.map(function (f) { return editor(col, row, f, true); }).concat(extra ? [extra] : [])),
+    ]);
+  }
+  /* Los valores de un campo por los que se reparte una vista: sus opciones, lo que haya de más y, si hace falta, «sin». */
+  function buckets(col, f, emptyFirst) {
+    var names = (f.opciones || []).slice();
+    col.rows.forEach(function (row) { if (!blank(row[f.id]) && names.indexOf(row[f.id]) < 0) names.push(row[f.id]); });
+    if (col.rows.some(function (row) { return blank(row[f.id]); })) { if (emptyFirst) names.unshift(""); else names.push(""); }
+    return names;
+  }
+  function bucketName(f, name) { return name || "Sin " + (f.nombre || f.id).toLowerCase(); }
+
+  /* Cuadrícula: un campo reparte las columnas y otro las filas (los días y los bloques de una semana, por ejemplo). */
+  function grid(block, key) {
+    var col = collections[block.de];
+    if (!col || !block.columnas) return null;
+    if (!block.filas) return board(block, key);
+    var across = field(col, block.columnas), down = field(col, block.filas), textId = textField(col, block), done = doneField(col, block);
+    var details = (block.detalles || []).filter(function (id) { return id !== across.id && id !== down.id; }).map(function (id) { return field(col, id); });
+    var xs = buckets(col, across), ys = buckets(col, down);
+    var sumId = Array.isArray(block.suma) ? block.suma[0] : block.suma, sumField = sumId ? field(col, sumId) : null;
+    var at = function (row, f) { return blank(row[f.id]) ? "" : row[f.id]; };
+    var put = function (row, x, y) {
+      if (at(row, across) === x && at(row, down) === y) return;
+      if (x === "") delete row[across.id]; else row[across.id] = x;
+      if (y === "") delete row[down.id]; else row[down.id] = y;
+      changed(col);
+    };
+    var places = [];
+    ys.forEach(function (y) { xs.forEach(function (x) { places.push([x, y]); }); });
+    var move = function (row) {
+      if (places.length > 42) return null;
+      var select = el("select", { class: "tp-chip tp-empty tp-move", "aria-label": "Mover a otro hueco", onchange: function () { var to = places[Number(select.value)]; if (to) put(row, to[0], to[1]); } },
+        [el("option", { value: "", text: "Mover…", selected: true, disabled: true })].concat(places.map(function (place, index) {
+          if (place[0] === at(row, across) && place[1] === at(row, down)) return null;
+          return el("option", { value: String(index), text: bucketName(across, place[0]) + " · " + bucketName(down, place[1]) });
+        })));
+      return select;
+    };
+    var cells = [el("div", { class: "tp-grid-corner" })].concat(xs.map(function (x) {
+      var inColumn = col.rows.filter(function (row) { return at(row, across) === x; });
+      return el("div", { class: "tp-grid-head" }, [el("span", { class: "tp-chip tp-" + tone(across, x), text: bucketName(across, x) }), el("i", { text: sumField ? total(sumField, inColumn) : String(inColumn.length) })]);
+    }));
+    ys.forEach(function (y) {
+      cells.push(el("div", { class: "tp-grid-side" }, [el("span", { class: "tp-chip tp-" + tone(down, y), text: bucketName(down, y) })]));
+      xs.forEach(function (x) {
+        var defaults = {}; defaults[across.id] = x; defaults[down.id] = y; if (done) defaults[done] = false;
+        var cell = el("div", { class: "tp-col tp-cell",
+          ondragover: function (event) { event.preventDefault(); cell.classList.add("over"); },
+          ondragleave: function () { cell.classList.remove("over"); },
+          ondrop: function (event) {
+            event.preventDefault();
+            var moved = byId(col.rows)[event.dataTransfer.getData("text/plain")];
+            cell.classList.remove("over");
+            if (moved) put(moved, x, y);
+          } }, col.rows.filter(function (row) { return at(row, across) === x && at(row, down) === y; }).map(function (row) {
+            return card(col, row, textId, details, done, move(row));
+          }).concat(block.anadir === false ? [] : [adder(col, key + ":" + x + "|" + y, "Añadir…", defaults, textId)]));
+        cells.push(cell);
+      });
+    });
+    return el("section", {}, [heading(block), el("div", { class: "wrapx" }, [
+      el("div", { class: "tp-grid", style: "grid-template-columns:max-content repeat(" + xs.length + ",minmax(128px,1fr))" }, cells)])]);
+  }
+
   function board(block, key) {
     var col = collections[block.de];
     if (!col || !block.columnas) return null;
     var by = field(col, block.columnas), textId = textField(col, block), done = doneField(col, block);
     var details = (block.detalles || []).filter(function (id) { return id !== by.id; }).map(function (id) { return field(col, id); });
-    var names = (by.opciones || []).slice();
-    col.rows.forEach(function (row) { if (!blank(row[by.id]) && names.indexOf(row[by.id]) < 0) names.push(row[by.id]); });
-    if (col.rows.some(function (row) { return blank(row[by.id]); })) names.unshift("");
+    var names = buckets(col, by, true);
     var columns = names.map(function (name) {
       var cards = col.rows.filter(function (row) { return (blank(row[by.id]) ? "" : row[by.id]) === name; });
       var defaults = {}; defaults[by.id] = name; if (done) defaults[done] = false;
@@ -443,10 +526,7 @@
         } }, [
         el("div", { class: "tp-col-head" }, [el("span", { class: "tp-chip tp-" + tone(by, name), text: name || "Sin " + (by.nombre || by.id).toLowerCase() }), el("i", { text: String(cards.length) })]),
       ].concat(cards.map(function (row) {
-        return el("div", { class: "tp-item" + (done && row[done] ? " done" : ""), draggable: "true", ondragstart: function (event) { event.dataTransfer.setData("text/plain", row.id); } }, [
-          el("div", { class: "tp-item-top" }, [done ? checkbox(col, row, done) : null, el("div", { class: "tp-main" }, [editor(col, row, field(col, textId))]), removeButton(col, row)]),
-          el("div", { class: "tp-meta" }, details.map(function (f) { return editor(col, row, f, true); }).concat([mover(col, row, by, names, name)])),
-        ]);
+        return card(col, row, textId, details, done, mover(col, row, by, names, name));
       })).concat(block.anadir === false ? [] : [adder(col, key + ":" + name, "Añadir…", defaults, textId)]));
       return column;
     });
@@ -467,7 +547,7 @@
     });
     var foot = sums.length ? el("tr", { class: "tp-sum" }, fields.map(function (f, index) {
       if (sums.indexOf(f.id) < 0) return el("td", { text: index === 0 ? "Total" : "" });
-      return el("td", { class: "num", text: shown(f.tipo === "moneda" ? f : { tipo: "numero" }, rows.reduce(function (sum, row) { return sum + (Number(row[f.id]) || 0); }, 0)) });
+      return el("td", { class: "num", text: total(f, rows) });
     }).concat([el("td", {})])) : null;
     var first = fields[0] ? fields[0].id : "texto";
     return el("section", {}, [heading(block), filterBar(col, block, key, null),
@@ -508,6 +588,7 @@
         else if (block.tipo === "progreso") part = progress(block);
         else if (block.tipo === "lista") part = list(block, key);
         else if (block.tipo === "tablero") part = board(block, key);
+        else if (block.tipo === "cuadricula") part = grid(block, key);
         else if (block.tipo === "tabla") part = table(block, key);
         else if (block.tipo === "notas") part = notepad(block);
         else if (block.tipo === "texto") part = el("section", {}, [heading(block), el("div", { html: String(block.html || "") })]);
