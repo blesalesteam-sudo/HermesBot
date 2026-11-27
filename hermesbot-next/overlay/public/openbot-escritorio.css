@@ -24,12 +24,4 @@
   html:root [data-sidebar-root] [data-sidebar-rail-separator] {
     display: none;
   }
-
-  /* Selector de conversaciones abierto: si no caben, los títulos se acortan con puntos suspensivos en vez de quedar
-     cortados por la izquierda. */
-  html:root [data-chathead-switch="open"] [data-thread-chip] {
-    flex-shrink: 1;
-    min-width: 4.5rem;
-    max-width: 16rem;
-  }
 }
